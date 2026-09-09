@@ -5,6 +5,11 @@ import {
   statusFor,
 } from "../features/workflows/status";
 import { workflowStatus } from "../lib/schemas";
+import {
+  workflows,
+  displayFor,
+  displayForSlug,
+} from "../features/workflows/display";
 
 test("every workflow state has an explicit readable presentation", () => {
   for (const state of workflowStatus.options) {
@@ -24,4 +29,18 @@ test("every workflow state has an explicit readable presentation", () => {
     true,
   );
   expect(stagesFor("AWAITING_APPROVAL")[2].state).toBe("waiting");
+});
+
+test("every workflow pillar has a unique slug, key, and a full entry-page script", () => {
+  expect(workflows).toHaveLength(3);
+  expect(new Set(workflows.map((workflow) => workflow.slug)).size).toBe(3);
+  expect(new Set(workflows.map((workflow) => workflow.key)).size).toBe(3);
+  for (const workflow of workflows) {
+    expect(workflow.steps.length).toBeGreaterThan(0);
+    expect(workflow.sources.length).toBeGreaterThan(0);
+    expect(workflow.destinations.length).toBeGreaterThan(0);
+    expect(displayForSlug(workflow.slug)?.key).toBe(workflow.key);
+    expect(displayFor(workflow.key)?.slug).toBe(workflow.slug);
+  }
+  expect(displayForSlug("not-a-real-slug")).toBeUndefined();
 });
