@@ -1,44 +1,109 @@
-const defaultStages = ["Source", "Understand", "Review", "Destination"];
-const stageByStatus: Record<string, number> = {
-  DRAFT: 0,
-  ANALYZING: 1,
-  PLAN_READY: 1,
-  AWAITING_APPROVAL: 2,
-  APPROVED: 2,
-  QUEUED: 3,
-  EXECUTING: 3,
-  COMPLETED: 4,
-  PARTIALLY_COMPLETED: 3,
+import type { CSSProperties, ReactNode } from "react";
+import { ArrowRight, Check, Circle, Clock3, X } from "lucide-react";
+import type { Run } from "@/lib/schemas";
+import {
+  stagesFor,
+  statusFor,
+  type RelayStage,
+} from "@/features/workflows/status";
+export type RelayEndpoint = {
+  label: string;
+  icon?: ReactNode;
+  description?: string;
+};
+export type RelayLineProps = {
+  sources?: readonly RelayEndpoint[];
+  destinations?: readonly RelayEndpoint[];
+  stages?: readonly RelayStage[];
+  status?: Run["status"];
+  compact?: boolean;
+  label?: string;
 };
 export function RelayLine({
-  status,
-  stages = defaultStages,
-}: {
-  status: string;
-  stages?: readonly string[];
-}) {
-  const active = stageByStatus[status];
+  sources = [{ label: "Your input" }],
+  destinations = [{ label: "Your tools" }],
+  stages,
+  status = "DRAFT",
+  compact = false,
+  label = "Relay progress",
+}: RelayLineProps) {
+  const progress = stages || stagesFor(status);
   return (
-    <div className="panel">
-      <ol
-        aria-label="Workflow progress"
-        className="grid grid-cols-2 gap-5 sm:grid-cols-4"
-      >
-        {stages.map((stage, index) => (
-          <li
-            key={stage}
-            aria-current={active === index ? "step" : undefined}
-            className={`border-t-2 pt-4 ${active !== undefined && index <= active ? "border-accent" : "border-line"}`}
-          >
-            <span className="mb-2 block text-xs text-muted">0{index + 1}</span>
-            <span className="font-medium">{stage}</span>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-5 text-sm text-muted">
-        {status.toLowerCase().replaceAll("_", " ")} · External actions require
-        your approval.
-      </p>
-    </div>
+    <figure
+      className={`relay-line ${compact ? "compact" : ""}`}
+      aria-label={label}
+    >
+      <div className="relay-track">
+        <div className="relay-endpoints sources">
+          <p className="system-label">From</p>
+          <ul>
+            {sources.map((source) => (
+              <li key={source.label}>
+                {source.icon}
+                <span>
+                  {source.label}
+                  {source.description && <small>{source.description}</small>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <ol
+          style={{ "--stage-count": progress.length } as CSSProperties}
+          className="relay-stages"
+          aria-label="Workflow stages"
+        >
+          {progress.map((stage) => (
+            <li
+              key={stage.id}
+              className={`relay-stage ${stage.state}`}
+              aria-current={
+                stage.state === "active" || stage.state === "waiting"
+                  ? "step"
+                  : undefined
+              }
+            >
+              <span className="relay-node" aria-hidden="true">
+                {stage.state === "complete" ? (
+                  <Check />
+                ) : stage.state === "failed" ? (
+                  <X />
+                ) : stage.state === "waiting" ? (
+                  <Clock3 />
+                ) : (
+                  <Circle />
+                )}
+              </span>
+              <span className="relay-stage-label">{stage.label}</span>
+              <span className="stage-state">{stage.state}</span>
+              {stage.description && <small>{stage.description}</small>}
+            </li>
+          ))}
+        </ol>
+        <div className="relay-endpoints destinations">
+          <p className="system-label">To</p>
+          <ul>
+            {destinations.map((destination) => (
+              <li key={destination.label}>
+                <ArrowRight aria-hidden="true" />
+                {destination.icon}
+                <span>
+                  {destination.label}
+                  {destination.description && (
+                    <small>{destination.description}</small>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      {!compact && (
+        <figcaption>
+          <span>{statusFor(status).label}</span>
+          <span>Your review connects a proposal to an action.</span>
+        </figcaption>
+      )}
+    </figure>
   );
 }
