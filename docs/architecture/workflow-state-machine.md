@@ -1,6 +1,6 @@
 # Workflow state machine
 
-`app/domain/workflows.py` is the single transition table. There is no endpoint that accepts an arbitrary workflow status. `POST /workflow-runs` creates DRAFT only. Planning/execution transitions are internal service methods for future workflows and are exercised using fixtures.
+`app/domain/workflows.py` is the single transition table. There is no endpoint that accepts an arbitrary workflow status. `POST /workflow-runs` creates DRAFT only. Planning/execution transitions are internal service methods, driven by each workflow's own service (`app/workflows/lecture_notes/`, `app/workflows/study_plan/`) through their public API routes -- not by any endpoint that sets status directly.
 
 ```mermaid
 stateDiagram-v2
@@ -31,10 +31,10 @@ COMPLETED, PARTIALLY_COMPLETED, FAILED, REJECTED, and CANCELLED are terminal. Se
 
 ## Approval gates
 
-Entering AWAITING_APPROVAL requires a non-empty action set with pending requests. Every action must have an approved request before APPROVED or QUEUED. No public API can create proposed actions or trigger analysis/execution yet.
+Entering AWAITING_APPROVAL requires a non-empty action set with pending requests. Every action must have an approved request before APPROVED or QUEUED. LEARN and PLAN both expose real public endpoints that create proposed actions and drive execution (`/workflows/learn/{id}/execute`, `/workflows/plan/{id}/execute`); COLLABORATE does not yet.
 
 Request creation deep-copies the proposed payload. Approval requires PENDING, ownership, AWAITING_APPROVAL, and an exact JSON payload match against both the stored original and current action. Object key order is ignored; JSON scalar types, array order, and values are retained. Payload editing is deliberately not exposed. A changed proposal fails with a conflict instead of silently authorizing different work.
 
 The exact approved snapshot is persisted and cannot be changed through supported APIs/ORM writes after resolution. Future executors must use this snapshot. Approving all actions moves the run to APPROVED but does not submit execution. Rejecting one action rejects the run and expires other pending requests. Duplicate approve/reject requests return 409, including concurrent resolutions serialized with a PostgreSQL parent-run lock. No second decision event is appended.
 
-Execution states describe the future lifecycle; their presence is not evidence that workers or external writes exist. Cancellation from EXECUTING is intentionally unsupported because an in-flight external side effect cannot be assumed reversible.
+QUEUED and EXECUTING are real, exercised states for both LEARN (Notion) and PLAN (Google Calendar) execution. PARTIALLY_COMPLETED is used by PLAN when some but not all approved calendar blocks could be created (see `docs/architecture/plan-sequence.md`); LEARN's single-action executions only ever reach COMPLETED or FAILED. Cancellation from EXECUTING is intentionally unsupported because an in-flight external side effect cannot be assumed reversible.

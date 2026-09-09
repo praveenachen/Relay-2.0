@@ -21,7 +21,7 @@ erDiagram
 
 Users receive default preferences and a USER_CREATED audit event atomically during registration. Email uniqueness includes a case-insensitive index. Preferences use local wall-clock times plus an IANA timezone; the current policy is a same-day study window, sessions from 5 to 480 minutes, preferred <= maximum, and breaks from 0 to 240 minutes. Overnight study windows are intentionally unsupported until scheduling semantics are designed.
 
-The three definition keys are `lecture_to_notion`, `study_scheduler`, and `project_meeting`. Alembic seeds version 1 exactly once. Running `upgrade head` again creates no duplicates. Enabled means a user can create a DRAFT, not that automation is implemented. Definitions are versioned by `(key, version)` and runs reference a specific version.
+The three definition keys are `lecture_to_notion`, `study_scheduler`, and `project_meeting`. Alembic seeds version 1 exactly once. Running `upgrade head` again creates no duplicates. Enabled means a user can create a DRAFT; `lecture_to_notion` (LEARN) and `study_scheduler` (PLAN) both have full automation behind that DRAFT, `project_meeting` (COLLABORATE) does not yet. Definitions are versioned by `(key, version)` and runs reference a specific version.
 
 JSONB is used for workflow inputs/plans/results, proposed and approved payloads, audit metadata, and provider scope lists. Ownership, state, identities, dates, risk, providers, and relationships are typed columns. No entity is a generic JSON document.
 

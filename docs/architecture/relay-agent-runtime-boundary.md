@@ -12,7 +12,7 @@ Relay owns what should happen; Agent Runtime owns reliable execution. They remai
 
 `backend/app/runtime/client.py` defines a typed asynchronous `RuntimeClient` Protocol with submit, get, and cancel methods. Requests carry an operation identifier, JSON payload, and idempotency key. Snapshots carry execution identity, state, optional result, error code, and timestamps.
 
-`LocalRuntimeClient` exists for the LEARN slice. It is an in-process adapter that persists local execution snapshots and calls either `MockNotionConnector` or a DB-backed real Notion connector after approval. `AgentRuntimeHttpClient` remains a future adapter. Runtime must not interpret lectures, assignments, courses, study sessions, Notion tasks, or GitHub issues. An eventual opaque operation payload is not permission to teach Runtime domain rules.
+`LocalRuntimeClient` now serves both the LEARN and PLAN slices. It is an in-process adapter that persists local execution snapshots and, after approval, calls either a Notion connector (mock or DB-backed real) for LEARN, or a DB-backed Google Calendar connector for PLAN -- creating each approved study block independently so a mid-batch failure doesn't discard the blocks that already succeeded (see `docs/architecture/plan-sequence.md`). `AgentRuntimeHttpClient` remains a future adapter and is out of scope for this phase. Runtime must not interpret lectures, assignments, courses, study sessions, Notion tasks, or GitHub issues. An eventual opaque operation payload is not permission to teach Runtime domain rules.
 
 ```mermaid
 sequenceDiagram
