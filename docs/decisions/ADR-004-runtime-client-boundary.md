@@ -20,7 +20,7 @@ A small port makes dependencies explicit and permits future LocalRuntimeClient a
 
 # Consequences
 
-The contract is provisional. It includes idempotency keys but provides no idempotency guarantee itself. No adapter, transport, retry mechanism, or execution endpoint is implemented.
+The contract is still the Relay boundary for execution. It includes idempotency keys but provides no idempotency guarantee by itself. Phase 5 has an in-process `LocalRuntimeClient` for LEARN publishing; Agent Runtime transport, queues, retry workers, and cancellation remain future work.
 
 # When We Would Reconsider
 

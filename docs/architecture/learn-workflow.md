@@ -43,7 +43,7 @@ sequenceDiagram
 
 The service does not expose storage keys or raw extracted text in list/detail payloads. Detail responses include document metadata and section identities so generated `source_refs` can be shown and validated without echoing the whole lecture source.
 
-`ExecutionService` only runs after the generic approval service has resolved an approval to `APPROVED` with an immutable `approved_payload`. Execution submits that snapshot through the `RuntimeClient` contract with an idempotency key. The local runtime persists the request and snapshot in `local_execution`; successful mock publishing records an `external_artifact` with no connected account.
+`ExecutionService` only runs after the generic approval service has resolved an approval to `APPROVED` with an immutable `approved_payload`. Execution submits that snapshot through the `RuntimeClient` contract with an idempotency key. The local runtime persists the request and snapshot in `local_execution`; successful publishing records an `external_artifact`.
 
 ## Frontend responsibilities
 
@@ -56,10 +56,10 @@ Generic run detail and approval pages link LEARN runs into the richer review rou
 
 ## Provider modes
 
-`LANGUAGE_MODEL_PROVIDER=fake` is the default and is deterministic for tests and local demos. `LANGUAGE_MODEL_PROVIDER=openai` uses the OpenAI Responses API with schema parsing, no retries, configured timeout, and `store=false`.
+`LANGUAGE_MODEL_PROVIDER=fake` is the default and is deterministic for tests and local demos. `LANGUAGE_MODEL_PROVIDER=openai` uses the OpenAI Responses API with schema parsing, no retries, configured timeout, and `store=false`. `NOTION_PUBLISH_MODE=mock` keeps publishing isolated; `NOTION_PUBLISH_MODE=real` uses an encrypted Notion connection and selected destination.
 
 OpenAI integration is a provider adapter behind `LanguageModel`; the LEARN workflow service receives only typed `LectureSummary` values or safe domain errors.
 
 ## Out of scope
 
-LEARN does not retrieve content from Notion, create a real Notion page, use OAuth credentials, perform OCR, implement retrieval-augmented generation, or use Agent Runtime workers. PLAN and COLLABORATE automation remain future work.
+LEARN does not retrieve content from Notion, perform OCR, implement retrieval-augmented generation, or use Agent Runtime workers. PLAN and COLLABORATE automation remain future work.

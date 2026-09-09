@@ -29,7 +29,7 @@ JSONB is used for workflow inputs/plans/results, proposed and approved payloads,
 
 - Connected accounts are unique by `(user_id, provider, external_account_id)`; provider endpoints return lists because one user may eventually connect multiple accounts. Provider-level disconnect revokes all of that user's records for the provider.
 - Approvals have one record per action in this phase. Composite foreign keys keep approval/artifact action IDs tied to the same workflow run. An approved record requires a payload and resolver; pending records have no resolution timestamp.
-- External artifacts have globally unique idempotency keys and `(connected_account_id, artifact_type, external_id)` uniqueness. External IDs are scoped to accounts rather than assumed globally unique. No artifact creation API exists yet.
+- External artifacts have globally unique idempotency keys and `(connected_account_id, artifact_type, external_id)` uniqueness. External IDs are scoped to accounts rather than assumed globally unique. LEARN creates artifacts only through approved execution.
 - Run lists index owner/creation time and state. Connections index owner/provider. Approval requests index run. Audit events index run/time. Results are bounded; run and approval list APIs accept pagination parameters.
 - Audit mutation is unavailable through the API and guarded against ORM update/delete. Resolved approvals reject ORM updates. Privileged raw SQL remains outside this application-level protection; a future production DB role policy can enforce stronger append-only restrictions.
 
