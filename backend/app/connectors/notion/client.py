@@ -15,10 +15,12 @@ from app.connectors.notion.errors import (
 from app.connectors.notion.mapper import NotionStudyPageMapper
 from app.connectors.notion.schemas import (
     CreateNotionStudyPageAction,
+    CreateNotionTaskAction,
     ExternalArtifactResult,
     NotionBlock,
     NotionDestination,
     NotionTaskDatabase,
+    NotionTaskResult,
 )
 
 NOTION_VERSION = "2026-03-11"
@@ -83,7 +85,9 @@ class NotionApiClient:
     ):
         self.access_token, self.base_url, self.timeout = access_token, base_url, timeout
 
-    async def request(self, method: str, path: str, json: dict[str, Any]) -> dict[str, Any]:
+    async def request(
+        self, method: str, path: str, json: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         try:
             async with httpx.AsyncClient(base_url=self.base_url, timeout=self.timeout) as client:
                 response = await client.request(
@@ -177,6 +181,25 @@ class NotionApiClient:
             },
         )
 
+    async def get_database(self, database_id: str) -> dict[str, Any]:
+        return await self.request("GET", f"/v1/databases/{database_id}")
+
+    async def create_database_page(
+        self,
+        database_id: str,
+        properties: dict[str, Any],
+        blocks: list[NotionBlock] | None = None,
+    ) -> dict[str, Any]:
+        return await self.request(
+            "POST",
+            "/v1/pages",
+            {
+                "parent": {"database_id": database_id},
+                "properties": properties,
+                "children": [notion_block(block) for block in blocks or []],
+            },
+        )
+
 
 class RealNotionConnector:
     def __init__(self, client: NotionApiClient):
@@ -210,3 +233,20 @@ class RealNotionConnector:
             destination_title=action.parent_destination_title,
             blocks=blocks,
         )
+
+    async def create_task(
+        self,
+        action: CreateNotionTaskAction,
+        idempotency_key: str,
+    ) -> NotionTaskResult:
+        marker = NotionBlock(kind="paragraph", text=f"Relay action: {idempotency_key}")
+        result = await self.client.create_database_page(
+            action.database_id,
+            action.properties,
+            [marker, *action.body_blocks],
+        )
+        page_id = result.get("id")
+        page_url = result.get("url")
+        if not isinstance(page_id, str) or not isinstance(page_url, str):
+            raise NotionPublishFailed()
+        return NotionTaskResult(external_id=page_id, external_url=page_url, title=action.title)

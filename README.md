@@ -2,7 +2,7 @@
 
 Relay is a student workflow platform that turns information into understanding, a plan, and actions a person explicitly approves.
 
-**Status: Phase 5 real Notion integration implemented.** Relay has real accounts and revocable sessions, saved preferences, workflow drafts, private lecture document ingestion, typed AI summarization, editable approval payloads, real Notion OAuth, destination selection, approved Notion publishing, mock publishing for tests/local isolation, external artifact records, encrypted connection infrastructure, and a working onboarding/workspace UI. Retrieval, scheduling, collaboration automation, Google/GitHub OAuth, and Agent Runtime integration are not implemented.
+**Status: Phase 7 COLLABORATE implemented.** Relay has real accounts and revocable sessions, saved preferences, workflow drafts, private document/transcript ingestion, typed AI summarization and meeting extraction, editable approval payloads, real Notion OAuth, Google Calendar OAuth, GitHub OAuth, deterministic PLAN scheduling, COLLABORATE project workspaces, approved Notion/GitHub/Calendar actions, mock publishing for tests/local isolation, external artifact records, encrypted connection infrastructure, and a working onboarding/workspace UI. Retrieval, refresh workers, audio/video transcription, generic chat, autonomous code generation, and Agent Runtime HTTP integration are not implemented.
 
 ## Three planned workflows
 
@@ -12,7 +12,7 @@ Relay is a student workflow platform that turns information into understanding, 
 | Plan (`study_scheduler`) | Tasks, calendar availability and preferences become a realistic study schedule. |
 | Collaborate (`project_meeting`) | Meeting transcripts become Notion action items and GitHub work. |
 
-The dashboard reads versioned definitions from the API. LEARN accepts PDF, DOCX, Markdown, and plain text source files, parses them locally, generates typed study notes, and publishes to a selected Notion parent page after approval when Notion is configured. PLAN and COLLABORATE still save drafts only.
+The dashboard reads versioned definitions from the API. LEARN accepts PDF, DOCX, Markdown, and plain text source files, parses them locally, generates typed study notes, and publishes to a selected Notion parent page after approval. PLAN imports tasks, combines preferences with Google Calendar availability, solves a deterministic CP-SAT schedule, and creates approved study blocks. COLLABORATE parses meeting transcripts, extracts typed decisions/action items, resolves owners against project members, and creates approved Notion tasks, GitHub issues, or review requests.
 
 ## Technical thesis
 
@@ -31,7 +31,7 @@ Relay decides **what should happen**. The separate Agent Runtime repository will
 frontend/
   app/                     Landing, auth and protected workspace pages
   components/              Reusable forms, cards, navigation and Relay Line
-  features/                Auth, runs, definitions, approvals, preferences, connections and LEARN API modules
+  features/                Auth, runs, definitions, approvals, preferences, connections and workflow API modules
   hooks/                   TanStack Query server-state hooks
   lib/                     Zod schemas, API transport and server session validation
   tests/                   Playwright browser flows
@@ -56,7 +56,7 @@ docs/                      Architecture, security and ADRs
 
 The core domain imports no FastAPI, SQLAlchemy, React, OAuth SDK, or language-model client. API routes return explicit schemas and delegate mutations to services. Async SQLAlchemy sessions support FastAPI Users and application services; synchronous database access is reserved for Alembic/diagnostics. Migrations, not application startup, own schema creation.
 
-Read [system context](docs/architecture/system-context.md), [domain model](docs/architecture/domain-model.md), [workflow state machine](docs/architecture/workflow-state-machine.md), [runtime boundary](docs/architecture/relay-agent-runtime-boundary.md), [LEARN workflow](docs/architecture/learn-workflow.md), [document processing](docs/architecture/document-processing.md), [Notion publishing](docs/architecture/notion-publishing.md), and [Notion integration](docs/integrations/notion.md). Design decisions are recorded in [ADRs](docs/decisions).
+Read [system context](docs/architecture/system-context.md), [domain model](docs/architecture/domain-model.md), [workflow state machine](docs/architecture/workflow-state-machine.md), [runtime boundary](docs/architecture/relay-agent-runtime-boundary.md), [LEARN workflow](docs/architecture/learn-workflow.md), [document processing](docs/architecture/document-processing.md), [Notion publishing](docs/architecture/notion-publishing.md), [scheduling engine](docs/architecture/scheduling-engine.md), [PLAN sequence](docs/architecture/plan-sequence.md), [COLLABORATE sequence](docs/architecture/collaborate-sequence.md), [Notion integration](docs/integrations/notion.md), [Google Calendar integration](docs/integrations/google-calendar.md), and [GitHub integration](docs/integrations/github.md). Design decisions are recorded in [ADRs](docs/decisions).
 
 ## Local development
 
@@ -80,7 +80,7 @@ Root `.env` configures the API and Compose. `frontend/.env.local` holds `API_INT
 
 **Upgrading from Phase 0:** add `COOKIE_SECURE=false`, `FRONTEND_ORIGIN=http://localhost:3000`, and `SESSION_LIFETIME_SECONDS=86400` to your existing local `.env` if missing; add `API_INTERNAL_URL=http://127.0.0.1:8000` to the frontend env file. Run setup to update dependencies, then migrate. The setup command preserves existing env files.
 
-No OAuth keys or encryption key are required to sign up and use drafts/preferences. Google Calendar and GitHub authorization intentionally return 501. LEARN uses `LANGUAGE_MODEL_PROVIDER=fake` by default for deterministic local summaries. To call OpenAI for typed summaries, set `LANGUAGE_MODEL_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`; responses are requested with schema parsing and `store=false`. To publish to Notion, configure `TOKEN_ENCRYPTION_KEY`, `NOTION_CLIENT_ID`, `NOTION_CLIENT_SECRET`, `NOTION_REDIRECT_URI`, and `NOTION_PUBLISH_MODE=real` as described in [Notion integration](docs/integrations/notion.md). Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
+No OAuth keys or encryption key are required to sign up and use mock/local workflow paths. LEARN and COLLABORATE use `LANGUAGE_MODEL_PROVIDER=fake` by default for deterministic test data. To call OpenAI for typed summaries or meeting extraction, set `LANGUAGE_MODEL_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`; responses are requested with schema parsing and `store=false`. To use real provider writes, configure `TOKEN_ENCRYPTION_KEY` plus the relevant Notion, Google Calendar, or GitHub OAuth values described in [Notion integration](docs/integrations/notion.md), [Google Calendar integration](docs/integrations/google-calendar.md), and [GitHub integration](docs/integrations/github.md). Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
 
 | Make command | Portable equivalent | Purpose |
 | --- | --- | --- |
@@ -115,16 +115,19 @@ Frontend versions are locked in `package-lock.json`; backend dependencies are pi
 - `/users/me`, `/users/me/onboarding`, `/preferences`: profile, onboarding and validated preferences.
 - `/workflow-definitions`, `/workflow-runs`, `/workflow-runs/{id}/events`: definitions, owned drafts and history. Run lists support definition, status, date, incomplete-state filtering, limit and offset.
 - `/workflows/learn`: LEARN run creation, private source upload/download, parse, summarize, edit proposed summary, refresh selected Notion destination, execute approved Notion publishing, and owned artifact lookup.
-- `/approvals`: owned requests and exact-payload approve/reject. Requests are produced only by internal fixture/service planning for now.
-- `/connections`: safe metadata/disconnect; authorize/callback return authenticated 501 responses.
+- `/workflows/plan`: PLAN setup, Notion task import, Google availability loading, deterministic schedule solve, session edits/locks, approval, and approved Calendar execution.
+- `/workflows/collaborate`: project-backed transcript upload/parse/analyze, action review, approval, Notion task creation, GitHub issue creation, review requests, idempotent execution, and partial completion.
+- `/projects`: owned project workspace and member configuration for COLLABORATE identity/repository context.
+- `/approvals`: owned requests and exact-payload approve/reject.
+- `/connections`: safe metadata/disconnect; Notion, Google Calendar, and GitHub OAuth plus destination/repository/calendar lookup.
 
 No arbitrary state-change, audit-edit, real external-artifact, or generic workflow-execution endpoint exists. Unsafe requests require the configured Origin header as well as a session where applicable.
 
 ## Boundaries and next phase
 
-Approval snapshots, lifecycle rules and audit records are implemented. LEARN proves one reviewed document-to-action path with real Notion publishing behind the `RuntimeClient` boundary. Retrieval, refresh workers, account recovery/email verification, production abuse protection and deployment hardening remain outstanding. See [authentication](docs/security/authentication.md), [external connections](docs/security/external-connections.md), [OAuth security](docs/security/oauth.md), and [AI and document handling](docs/security/ai-and-document-handling.md) for precise limits.
+Approval snapshots, lifecycle rules and audit records are implemented. LEARN, PLAN, and COLLABORATE all execute approved provider actions behind the `RuntimeClient` boundary, but the implementation still uses `LocalRuntimeClient`; Agent Runtime HTTP integration is intentionally left for Phase 8. Retrieval, refresh workers, account recovery/email verification, production abuse protection and deployment hardening remain outstanding. See [authentication](docs/security/authentication.md), [external connections](docs/security/external-connections.md), [OAuth security](docs/security/oauth.md), and [AI and document handling](docs/security/ai-and-document-handling.md) for precise limits.
 
-The recommended next phase is Agent Runtime integration behind the existing `RuntimeClient` contract, or PLAN workflow discovery/scheduling. Plan and Collaborate remain later work.
+The recommended next phase is Agent Runtime integration behind the existing `RuntimeClient` contract. Do not start Phase 8 until the local runtime behavior is accepted.
 
 ## License
 

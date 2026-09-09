@@ -7,6 +7,8 @@ from fastapi.responses import RedirectResponse
 
 from app.api.dependencies import Repository
 from app.auth.users import CurrentUser, UserRead
+from app.connectors.github import GitHubOAuthClient, GitHubOAuthService, GitHubRepository
+from app.connectors.github.service import GitHubService
 from app.connectors.google import GoogleOAuthClient, GoogleOAuthService
 from app.connectors.google.schemas import CalendarListItem
 from app.connectors.google.service import GoogleCalendarService
@@ -203,6 +205,29 @@ def google_calendars(repo: Repository) -> GoogleCalendarService:
     )
 
 
+def github_oauth() -> GitHubOAuthClient:
+    settings = get_settings()
+    return GitHubOAuthClient(
+        settings.github_client_id,
+        settings.github_client_secret.get_secret_value(),
+        settings.github_redirect_uri,
+        authorize_url=settings.github_oauth_authorize_url,
+        token_url=settings.github_oauth_token_url,
+        api_base_url=settings.github_api_base_url,
+        timeout=settings.github_timeout_seconds,
+    )
+
+
+def github_connections(repo: Repository) -> GitHubService:
+    settings = get_settings()
+    return GitHubService(
+        repo,
+        credential_store(),
+        api_base_url=settings.github_api_base_url,
+        timeout=settings.github_timeout_seconds,
+    )
+
+
 def notion_destinations(repo: Repository) -> NotionDestinationService:
     settings = get_settings()
     return NotionDestinationService(
@@ -233,6 +258,8 @@ async def authorize(
         return await NotionOAuthService(repo, notion_oauth(), credential_store()).start(user.id)
     if provider == Provider.GOOGLE:
         return await GoogleOAuthService(repo, google_oauth(), credential_store()).start(user.id)
+    if provider == Provider.GITHUB:
+        return await GitHubOAuthService(repo, github_oauth(), credential_store()).start(user.id)
     ConnectionService(repo).authorize(provider)
     return None
 
@@ -256,6 +283,11 @@ async def callback(
             user.id, state=state, code=code, error=error
         )
         return RedirectResponse(get_settings().frontend_origin + "/connections?connected=google")
+    if provider == Provider.GITHUB:
+        await GitHubOAuthService(repo, github_oauth(), credential_store()).callback(
+            user.id, state=state, code=code, error=error
+        )
+        return RedirectResponse(get_settings().frontend_origin + "/connections?connected=github")
     ConnectionService(repo).callback(provider)
     return Response(status_code=501)
 
@@ -361,3 +393,12 @@ async def notion_task_database_select(
     data: NotionTaskDatabaseSelection, user: CurrentUser, repo: Repository
 ) -> NotionTaskDatabase:
     return await notion_task_sources(repo).select(user.id, data.database_id, data.mapping)
+
+
+@router.get(
+    "/connections/GITHUB/repositories",
+    response_model=list[GitHubRepository],
+    tags=["connections"],
+)
+async def github_repository_list(user: CurrentUser, repo: Repository) -> list[GitHubRepository]:
+    return await github_connections(repo).repositories(user.id)

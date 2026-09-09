@@ -6,12 +6,19 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import ApprovalStatus, Provider, WorkflowStatus
-from app.domain.errors import ApprovalNotFound, UnauthorizedResourceAccess, WorkflowNotFound
+from app.domain.errors import (
+    ApprovalNotFound,
+    ProjectNotFound,
+    UnauthorizedResourceAccess,
+    WorkflowNotFound,
+)
 from app.domain.workflows import TERMINAL_STATES
 from app.models.entities import (
     ApprovalRequest,
     AuditEvent,
     ConnectedAccount,
+    ProjectMember,
+    ProjectWorkspace,
     ProposedAction,
     UserPreference,
     WorkflowDefinition,
@@ -125,5 +132,36 @@ class RelayRepository:
                 select(AuditEvent)
                 .where(AuditEvent.workflow_run_id == run_id, AuditEvent.user_id == owner)
                 .order_by(AuditEvent.created_at, AuditEvent.id)
+            )
+        ).all()
+
+    async def projects(self, owner: UUID) -> Sequence[ProjectWorkspace]:
+        return (
+            await self.session.scalars(
+                select(ProjectWorkspace)
+                .where(ProjectWorkspace.user_id == owner)
+                .order_by(ProjectWorkspace.created_at.desc())
+            )
+        ).all()
+
+    async def project(
+        self, project_id: UUID, owner: UUID, *, lock: bool = False
+    ) -> ProjectWorkspace:
+        query = select(ProjectWorkspace).where(
+            ProjectWorkspace.id == project_id, ProjectWorkspace.user_id == owner
+        )
+        if lock:
+            query = query.with_for_update().execution_options(populate_existing=True)
+        project = await self.session.scalar(query)
+        if project is None:
+            raise ProjectNotFound()
+        return project
+
+    async def members(self, project_id: UUID) -> Sequence[ProjectMember]:
+        return (
+            await self.session.scalars(
+                select(ProjectMember)
+                .where(ProjectMember.project_workspace_id == project_id)
+                .order_by(ProjectMember.display_name)
             )
         ).all()

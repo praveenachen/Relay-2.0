@@ -61,12 +61,33 @@ class NotionOAuthToken(StrictModel):
     duplicated_template_id: str | None = None
 
 
+class CreateNotionTaskAction(StrictModel):
+    task_id: str
+    database_id: str
+    title: str
+    properties: dict[str, Any]
+    body_blocks: tuple[NotionBlock, ...] = ()
+    connection_id: str | None = None
+
+
+class NotionTaskResult(StrictModel):
+    external_id: str
+    external_url: str
+    title: str
+
+
 class NotionConnector(Protocol):
     async def create_study_page(
         self,
         action: CreateNotionStudyPageAction,
         idempotency_key: str,
     ) -> ExternalArtifactResult: ...
+
+    async def create_task(
+        self,
+        action: CreateNotionTaskAction,
+        idempotency_key: str,
+    ) -> NotionTaskResult: ...
 
 
 class NotionTaskDatabase(StrictModel):

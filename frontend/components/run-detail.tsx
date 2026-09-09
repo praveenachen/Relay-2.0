@@ -3,20 +3,22 @@ import Link from "next/link";
 import { useDefinitions, useEvents, useRun } from "@/hooks/queries";
 import { RelayLine } from "@/components/relay-line";
 import { Empty, ErrorMessage, Loading, PageTitle } from "@/components/ui";
+import { displayFor } from "@/features/workflows/display";
+
 export function RunDetail({ id }: { id: string }) {
   const run = useRun(id),
     events = useEvents(id),
     definitions = useDefinitions();
   if (run.isPending) return <Loading />;
   if (run.error) return <ErrorMessage error={run.error} />;
-  const name =
-    definitions.data?.find(
-      (item) => item.id === run.data.workflow_definition_id,
-    )?.name || "Relay";
-  const isLearn =
-    definitions.data?.find(
-      (item) => item.id === run.data.workflow_definition_id,
-    )?.key === "lecture_to_notion";
+  const definition = definitions.data?.find(
+    (item) => item.id === run.data.workflow_definition_id,
+  );
+  const display = displayFor(definition?.key);
+  const name = definition?.name || "Relay";
+  const workspaceHref = display
+    ? `/workflows/${display.slug}/${run.data.id}`
+    : undefined;
   return (
     <>
       <PageTitle
@@ -24,23 +26,27 @@ export function RunDetail({ id }: { id: string }) {
         title={`${name} / ${run.data.status.toLowerCase().replaceAll("_", " ")}`}
         description="A clear record of your intent and every step that follows."
       />
-      <RelayLine status={run.data.status} />
+      <RelayLine
+        sources={display?.sources.map((label) => ({ label }))}
+        destinations={display?.destinations.map((label) => ({ label }))}
+        status={run.data.status}
+      />
       <div className="my-8">
-        {isLearn ? (
+        {workspaceHref ? (
           <Empty
             title={
               run.data.status === "DRAFT"
                 ? "Your draft is saved."
-                : "LEARN processing is available."
+                : `${display?.title || name} processing is available.`
             }
             action={
-              <Link className="button" href={`/workflows/learn/${run.data.id}`}>
-                Open LEARN review
+              <Link className="button" href={workspaceHref}>
+                Open {display?.title || name} review
               </Link>
             }
           >
-            Continue with upload, parsing, summary review, approval, and mock
-            publishing from the dedicated LEARN workspace.
+            Continue review, approval, and execution from the dedicated{" "}
+            {display?.title || name} workspace.
           </Empty>
         ) : (
           <Empty
@@ -56,10 +62,7 @@ export function RunDetail({ id }: { id: string }) {
         )}
       </div>
       {run.data.status === "AWAITING_APPROVAL" && (
-        <Link
-          className="button mb-8"
-          href={isLearn ? `/workflows/learn/${run.data.id}` : "/approvals"}
-        >
+        <Link className="button mb-8" href={workspaceHref || "/approvals"}>
           Review approval
         </Link>
       )}

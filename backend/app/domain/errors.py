@@ -73,6 +73,12 @@ class UnauthorizedResourceAccess(DomainError):
     message = "Resource not found."
 
 
+class ProjectNotFound(DomainError):
+    code = "PROJECT_NOT_FOUND"
+    status_code = 404
+    message = "Project not found."
+
+
 class CredentialStorageUnavailable(DomainError):
     code = "CREDENTIAL_STORAGE_UNAVAILABLE"
     status_code = 503

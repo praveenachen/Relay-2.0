@@ -120,11 +120,34 @@ class WorkflowDefinition(Identity, Timestamps, Base):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class ProjectWorkspace(Identity, Timestamps, Base):
+    __tablename__ = "project_workspace"
+    __table_args__ = (Index("ix_project_workspace_user", "user_id"),)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    name: Mapped[str] = mapped_column(String(200))
+    course: Mapped[str | None] = mapped_column(String(200))
+    notion_database_id: Mapped[str | None] = mapped_column(String(255))
+    notion_property_mapping: Mapped[dict[str, Any] | None] = mapped_column(PAYLOAD)
+    github_repository_owner: Mapped[str | None] = mapped_column(String(255))
+    github_repository_name: Mapped[str | None] = mapped_column(String(255))
+
+
+class ProjectMember(Identity, Timestamps, Base):
+    __tablename__ = "project_member"
+    __table_args__ = (Index("ix_project_member_workspace", "project_workspace_id"),)
+    project_workspace_id: Mapped[UUID] = mapped_column(ForeignKey("project_workspace.id"))
+    display_name: Mapped[str] = mapped_column(String(200))
+    email: Mapped[str | None] = mapped_column(String(320))
+    notion_identity: Mapped[str | None] = mapped_column(String(255))
+    github_username: Mapped[str | None] = mapped_column(String(255))
+
+
 class WorkflowRun(Identity, Timestamps, Base):
     __tablename__ = "workflow_run"
     __table_args__ = (Index("ix_run_user_created", "user_id", "created_at"),)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
     workflow_definition_id: Mapped[UUID] = mapped_column(ForeignKey("workflow_definition.id"))
+    project_workspace_id: Mapped[UUID | None] = mapped_column(ForeignKey("project_workspace.id"))
     status: Mapped[WorkflowStatus] = mapped_column(
         enum_type(WorkflowStatus), index=True, default=WorkflowStatus.DRAFT
     )

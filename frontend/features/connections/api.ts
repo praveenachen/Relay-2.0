@@ -38,6 +38,15 @@ export type NotionTaskPropertyMapping = z.infer<
   typeof notionTaskPropertyMappingSchema
 >;
 
+export const githubRepositorySchema = z.object({
+  owner: z.string(),
+  name: z.string(),
+  full_name: z.string(),
+  private: z.boolean(),
+  html_url: z.string(),
+});
+export type GitHubRepository = z.infer<typeof githubRepositorySchema>;
+
 export const connections = {
   list: () => request("/connections", connectionSchema.array()),
   authorize: (provider: Provider) =>
@@ -98,4 +107,6 @@ export const connections = {
       notionTaskDatabaseSchema,
       json({ database_id: databaseId, mapping }, "PUT"),
     ),
+  githubRepositories: () =>
+    request("/connections/GITHUB/repositories", githubRepositorySchema.array()),
 };

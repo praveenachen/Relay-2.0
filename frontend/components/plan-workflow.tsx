@@ -45,7 +45,10 @@ function defaultWindow(): { start: string; end: string } {
   start.setMinutes(0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 7);
-  return { start: localInputValue(start.toISOString()), end: localInputValue(end.toISOString()) };
+  return {
+    start: localInputValue(start.toISOString()),
+    end: localInputValue(end.toISOString()),
+  };
 }
 
 function emptyTask(): AcademicTask {
@@ -85,10 +88,12 @@ export function PlanEntry() {
         <h2 className="section-title">What Relay will do</h2>
         <ol className="learn-steps">
           <li>Import tasks from a Notion database, or enter them directly.</li>
-          <li>Read your Google Calendar availability for the planning window.</li>
           <li>
-            Run a CP-SAT solver to place study sessions around real
-            deadlines, study hours, and breaks.
+            Read your Google Calendar availability for the planning window.
+          </li>
+          <li>
+            Run a CP-SAT solver to place study sessions around real deadlines,
+            study hours, and breaks.
           </li>
           <li>Let you lock, move, or remove sessions before approving.</li>
           <li>Create only the approved study blocks on your calendar.</li>
@@ -130,7 +135,11 @@ export function PlanRun({ id }: { id: string }) {
     <>
       <PageTitle
         eyebrow="PLAN run"
-        title={taskCount ? `Study plan for ${taskCount} task${taskCount === 1 ? "" : "s"}` : "Study plan"}
+        title={
+          taskCount
+            ? `Study plan for ${taskCount} task${taskCount === 1 ? "" : "s"}`
+            : "Study plan"
+        }
         description="Review the imported tasks, calendar availability, generated schedule, and approval for this PLAN workflow."
         action={<Status value={data.run.status} />}
       />
@@ -182,17 +191,27 @@ function SetupWizard({
   );
   const [calendarId, setCalendarId] = useState(setup?.calendar_id || "");
   const [databaseId, setDatabaseId] = useState(setup?.notion_database_id || "");
-  const [mappingTitle, setMappingTitle] = useState(setup?.notion_mapping?.title || "Task Name");
-  const [mappingCourse, setMappingCourse] = useState(setup?.notion_mapping?.course || "");
-  const [mappingDeadline, setMappingDeadline] = useState(setup?.notion_mapping?.deadline || "Due Date");
+  const [mappingTitle, setMappingTitle] = useState(
+    setup?.notion_mapping?.title || "Task Name",
+  );
+  const [mappingCourse, setMappingCourse] = useState(
+    setup?.notion_mapping?.course || "",
+  );
+  const [mappingDeadline, setMappingDeadline] = useState(
+    setup?.notion_mapping?.deadline || "Due Date",
+  );
   const [mappingEstimate, setMappingEstimate] = useState(
     setup?.notion_mapping?.estimated_minutes || "Estimated Hours",
   );
   const [mappingUnit, setMappingUnit] = useState<"minutes" | "hours">(
     setup?.notion_mapping?.estimate_unit || "hours",
   );
-  const [mappingPriority, setMappingPriority] = useState(setup?.notion_mapping?.priority || "");
-  const [mappingStatus, setMappingStatus] = useState(setup?.notion_mapping?.status || "Status");
+  const [mappingPriority, setMappingPriority] = useState(
+    setup?.notion_mapping?.priority || "",
+  );
+  const [mappingStatus, setMappingStatus] = useState(
+    setup?.notion_mapping?.status || "Status",
+  );
   const [tasks, setTasks] = useState<AcademicTask[]>(setup?.tasks || []);
 
   const hasGoogle = (connectionsQuery.data || []).some(
@@ -219,7 +238,8 @@ function SetupWizard({
         end: new Date(end).toISOString(),
         calendar_id: calendarId || null,
         notion_database_id: overrides.detachNotion ? null : databaseId || null,
-        notion_mapping: overrides.detachNotion || !databaseId ? null : buildMapping(),
+        notion_mapping:
+          overrides.detachNotion || !databaseId ? null : buildMapping(),
         tasks,
       }),
     onSuccess: invalidate,
@@ -232,7 +252,10 @@ function SetupWizard({
     mutationFn: () => plan.loadAvailability(id),
     onSuccess: invalidate,
   });
-  const solve = useMutation({ mutationFn: () => plan.solve(id), onSuccess: invalidate });
+  const solve = useMutation({
+    mutationFn: () => plan.solve(id),
+    onSuccess: invalidate,
+  });
 
   const busy =
     saveSetup.isPending ||
@@ -244,7 +267,12 @@ function SetupWizard({
   return (
     <section className="my-8 space-y-8">
       <ErrorMessage
-        error={saveSetup.error || importTasks.error || loadAvailability.error || solve.error}
+        error={
+          saveSetup.error ||
+          importTasks.error ||
+          loadAvailability.error ||
+          solve.error
+        }
       />
       {!stage || stage === "setup" ? (
         <div className="panel">
@@ -255,8 +283,8 @@ function SetupWizard({
             </Link>
           </div>
           <p className="text-sm text-muted">
-            Relay schedules within your study hours, session lengths, and
-            break preferences from Settings.
+            Relay schedules within your study hours, session lengths, and break
+            preferences from Settings.
           </p>
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <label className="field">
@@ -326,25 +354,32 @@ function SetupWizard({
           </div>
           {databaseId && (
             <div className="mt-6 border-t border-line pt-5">
-              <h3 className="section-title">
-                Notion property mapping
-              </h3>
+              <h3 className="section-title">Notion property mapping</h3>
               <p className="text-sm text-muted">
-                Match Relay&apos;s task fields to this database&apos;s property names.
-                Relay never guesses a missing estimate or deadline.
+                Match Relay&apos;s task fields to this database&apos;s property
+                names. Relay never guesses a missing estimate or deadline.
               </p>
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 <label className="field">
                   Title property
-                  <input value={mappingTitle} onChange={(e) => setMappingTitle(e.target.value)} />
+                  <input
+                    value={mappingTitle}
+                    onChange={(e) => setMappingTitle(e.target.value)}
+                  />
                 </label>
                 <label className="field">
                   Course property
-                  <input value={mappingCourse} onChange={(e) => setMappingCourse(e.target.value)} />
+                  <input
+                    value={mappingCourse}
+                    onChange={(e) => setMappingCourse(e.target.value)}
+                  />
                 </label>
                 <label className="field">
                   Status property
-                  <input value={mappingStatus} onChange={(e) => setMappingStatus(e.target.value)} />
+                  <input
+                    value={mappingStatus}
+                    onChange={(e) => setMappingStatus(e.target.value)}
+                  />
                 </label>
                 <label className="field">
                   Deadline property
@@ -371,7 +406,9 @@ function SetupWizard({
                   Estimate unit
                   <select
                     value={mappingUnit}
-                    onChange={(e) => setMappingUnit(e.target.value as "minutes" | "hours")}
+                    onChange={(e) =>
+                      setMappingUnit(e.target.value as "minutes" | "hours")
+                    }
                   >
                     <option value="minutes">Minutes</option>
                     <option value="hours">Hours</option>
@@ -403,7 +440,11 @@ function SetupWizard({
               ? "Relay will read tasks from the selected Notion database."
               : "Relay will use the tasks you entered."}
           </p>
-          <button className="button mt-5" disabled={busy} onClick={() => importTasks.mutate()}>
+          <button
+            className="button mt-5"
+            disabled={busy}
+            onClick={() => importTasks.mutate()}
+          >
             Import tasks
           </button>
         </div>
@@ -416,7 +457,8 @@ function SetupWizard({
             <div className="notice mb-5">
               <p className="font-medium">
                 {setup.task_issues.length} Notion page
-                {setup.task_issues.length === 1 ? "" : "s"} could not be imported.
+                {setup.task_issues.length === 1 ? "" : "s"} could not be
+                imported.
               </p>
               <ul className="mt-2 list-disc pl-5 text-sm">
                 {setup.task_issues.map((issue, index) => (
@@ -453,7 +495,11 @@ function SetupWizard({
               ? `Relay found ${setup.busy_intervals.length} existing event${setup.busy_intervals.length === 1 ? "" : "s"} in the planning window.`
               : "No calendar is selected -- Relay will treat the whole window as free."}
           </p>
-          <button className="button mt-5" disabled={busy} onClick={() => solve.mutate()}>
+          <button
+            className="button mt-5"
+            disabled={busy}
+            onClick={() => solve.mutate()}
+          >
             <Play aria-hidden="true" />
             Generate study plan
           </button>
@@ -473,7 +519,9 @@ function TaskTable({
   editable: boolean;
 }) {
   const update = (index: number, patch: Partial<AcademicTask>) =>
-    onChange(tasks.map((task, i) => (i === index ? { ...task, ...patch } : task)));
+    onChange(
+      tasks.map((task, i) => (i === index ? { ...task, ...patch } : task)),
+    );
   return (
     <div>
       <div className="section-heading">
@@ -508,7 +556,9 @@ function TaskTable({
                   <input
                     disabled={!editable}
                     value={task.course || ""}
-                    onChange={(e) => update(index, { course: e.target.value || null })}
+                    onChange={(e) =>
+                      update(index, { course: e.target.value || null })
+                    }
                   />
                 </label>
                 <label className="field">
@@ -518,7 +568,9 @@ function TaskTable({
                     disabled={!editable}
                     value={localInputValue(task.deadline)}
                     onChange={(e) =>
-                      update(index, { deadline: new Date(e.target.value).toISOString() })
+                      update(index, {
+                        deadline: new Date(e.target.value).toISOString(),
+                      })
                     }
                   />
                 </label>
@@ -530,7 +582,9 @@ function TaskTable({
                     disabled={!editable}
                     value={task.estimated_minutes}
                     onChange={(e) =>
-                      update(index, { estimated_minutes: Number(e.target.value) || 0 })
+                      update(index, {
+                        estimated_minutes: Number(e.target.value) || 0,
+                      })
                     }
                   />
                 </label>
@@ -542,7 +596,9 @@ function TaskTable({
                     max={5}
                     disabled={!editable}
                     value={task.priority}
-                    onChange={(e) => update(index, { priority: Number(e.target.value) || 3 })}
+                    onChange={(e) =>
+                      update(index, { priority: Number(e.target.value) || 3 })
+                    }
                   />
                 </label>
               </div>
@@ -575,10 +631,18 @@ function ReviewAndApprove({
 }) {
   const setup = data.setup;
   const result = data.result;
-  const solve = useMutation({ mutationFn: () => plan.solve(id), onSuccess: invalidate });
+  const solve = useMutation({
+    mutationFn: () => plan.solve(id),
+    onSuccess: invalidate,
+  });
   const lock = useMutation({
-    mutationFn: ({ sessionId, locked }: { sessionId: string; locked: boolean }) =>
-      plan.lockSession(id, sessionId, locked),
+    mutationFn: ({
+      sessionId,
+      locked,
+    }: {
+      sessionId: string;
+      locked: boolean;
+    }) => plan.lockSession(id, sessionId, locked),
     onSuccess: invalidate,
   });
   const remove = useMutation({
@@ -597,7 +661,10 @@ function ReviewAndApprove({
     },
     onSuccess: invalidate,
   });
-  const execute = useMutation({ mutationFn: () => plan.execute(id), onSuccess: invalidate });
+  const execute = useMutation({
+    mutationFn: () => plan.execute(id),
+    onSuccess: invalidate,
+  });
 
   const busy =
     solve.isPending ||
@@ -644,7 +711,11 @@ function ReviewAndApprove({
       {canRegenerate && (
         <div className="panel">
           <div className="flex flex-wrap gap-3">
-            <button className="button secondary" disabled={busy} onClick={() => solve.mutate()}>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => solve.mutate()}
+            >
               <RotateCcw aria-hidden="true" />
               Regenerate remaining sessions
             </button>
@@ -659,8 +730,8 @@ function ReviewAndApprove({
           </div>
           {!canRequestApproval && result?.status === "INFEASIBLE" && (
             <p className="mt-3 text-sm text-muted">
-              This plan is not feasible yet -- adjust the window, preferences, or
-              task load before requesting approval.
+              This plan is not feasible yet -- adjust the window, preferences,
+              or task load before requesting approval.
             </p>
           )}
         </div>
@@ -690,14 +761,19 @@ function ReviewAndApprove({
             </div>
           )}
           {data.run.status === "APPROVED" && (
-            <button className="button mt-5" disabled={busy} onClick={() => execute.mutate()}>
+            <button
+              className="button mt-5"
+              disabled={busy}
+              onClick={() => execute.mutate()}
+            >
               <Send aria-hidden="true" />
               Create approved calendar blocks
             </button>
           )}
         </div>
       )}
-      {(data.run.status === "COMPLETED" || data.run.status === "PARTIALLY_COMPLETED") && (
+      {(data.run.status === "COMPLETED" ||
+        data.run.status === "PARTIALLY_COMPLETED") && (
         <ExecutionSummary data={data} />
       )}
     </section>
@@ -705,15 +781,18 @@ function ReviewAndApprove({
 }
 
 function ExecutionSummary({ data }: { data: PlanDetail }) {
-  const payload = data.run.result_payload as
-    | { created_count?: number; failed_count?: number; approved_count?: number }
-    | null;
+  const payload = data.run.result_payload as {
+    created_count?: number;
+    failed_count?: number;
+    approved_count?: number;
+  } | null;
   return (
     <div className="panel">
       <h2 className="section-title">Calendar result</h2>
       <p className="text-sm">
-        {payload?.created_count ?? 0} of {payload?.approved_count ?? 0} approved study blocks
-        created{payload?.failed_count ? `, ${payload.failed_count} failed` : ""}.
+        {payload?.created_count ?? 0} of {payload?.approved_count ?? 0} approved
+        study blocks created
+        {payload?.failed_count ? `, ${payload.failed_count} failed` : ""}.
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         <Link className="button secondary" href="/dashboard">
@@ -745,7 +824,8 @@ function SchedulePanel({
   if (!result) return null;
   const titleFor = (taskId: string) =>
     tasks.find((task) => task.id === taskId)?.title || taskId;
-  const courseFor = (taskId: string) => tasks.find((task) => task.id === taskId)?.course;
+  const courseFor = (taskId: string) =>
+    tasks.find((task) => task.id === taskId)?.course;
   const byDay = new Map<string, StudySession[]>();
   for (const session of result.sessions) {
     const day = new Date(session.start).toLocaleDateString(undefined, {
@@ -762,8 +842,12 @@ function SchedulePanel({
         <Status value={result.status} />
       </div>
       <div className="mt-4 grid gap-3 text-sm text-muted md:grid-cols-4">
-        <span>{result.metrics.tasks_fully_scheduled} task(s) fully scheduled</span>
-        <span>{result.metrics.tasks_partially_scheduled} partially scheduled</span>
+        <span>
+          {result.metrics.tasks_fully_scheduled} task(s) fully scheduled
+        </span>
+        <span>
+          {result.metrics.tasks_partially_scheduled} partially scheduled
+        </span>
         <span>{result.metrics.session_count} session(s)</span>
         <span>{result.metrics.unscheduled_minutes} unscheduled minute(s)</span>
       </div>
@@ -792,7 +876,9 @@ function SchedulePanel({
                   <div>
                     <p className="font-medium">{titleFor(session.task_id)}</p>
                     <p className="text-sm text-muted">
-                      {courseFor(session.task_id) ? `${courseFor(session.task_id)} - ` : ""}
+                      {courseFor(session.task_id)
+                        ? `${courseFor(session.task_id)} - `
+                        : ""}
                       {new Date(session.start).toLocaleTimeString(undefined, {
                         hour: "numeric",
                         minute: "2-digit",
@@ -809,8 +895,12 @@ function SchedulePanel({
                       <button
                         className="button secondary"
                         disabled={busy}
-                        aria-label={session.locked ? "Unlock session" : "Lock session"}
-                        onClick={() => onLock(session.id as string, !session.locked)}
+                        aria-label={
+                          session.locked ? "Unlock session" : "Lock session"
+                        }
+                        onClick={() =>
+                          onLock(session.id as string, !session.locked)
+                        }
                       >
                         {session.locked ? (
                           <Unlock aria-hidden="true" />

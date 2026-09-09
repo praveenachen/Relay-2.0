@@ -125,3 +125,41 @@ class AuditRead(ReadModel):
     event_type: str
     event_metadata: dict[str, JsonValue]
     created_at: datetime
+
+
+class ProjectInput(InputModel):
+    name: str = Field(min_length=1, max_length=200)
+    course: str | None = Field(default=None, max_length=200)
+    notion_database_id: str | None = Field(default=None, max_length=255)
+    notion_property_mapping: dict[str, JsonValue] | None = None
+    github_repository_owner: str | None = Field(default=None, max_length=255)
+    github_repository_name: str | None = Field(default=None, max_length=255)
+
+
+class ProjectRead(ReadModel):
+    id: UUID
+    user_id: UUID
+    name: str
+    course: str | None
+    notion_database_id: str | None
+    notion_property_mapping: dict[str, JsonValue] | None
+    github_repository_owner: str | None
+    github_repository_name: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProjectMemberInput(InputModel):
+    display_name: str = Field(min_length=1, max_length=200)
+    email: str | None = Field(default=None, max_length=320)
+    notion_identity: str | None = Field(default=None, max_length=255)
+    github_username: str | None = Field(default=None, max_length=255)
+
+
+class ProjectMemberRead(ReadModel):
+    id: UUID
+    project_workspace_id: UUID
+    display_name: str
+    email: str | None
+    notion_identity: str | None
+    github_username: str | None

@@ -6,7 +6,11 @@ from cryptography.fernet import Fernet
 from sqlalchemy import select
 
 from app.domain.enums import ConnectionStatus, Provider
-from app.domain.errors import ConnectedAccountAlreadyExists, CredentialStorageUnavailable
+from app.domain.errors import (
+    ConnectedAccountAlreadyExists,
+    CredentialStorageUnavailable,
+    OAuthNotConfigured,
+)
 from app.domain.ports import OAuthCredentials
 from app.infrastructure.credentials import FernetCredentialStore
 from app.models.entities import AuditEvent, ConnectedAccount
@@ -74,11 +78,20 @@ async def test_connection_lifecycle_and_isolation(client, account, session_facto
         assert len(events) == 1
 
 
-async def test_oauth_is_honestly_unavailable(client, account):
-    # GOOGLE and NOTION have real OAuth implementations (see test_plan_connectors.py
-    # and test_notion_integration.py); GITHUB (COLLABORATE, a later phase) does not yet.
-    for path in ["/connections/GITHUB/authorize", "/connections/GITHUB/callback"]:
-        response = await client.get(path)
-        assert response.status_code == 501
-        assert response.json()["code"] == "OAUTH_NOT_CONFIGURED"
+async def test_oauth_fallback_is_honestly_unavailable(session_factory):
+    # NOTION, GOOGLE, and GITHUB all have real OAuth implementations now
+    # (see test_notion_integration.py, test_plan_connectors.py, and
+    # test_github_connector.py). ConnectionService.authorize/callback is a
+    # defensive fallback for a future provider added to the Provider enum
+    # before its OAuth flow is wired into routes.py -- no longer reachable
+    # through the API for any current provider, but still real code.
+    async with session_factory() as session:
+        service = ConnectionService(RelayRepository(session))
+        with pytest.raises(OAuthNotConfigured):
+            service.authorize(Provider.NOTION)
+        with pytest.raises(OAuthNotConfigured):
+            service.callback(Provider.NOTION)
+
+
+async def test_connections_start_empty(client, account):
     assert (await client.get("/connections")).json() == []

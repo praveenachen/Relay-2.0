@@ -1,3 +1,7 @@
+from app.connectors.notion.action_items import (
+    NotionActionItemPropertyMapping,
+    build_task_properties,
+)
 from app.connectors.notion.auth import NotionOAuthClient, NotionOAuthService
 from app.connectors.notion.client import NotionApiClient, RealNotionConnector
 from app.connectors.notion.errors import (
@@ -17,6 +21,7 @@ from app.connectors.notion.mapper import NotionStudyPageMapper
 from app.connectors.notion.mock import MockNotionConnector
 from app.connectors.notion.schemas import (
     CreateNotionStudyPageAction,
+    CreateNotionTaskAction,
     ExternalArtifactResult,
     NotionBlock,
     NotionConnector,
@@ -24,14 +29,17 @@ from app.connectors.notion.schemas import (
     NotionOAuthToken,
     NotionStudyPageContent,
     NotionTaskDatabase,
+    NotionTaskResult,
 )
 from app.connectors.notion.service import NotionDestinationService, NotionTaskSourceService
 
 __all__ = [
     "CreateNotionStudyPageAction",
+    "CreateNotionTaskAction",
     "ExternalArtifactResult",
     "MockNotionConnector",
     "MockNotionFailure",
+    "NotionActionItemPropertyMapping",
     "NotionApiClient",
     "NotionAuthorizationFailed",
     "NotionBlock",
@@ -51,10 +59,12 @@ __all__ = [
     "NotionStudyPageContent",
     "NotionStudyPageMapper",
     "NotionTaskDatabaseNotFound",
+    "NotionTaskResult",
     "NotionTaskSourceService",
     "NotionUnavailable",
     "NotionValidationFailed",
     "RealNotionConnector",
+    "build_task_properties",
 ]
 
 from app.connectors.notion.tasks import (

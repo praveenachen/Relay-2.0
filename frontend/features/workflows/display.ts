@@ -62,7 +62,7 @@ export const workflowDisplay = {
     ],
     inputLabel: "Meeting transcript",
     inputHint:
-      "Transcript processing and action extraction are not available yet.",
+      "Relay extracts decisions and action items with a language model, but a deterministic planner -- not the model -- decides which typed Notion and GitHub actions get proposed.",
   },
 } as const;
 export const workflows = Object.values(workflowDisplay);

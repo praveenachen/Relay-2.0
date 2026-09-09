@@ -23,15 +23,12 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
     .click();
   await expect(page).toHaveURL(/\/onboarding$/);
   await page.getByRole("button", { name: "Get started" }).click();
-  // GitHub (COLLABORATE) is the one provider still unimplemented in this
-  // phase; GOOGLE and NOTION both have real OAuth now.
-  await page
-    .getByRole("article")
-    .filter({ hasText: "GitHub" })
-    .getByRole("button", { name: "Connect", exact: true })
-    .click();
+  // Notion, Google Calendar, and GitHub all have real OAuth now, so
+  // connecting during onboarding would navigate away to a live provider.
+  // This step only verifies connections are optional -- skipping moves on
+  // without connecting anything.
   await expect(
-    page.getByRole("alert").filter({ hasText: "not implemented yet" }),
+    page.getByRole("article").filter({ hasText: "GitHub" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Skip for now" }).click();
   await page.getByLabel("Timezone").fill("America/Toronto");

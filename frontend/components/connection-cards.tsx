@@ -61,8 +61,9 @@ export function ConnectionCards() {
   return (
     <>
       <p className="notice mb-6">
-        Notion and Google Calendar connect through OAuth and store encrypted
-        credentials. GitHub stays unavailable for now.
+        Notion, Google Calendar, and GitHub all connect through OAuth and store
+        encrypted credentials. GitHub uses repository-scoped access only -- no
+        administration, deletion, or Actions permissions.
       </p>
       <div className="grid gap-5 md:grid-cols-3">
         {tools.map((tool) => {
@@ -129,7 +130,7 @@ export function ConnectionCards() {
                       Disconnect
                     </button>
                   )
-                ) : tool.provider === "NOTION" || tool.provider === "GOOGLE" ? (
+                ) : (
                   <button
                     className="button secondary"
                     disabled={connect.isPending}
@@ -140,14 +141,6 @@ export function ConnectionCards() {
                         },
                       })
                     }
-                  >
-                    {connecting ? "Connecting..." : "Connect"}
-                  </button>
-                ) : (
-                  <button
-                    className="button secondary"
-                    disabled={connect.isPending}
-                    onClick={() => connect.mutate(tool.provider)}
                   >
                     {connecting ? "Connecting..." : "Connect"}
                   </button>
