@@ -15,6 +15,7 @@ import {
   X,
 } from "lucide-react";
 import { approvals } from "@/features/approvals/api";
+import { connections } from "@/features/connections/api";
 import { learn, LectureSummary } from "@/features/learn/api";
 import { WorkflowBadge } from "@/components/workflow-badge";
 import { RelayLine } from "@/components/relay-line";
@@ -69,12 +70,12 @@ export function LearnEntry() {
       <PageTitle
         eyebrow="LEARN"
         title="Turn lecture material into reviewed study notes."
-        description="Upload PDF, DOCX, Markdown, or plain text. Relay parses it locally, generates a sourced summary, and waits for your approval before the mock Notion publish."
+        description="Upload PDF, DOCX, Markdown, or plain text. Relay parses it locally, generates a sourced summary, and waits for your approval before publishing to Notion."
         action={<WorkflowBadge workflow={workflowDisplay.lecture_to_notion} />}
       />
       <RelayLine
         sources={[{ label: "Lecture notes" }]}
-        destinations={[{ label: "Mock Notion" }]}
+        destinations={[{ label: "Notion" }]}
         status="DRAFT"
       />
       <section className="my-10 grid gap-6 lg:grid-cols-[1fr_0.8fr]">
@@ -131,7 +132,7 @@ export function LearnEntry() {
             <li>Store the original file privately on this machine.</li>
             <li>Parse a structured document with pages and sections.</li>
             <li>Generate sourced notes with a typed model response.</li>
-            <li>Save your approved payload before mock publishing.</li>
+            <li>Save your approved payload before publishing.</li>
           </ol>
         </div>
       </section>
@@ -162,8 +163,25 @@ export function LearnRun({ id }: { id: string }) {
       cache.invalidateQueries({ queryKey: ["runs"] }),
       cache.invalidateQueries({ queryKey: ["events", id] }),
       cache.invalidateQueries({ queryKey: ["approvals"] }),
+      cache.invalidateQueries({ queryKey: ["connections"] }),
     ]);
   };
+  const config = useQuery({
+    queryKey: ["learn", "config"],
+    queryFn: learn.config,
+  });
+  const notionConnections = useQuery({
+    queryKey: ["connections"],
+    queryFn: connections.list,
+  });
+  const refreshDestinations = useMutation({
+    mutationFn: connections.refreshNotionDestinations,
+    onSuccess: invalidate,
+  });
+  const syncDestination = useMutation({
+    mutationFn: () => learn.destination(id),
+    onSuccess: invalidate,
+  });
   const parse = useMutation({
     mutationFn: () => learn.parse(id),
     onSuccess: invalidate,
@@ -203,19 +221,28 @@ export function LearnRun({ id }: { id: string }) {
     summarize.isPending ||
     save.isPending ||
     resolve.isPending ||
-    execute.isPending;
+    execute.isPending ||
+    refreshDestinations.isPending ||
+    syncDestination.isPending;
+  const notionConnection = notionConnections.data?.find(
+    (item) => item.provider === "NOTION" && item.status === "CONNECTED",
+  );
+  const realPublish = config.data?.notion_publish_mode === "real";
+  const hasDestination = Boolean(
+    data.approval?.original_payload.parent_destination_id,
+  );
 
   return (
     <>
       <PageTitle
         eyebrow="LEARN run"
         title={data.summary?.title || data.source?.filename || "Lecture notes"}
-        description="Review the source, generated notes, approval payload, and mock publish result for this LEARN workflow."
+        description="Review the source, generated notes, approval payload, and Notion publish result for this LEARN workflow."
         action={<Status value={data.run.status} />}
       />
       <RelayLine
         sources={[{ label: data.source?.filename || "Lecture notes" }]}
-        destinations={[{ label: "Mock Notion" }]}
+        destinations={[{ label: "Notion" }]}
         status={data.run.status}
       />
       <ErrorMessage
@@ -224,7 +251,10 @@ export function LearnRun({ id }: { id: string }) {
           summarize.error ||
           save.error ||
           resolve.error ||
-          execute.error
+          execute.error ||
+          refreshDestinations.error ||
+          syncDestination.error ||
+          notionConnections.error
         }
       />
       {data.run.error_message && (
@@ -243,9 +273,12 @@ export function LearnRun({ id }: { id: string }) {
         />
         <ApprovalPanel
           detail={data}
-          dirty={false}
           busy={busy}
-          approve={() => resolve.mutate({ approve: true })}
+          realPublish={realPublish}
+          hasDestination={hasDestination}
+          connectionName={notionConnection?.display_name}
+          refreshDestinations={() => refreshDestinations.mutate()}
+          syncDestination={() => syncDestination.mutate()}
           reject={() => resolve.mutate({ approve: false })}
           execute={() => execute.mutate()}
         />
@@ -257,6 +290,9 @@ export function LearnRun({ id }: { id: string }) {
           pending={pending}
           busy={busy}
           approvalPayload={data.approval?.original_payload}
+          realPublish={realPublish}
+          hasDestination={hasDestination}
+          approve={() => resolve.mutate({ approve: true })}
           onSave={(summary, expectedPayload) =>
             save.mutate({ summary, expectedPayload })
           }
@@ -269,7 +305,11 @@ export function LearnRun({ id }: { id: string }) {
       )}
       {data.run.status === "COMPLETED" && (
         <section className="panel mt-8">
-          <h2 className="section-title">Mock Notion artifact</h2>
+          <h2 className="section-title">
+            {artifact.data?.external_url.startsWith("mock://")
+              ? "Mock Notion artifact"
+              : "Relayed to Notion"}
+          </h2>
           {artifact.isPending ? (
             <Loading label="Loading published artifact" />
           ) : artifact.error ? (
@@ -284,6 +324,16 @@ export function LearnRun({ id }: { id: string }) {
                 Created{" "}
                 {new Date(artifact.data?.created_at || "").toLocaleString()}
               </p>
+              {artifact.data?.external_url.startsWith("https://") && (
+                <a
+                  className="button mt-5"
+                  href={artifact.data.external_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open in Notion
+                </a>
+              )}
             </div>
           )}
           <div className="mt-5 flex flex-wrap gap-3">
@@ -305,12 +355,18 @@ function SummaryReview({
   pending,
   busy,
   approvalPayload,
+  realPublish,
+  hasDestination,
+  approve,
   onSave,
 }: {
   summary: LectureSummary;
   pending: boolean;
   busy: boolean;
   approvalPayload: unknown;
+  realPublish: boolean;
+  hasDestination: boolean;
+  approve: () => void;
   onSave: (summary: LectureSummary, expectedPayload: unknown) => void;
 }) {
   const [draft, setDraft] = useState(summary);
@@ -323,6 +379,10 @@ function SummaryReview({
       onSave={() => approvalPayload && onSave(draft, approvalPayload)}
       onReset={() => setDraft(summary)}
       canSave={Boolean(pending && dirty && approvalPayload) && !busy}
+      canApprove={
+        pending && !dirty && (!realPublish || hasDestination) && !busy
+      }
+      onApprove={approve}
     />
   );
 }
@@ -403,35 +463,68 @@ function ProcessingPanel({
 
 function ApprovalPanel({
   detail,
-  dirty,
   busy,
-  approve,
+  realPublish,
+  hasDestination,
+  connectionName,
+  refreshDestinations,
+  syncDestination,
   reject,
   execute,
 }: {
   detail: Awaited<ReturnType<typeof learn.detail>>;
-  dirty: boolean;
   busy: boolean;
-  approve: () => void;
+  realPublish: boolean;
+  hasDestination: boolean;
+  connectionName?: string;
+  refreshDestinations: () => void;
+  syncDestination: () => void;
   reject: () => void;
   execute: () => void;
 }) {
   const pending = detail.approval?.status === "PENDING";
+  const payload = detail.approval?.original_payload;
   return (
     <article className="panel">
-      <h2 className="section-title">Approval</h2>
+      <h2 className="section-title">Destination</h2>
+      <p className="text-sm font-medium">
+        {String(payload?.workspace_name || connectionName || "Notion")}
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        {String(payload?.parent_destination_title || "No destination selected")}
+      </p>
+      {realPublish && pending && !hasDestination && (
+        <div className="notice mt-4">
+          <p>
+            Connect Notion and choose a default destination before approval.
+          </p>
+        </div>
+      )}
+      {pending && (
+        <div className="mt-5 flex flex-wrap gap-3">
+          <Link className="button secondary" href="/connections">
+            Connections
+          </Link>
+          <button
+            className="button secondary"
+            disabled={busy}
+            onClick={refreshDestinations}
+          >
+            Refresh pages
+          </button>
+          <button
+            className="button secondary"
+            disabled={busy}
+            onClick={syncDestination}
+          >
+            Use default
+          </button>
+        </div>
+      )}
+      <h2 className="section-title mt-8">Approval</h2>
       {detail.approval ? <Status value={detail.approval.status} /> : null}
       {pending && (
         <div className="mt-5 flex flex-wrap gap-3">
-          <button
-            className="button"
-            disabled={busy || dirty}
-            onClick={approve}
-            title={dirty ? "Save the edited notes before approval" : "Approve"}
-          >
-            <Check aria-hidden="true" />
-            Approve
-          </button>
           <button className="button secondary" disabled={busy} onClick={reject}>
             <X aria-hidden="true" />
             Reject
@@ -441,7 +534,7 @@ function ApprovalPanel({
       {detail.run.status === "APPROVED" && (
         <button className="button mt-5" disabled={busy} onClick={execute}>
           <Send aria-hidden="true" />
-          Publish mock page
+          Publish to Notion
         </button>
       )}
     </article>
@@ -455,6 +548,8 @@ function SummaryEditor({
   onSave,
   onReset,
   canSave,
+  canApprove,
+  onApprove,
 }: {
   value: LectureSummary;
   onChange: (value: LectureSummary) => void;
@@ -462,6 +557,8 @@ function SummaryEditor({
   onSave: () => void;
   onReset: () => void;
   canSave: boolean;
+  canApprove: boolean;
+  onApprove: () => void;
 }) {
   const set = <K extends keyof LectureSummary>(
     key: K,
@@ -483,6 +580,10 @@ function SummaryEditor({
           <button className="button" disabled={!canSave} onClick={onSave}>
             <Save aria-hidden="true" />
             Save notes
+          </button>
+          <button className="button" disabled={!canApprove} onClick={onApprove}>
+            <Check aria-hidden="true" />
+            Approve
           </button>
         </div>
       </div>

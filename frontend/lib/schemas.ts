@@ -62,6 +62,7 @@ export const connectionSchema = z.object({
   external_account_id: z.string(),
   display_name: z.string(),
   scopes: z.array(z.string()),
+  provider_metadata: payloadSchema,
   status: z.enum(["CONNECTED", "EXPIRED", "REVOKED", "ERROR"]),
   token_expires_at: z.string().nullable(),
 });

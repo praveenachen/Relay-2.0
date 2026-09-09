@@ -87,6 +87,7 @@ export const learnDetailSchema = z.object({
   provider: z.string(),
   stage: z.string().nullable().optional(),
   approval: approvalSchema.nullable(),
+  destination: z.string().nullable(),
 });
 
 export type LearnDetail = z.infer<typeof learnDetailSchema>;
@@ -94,6 +95,7 @@ export type LearnDetail = z.infer<typeof learnDetailSchema>;
 export const learnConfigSchema = z.object({
   max_upload_bytes: z.number(),
   provider: z.string(),
+  notion_publish_mode: z.enum(["mock", "real"]),
 });
 
 export const artifactSchema = z.object({
@@ -131,6 +133,10 @@ export const learn = {
       learnDetailSchema,
       json({ summary, expected_payload: expectedPayload }, "PUT"),
     ),
+  destination: (id: string) =>
+    request(`/workflows/learn/${id}/destination`, learnDetailSchema, {
+      method: "PUT",
+    }),
   execute: (id: string) =>
     request(`/workflows/learn/${id}/execute`, runSchema, { method: "POST" }),
   artifact: (id: string) =>

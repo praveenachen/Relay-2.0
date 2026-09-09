@@ -138,9 +138,9 @@ test("LEARN upload review approval and mock publish", async ({
   await expect(page.getByRole("button", { name: "Approve" })).toBeEnabled();
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(
-    page.getByRole("button", { name: "Publish mock page" }),
+    page.getByRole("button", { name: "Publish to Notion" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Publish mock page" }).click();
+  await page.getByRole("button", { name: "Publish to Notion" }).click();
   await expect(page.getByText("mock://notion/page/")).toBeVisible({
     timeout: 15000,
   });

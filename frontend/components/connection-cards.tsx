@@ -37,6 +37,18 @@ export function ConnectionCards() {
   const cache = useQueryClient();
   const [confirm, setConfirm] = useState<Provider | null>(null);
   const connect = useMutation({ mutationFn: connections.authorize });
+  const destinations = useMutation({
+    mutationFn: connections.refreshNotionDestinations,
+    onSuccess: async () => {
+      await cache.invalidateQueries({ queryKey: ["connections"] });
+    },
+  });
+  const selectDestination = useMutation({
+    mutationFn: connections.selectNotionDestination,
+    onSuccess: async () => {
+      await cache.invalidateQueries({ queryKey: ["connections"] });
+    },
+  });
   const disconnect = useMutation({
     mutationFn: connections.disconnect,
     onSuccess: async () => {
@@ -49,8 +61,8 @@ export function ConnectionCards() {
   return (
     <>
       <p className="notice mb-6">
-        Provider connections are not available yet. Your Relay account works
-        without them.
+        Notion connects through OAuth and stores encrypted credentials. Google
+        Calendar and GitHub stay unavailable for now.
       </p>
       <div className="grid gap-5 md:grid-cols-3">
         {tools.map((tool) => {
@@ -117,6 +129,20 @@ export function ConnectionCards() {
                       Disconnect
                     </button>
                   )
+                ) : tool.provider === "NOTION" ? (
+                  <button
+                    className="button secondary"
+                    disabled={connect.isPending}
+                    onClick={() =>
+                      connect.mutate(tool.provider, {
+                        onSuccess: (data) => {
+                          window.location.href = data.authorization_url;
+                        },
+                      })
+                    }
+                  >
+                    {connecting ? "Connecting..." : "Connect"}
+                  </button>
                 ) : (
                   <button
                     className="button secondary"
@@ -126,14 +152,87 @@ export function ConnectionCards() {
                     {connecting ? "Connecting..." : "Connect"}
                   </button>
                 )}
+                {tool.provider === "NOTION" && accounts.length > 0 && (
+                  <NotionDestinationPicker
+                    account={accounts[0]}
+                    loading={
+                      destinations.isPending || selectDestination.isPending
+                    }
+                    refresh={() => destinations.mutate()}
+                    destinations={destinations.data || []}
+                    select={(id) => selectDestination.mutate(id)}
+                  />
+                )}
               </div>
             </article>
           );
         })}
       </div>
       <div className="mt-5">
-        <ErrorMessage error={connect.error || disconnect.error} />
+        <ErrorMessage
+          error={
+            connect.error ||
+            disconnect.error ||
+            destinations.error ||
+            selectDestination.error
+          }
+        />
       </div>
     </>
+  );
+}
+
+function NotionDestinationPicker({
+  account,
+  loading,
+  destinations,
+  refresh,
+  select,
+}: {
+  account: {
+    provider_metadata: Record<string, unknown>;
+  };
+  loading: boolean;
+  destinations: { id: string; title: string }[];
+  refresh: () => void;
+  select: (id: string) => void;
+}) {
+  const selected =
+    typeof account.provider_metadata.default_destination_title === "string"
+      ? account.provider_metadata.default_destination_title
+      : undefined;
+  return (
+    <div className="mt-5 border-t border-line pt-5">
+      <p className="text-sm font-medium">Default lecture notes destination</p>
+      <p className="mt-2 text-sm text-muted">
+        {selected || "No default destination selected"}
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          className="button secondary"
+          disabled={loading}
+          onClick={refresh}
+        >
+          Refresh pages
+        </button>
+        {destinations.length > 0 && (
+          <select
+            className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
+            disabled={loading}
+            defaultValue=""
+            onChange={(event) =>
+              event.target.value && select(event.target.value)
+            }
+          >
+            <option value="">Choose destination</option>
+            {destinations.map((destination) => (
+              <option key={destination.id} value={destination.id}>
+                {destination.title}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    </div>
   );
 }
