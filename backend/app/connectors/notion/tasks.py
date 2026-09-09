@@ -16,6 +16,11 @@ class NotionTaskPropertyMapping(StrictModel):
     estimate_unit: Literal["minutes", "hours"] = "minutes"
 
 
+class NotionTaskDatabaseSelection(StrictModel):
+    database_id: str
+    mapping: NotionTaskPropertyMapping
+
+
 class TaskMappingIssue(StrictModel):
     code: str
     message: str

@@ -8,6 +8,7 @@ from starlette.responses import Response
 
 from app.api.health import router as health_router
 from app.api.learn import router as learn_router
+from app.api.plan import router as plan_router
 from app.api.routes import router
 from app.auth.users import UserCreate, UserRead, backend, users
 from app.core.config import get_settings
@@ -81,6 +82,7 @@ def create_app() -> FastAPI:
     )
     application.include_router(router)
     application.include_router(learn_router)
+    application.include_router(plan_router)
     return application
 
 

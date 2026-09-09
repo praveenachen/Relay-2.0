@@ -10,7 +10,14 @@ from app.auth.users import CurrentUser, UserRead
 from app.connectors.google import GoogleOAuthClient, GoogleOAuthService
 from app.connectors.google.schemas import CalendarListItem
 from app.connectors.google.service import GoogleCalendarService
-from app.connectors.notion import NotionDestinationService, NotionOAuthClient, NotionOAuthService
+from app.connectors.notion import (
+    NotionDestinationService,
+    NotionOAuthClient,
+    NotionOAuthService,
+    NotionTaskSourceService,
+)
+from app.connectors.notion.schemas import NotionTaskDatabase
+from app.connectors.notion.tasks import NotionTaskDatabaseSelection
 from app.core.config import get_settings
 from app.domain.enums import ApprovalStatus, Provider, WorkflowStatus
 from app.infrastructure.credentials import credential_store
@@ -190,6 +197,7 @@ def google_calendars(repo: Repository) -> GoogleCalendarService:
     return GoogleCalendarService(
         repo,
         credential_store(),
+        oauth=google_oauth(),
         api_base_url=settings.google_calendar_api_base_url,
         timeout=settings.google_timeout_seconds,
     )
@@ -198,6 +206,16 @@ def google_calendars(repo: Repository) -> GoogleCalendarService:
 def notion_destinations(repo: Repository) -> NotionDestinationService:
     settings = get_settings()
     return NotionDestinationService(
+        repo,
+        credential_store(),
+        api_base_url=settings.notion_api_base_url,
+        timeout=settings.notion_timeout_seconds,
+    )
+
+
+def notion_task_sources(repo: Repository) -> NotionTaskSourceService:
+    settings = get_settings()
+    return NotionTaskSourceService(
         repo,
         credential_store(),
         api_base_url=settings.notion_api_base_url,
@@ -310,3 +328,36 @@ async def google_calendar_select(
     data: NotionDestinationInput, user: CurrentUser, repo: Repository
 ) -> CalendarListItem:
     return await google_calendars(repo).select(user.id, data.destination_id)
+
+
+@router.get(
+    "/connections/NOTION/task-databases",
+    response_model=list[NotionTaskDatabase],
+    tags=["connections"],
+)
+async def notion_task_database_list(
+    user: CurrentUser, repo: Repository
+) -> list[NotionTaskDatabase]:
+    return await notion_task_sources(repo).list(user.id)
+
+
+@router.post(
+    "/connections/NOTION/task-databases/refresh",
+    response_model=list[NotionTaskDatabase],
+    tags=["connections"],
+)
+async def notion_task_database_refresh(
+    user: CurrentUser, repo: Repository
+) -> list[NotionTaskDatabase]:
+    return await notion_task_sources(repo).refresh(user.id)
+
+
+@router.put(
+    "/connections/NOTION/task-databases/default",
+    response_model=NotionTaskDatabase,
+    tags=["connections"],
+)
+async def notion_task_database_select(
+    data: NotionTaskDatabaseSelection, user: CurrentUser, repo: Repository
+) -> NotionTaskDatabase:
+    return await notion_task_sources(repo).select(user.id, data.database_id, data.mapping)

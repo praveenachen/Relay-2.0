@@ -9,6 +9,7 @@ from app.connectors.notion.errors import (
     NotionPublishFailed,
     NotionRateLimited,
     NotionRequestTimeout,
+    NotionTaskDatabaseNotFound,
     NotionUnavailable,
     NotionValidationFailed,
 )
@@ -24,7 +25,7 @@ from app.connectors.notion.schemas import (
     NotionStudyPageContent,
     NotionTaskDatabase,
 )
-from app.connectors.notion.service import NotionDestinationService
+from app.connectors.notion.service import NotionDestinationService, NotionTaskSourceService
 
 __all__ = [
     "CreateNotionStudyPageAction",
@@ -49,12 +50,15 @@ __all__ = [
     "NotionRequestTimeout",
     "NotionStudyPageContent",
     "NotionStudyPageMapper",
+    "NotionTaskDatabaseNotFound",
+    "NotionTaskSourceService",
     "NotionUnavailable",
     "NotionValidationFailed",
     "RealNotionConnector",
 ]
 
 from app.connectors.notion.tasks import (
+    NotionTaskDatabaseSelection,
     NotionTaskImportResult,
     NotionTaskMapper,
     NotionTaskPropertyMapping,
@@ -62,6 +66,7 @@ from app.connectors.notion.tasks import (
 )
 
 __all__ += [
+    "NotionTaskDatabaseSelection",
     "NotionTaskImportResult",
     "NotionTaskMapper",
     "NotionTaskPropertyMapping",
