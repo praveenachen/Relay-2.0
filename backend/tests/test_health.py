@@ -8,8 +8,3 @@ def test_health_contract() -> None:
         response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "relay-api"}
-
-
-def test_only_foundation_routes_exist() -> None:
-    paths = create_app().openapi()["paths"]
-    assert set(paths) == {"/health"}

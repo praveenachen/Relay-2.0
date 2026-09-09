@@ -45,7 +45,7 @@ def enum_type(enum: type[StrEnum]) -> Enum:
     return Enum(enum, native_enum=False, create_constraint=True, name=enum.__name__.lower())
 
 
-PAYLOAD = JSON().with_variant(JSONB(), "postgresql")
+PAYLOAD = JSON(none_as_null=True).with_variant(JSONB(none_as_null=True), "postgresql")
 
 
 class Identity:
