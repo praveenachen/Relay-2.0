@@ -101,7 +101,23 @@ class ConnectionRead(ReadModel):
     display_name: str
     token_expires_at: datetime | None
     scopes: list[str]
+    provider_metadata: dict[str, JsonValue]
     status: ConnectionStatus
+
+
+class AuthorizationRead(BaseModel):
+    authorization_url: str
+
+
+class NotionDestinationRead(BaseModel):
+    id: str
+    title: str
+    icon_url: str | None = None
+    object_type: str = "page"
+
+
+class NotionDestinationInput(InputModel):
+    destination_id: str = Field(min_length=1, max_length=255)
 
 
 class AuditRead(ReadModel):

@@ -3,7 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.entities import AuditEvent
+from app.models.entities import AuditEvent, now
 
 
 def record(
@@ -20,5 +20,6 @@ def record(
             workflow_run_id=run_id,
             event_type=event_type,
             event_metadata=metadata or {},
+            created_at=now(),
         )
     )

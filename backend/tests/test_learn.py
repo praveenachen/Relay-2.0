@@ -2,12 +2,15 @@ from copy import deepcopy
 
 import pytest
 from conftest import login, register
+from cryptography.fernet import Fernet
 from sqlalchemy import func, select
 
 from app.ai.fake import FakeLanguageModel
-from app.connectors.notion import MockNotionConnector
+from app.connectors.notion import MockNotionConnector, NotionApiClient
 from app.core.config import get_settings
-from app.models.entities import ExternalArtifact, LocalExecution, ProposedAction
+from app.domain.enums import Provider
+from app.infrastructure.credentials import FernetCredentialStore
+from app.models.entities import ConnectedAccount, ExternalArtifact, LocalExecution, ProposedAction
 from app.workflows.lecture_notes.errors import MalformedModelOutput
 
 
@@ -214,3 +217,65 @@ async def test_duplicate_and_empty_source(client, account):
     ).status_code == 409
     assert (await client.post(path + "/parse")).status_code == 422
     assert (await client.get(path)).json()["run"]["status"] == "FAILED"
+
+
+async def test_real_notion_publish_uses_approved_payload_once(
+    client, account, session_factory, monkeypatch
+):
+    key = Fernet.generate_key().decode()
+    monkeypatch.setattr(
+        get_settings(),
+        "token_encryption_key",
+        type("Secret", (), {"get_secret_value": lambda self: key})(),
+    )
+    monkeypatch.setattr(get_settings(), "notion_publish_mode", "real")
+    store = FernetCredentialStore([key])
+    async with session_factory() as session:
+        session.add(
+            ConnectedAccount(
+                user_id=account["id"],
+                provider=Provider.NOTION,
+                external_account_id="workspace-1",
+                display_name="Student Workspace",
+                access_token_encrypted=store.encrypt("notion-token"),
+                scopes=["read_content", "insert_content"],
+                provider_metadata={
+                    "workspace_id": "workspace-1",
+                    "workspace_name": "Student Workspace",
+                    "default_destination_id": "page-parent",
+                    "default_destination_title": "University Notes",
+                },
+                status="CONNECTED",
+            )
+        )
+        await session.commit()
+    calls = []
+
+    async def create_page(self, parent_page_id, title, blocks):
+        calls.append((parent_page_id, title, blocks))
+        assert self.access_token == "notion-token"
+        return {"id": "notion-page-1", "url": "https://notion.so/notion-page-1"}
+
+    async def fail_generate(*args, **kwargs):
+        raise AssertionError("publishing must not call the language model")
+
+    monkeypatch.setattr(NotionApiClient, "create_page", create_page)
+    path, detail = await ready(client)
+    assert detail["approval"]["original_payload"]["parent_destination_id"] == "page-parent"
+    await approve(client, detail)
+    monkeypatch.setattr(FakeLanguageModel, "generate_structured", fail_generate)
+    done = await client.post(path + "/execute")
+    assert done.status_code == 200, done.text
+    assert done.json()["status"] == "COMPLETED"
+    assert calls[0][0] == "page-parent"
+    assert calls[0][1] == detail["summary"]["title"]
+    assert any(block.text.startswith("Relay action: learn:") for block in calls[0][2])
+    async with session_factory() as session:
+        artifact = await session.scalar(select(ExternalArtifact))
+        assert artifact.external_id == "notion-page-1"
+        assert artifact.artifact_type == "notion_study_page"
+        assert artifact.connected_account_id is not None
+    assert (await client.post(path + "/execute")).json()["result_payload"] == done.json()[
+        "result_payload"
+    ]
+    assert len(calls) == 1

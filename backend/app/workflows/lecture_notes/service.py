@@ -7,7 +7,13 @@ from sqlalchemy import select
 from app.documents.base import FileStore
 from app.documents.models import ParsedDocument, UploadedDocument
 from app.documents.service import DocumentService
-from app.domain.enums import ActionProvider, ActionStatus, ApprovalStatus
+from app.domain.enums import (
+    ActionProvider,
+    ActionStatus,
+    ApprovalStatus,
+    ConnectionStatus,
+    Provider,
+)
 from app.domain.enums import WorkflowStatus as S
 from app.domain.errors import ApprovalPayloadMismatch, DomainError, UnauthorizedResourceAccess
 from app.models.entities import (
@@ -226,7 +232,7 @@ class LectureNotesWorkflowService:
             workflow_run_id=run.id,
             provider=ActionProvider.NOTION,
             action_type=OPERATION,
-            payload=proposed_page(summary).model_dump(mode="json"),
+            payload=await self.destination_payload(summary, owner),
         )
         self.session.add(action)
         await self.session.flush()
@@ -257,13 +263,50 @@ class LectureNotesWorkflowService:
             raise LearnWorkflowInvalidState()
         if exact_json(expected_payload) != exact_json(action.payload):
             raise ApprovalPayloadMismatch()
-        payload = proposed_page(summary).model_dump(mode="json")
+        payload = await self.destination_payload(summary, owner)
         action.payload, action.status = payload, ActionStatus.EDITED
         approval.original_payload = payload
         run.plan_payload = {**(run.plan_payload or {}), "summary": summary.model_dump(mode="json")}
         record(self.session, owner, "ACTION_EDITED", run.id, {"action_id": str(action.id)})
         await self.session.commit()
         return await self.detail(run_id, owner)
+
+    async def update_destination(self, run_id: UUID, owner: UUID) -> dict[str, Any]:
+        run = await self.owned_run(run_id, owner, lock=True)
+        if run.status != S.AWAITING_APPROVAL:
+            raise LearnWorkflowInvalidState()
+        summary_data = (run.plan_payload or {}).get("summary")
+        if summary_data is None:
+            raise LearnWorkflowInvalidState()
+        approvals = await self.repo.run_approvals(run_id)
+        actions = await self.repo.actions(run_id)
+        if len(approvals) != 1 or len(actions) != 1:
+            raise LearnWorkflowInvalidState()
+        approval, action = approvals[0], actions[0]
+        if approval.status != ApprovalStatus.PENDING:
+            raise LearnWorkflowInvalidState()
+        payload = await self.destination_payload(LectureSummary.model_validate(summary_data), owner)
+        action.payload, approval.original_payload = payload, payload
+        record(self.session, owner, "NOTION_DESTINATION_SELECTED", run.id)
+        await self.session.commit()
+        return await self.detail(run_id, owner)
+
+    async def destination_payload(self, summary: LectureSummary, owner: UUID) -> dict[str, Any]:
+        connections = [
+            item
+            for item in await self.repo.connections(owner, Provider.NOTION)
+            if item.status == ConnectionStatus.CONNECTED
+        ]
+        connection = connections[0] if connections else None
+        metadata = connection.provider_metadata if connection else {}
+        return proposed_page(
+            summary,
+            connection_id=str(connection.id) if connection else None,
+            destination_id=metadata.get("default_destination_id") if metadata else None,
+            destination_title=metadata.get("default_destination_title") if metadata else None,
+            workspace_id=metadata.get("workspace_id") if metadata else None,
+            workspace_name=metadata.get("workspace_name") if metadata else None,
+        ).model_dump(mode="json")
 
     async def fail(self, run: WorkflowRun, owner: UUID, error: DomainError, event: str) -> None:
         run.error_code, run.error_message = error.code, error.message
@@ -303,6 +346,11 @@ class LectureNotesWorkflowService:
             "provider": (run.plan_payload or {}).get("provider", self.provider_name),
             "stage": (run.plan_payload or {}).get("stage"),
             "approval": ApprovalRead.model_validate(approvals[0]).model_dump(mode="json")
+            if approvals
+            else None,
+            "destination": (approvals[0].original_payload if approvals else {}).get(
+                "parent_destination_title"
+            )
             if approvals
             else None,
         }

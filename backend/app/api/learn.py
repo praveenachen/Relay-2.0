@@ -14,8 +14,9 @@ from app.core.config import get_settings
 from app.documents.errors import DocumentTooLarge
 from app.documents.service import DocumentService
 from app.documents.storage import LocalFileStore
+from app.infrastructure.credentials import credential_store
 from app.runtime.client import RuntimeClient
-from app.runtime.local import LocalRuntimeClient
+from app.runtime.local import DatabaseNotionConnector, LocalRuntimeClient
 from app.schemas.domain import RunRead
 from app.services.execution import ExecutionService
 from app.workflows.lecture_notes.schemas import LectureSummary, StrictModel
@@ -55,7 +56,18 @@ def service(
 
 
 def runtime_client(repo: Repository) -> RuntimeClient:
-    return LocalRuntimeClient(repo.session, MockNotionConnector())
+    settings = get_settings()
+    connector = (
+        MockNotionConnector()
+        if settings.notion_publish_mode == "mock"
+        else DatabaseNotionConnector(
+            repo.session,
+            credential_store(),
+            api_base_url=settings.notion_api_base_url,
+            timeout=settings.notion_timeout_seconds,
+        )
+    )
+    return LocalRuntimeClient(repo.session, connector)
 
 
 Learn = Annotated[LectureNotesWorkflowService, Depends(service)]
@@ -73,6 +85,7 @@ async def configuration(user: CurrentUser) -> dict[str, Any]:
     return {
         "max_upload_bytes": settings.max_upload_size_mb * 1024 * 1024,
         "provider": settings.language_model_provider,
+        "notion_publish_mode": settings.notion_publish_mode,
     }
 
 
@@ -133,6 +146,11 @@ async def summarize(run_id: UUID, user: CurrentUser, learn: Learn) -> dict[str, 
 @router.put("/{run_id}/summary")
 async def edit(run_id: UUID, data: SummaryEdit, user: CurrentUser, learn: Learn) -> dict[str, Any]:
     return await learn.edit(run_id, user.id, data.summary, data.expected_payload)
+
+
+@router.put("/{run_id}/destination")
+async def destination(run_id: UUID, user: CurrentUser, learn: Learn) -> dict[str, Any]:
+    return await learn.update_destination(run_id, user.id)
 
 
 @router.post("/{run_id}/execute", response_model=RunRead)

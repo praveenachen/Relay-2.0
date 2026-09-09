@@ -26,6 +26,14 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_model: str = "gpt-4.1-mini"
     model_timeout_seconds: int = Field(default=60, ge=1, le=300)
+    notion_client_id: str = ""
+    notion_client_secret: SecretStr = SecretStr("")
+    notion_redirect_uri: str = "http://localhost:8000/connections/NOTION/callback"
+    notion_api_base_url: str = "https://api.notion.com"
+    notion_oauth_authorize_url: str = "https://api.notion.com/v1/oauth/authorize"
+    notion_oauth_token_url: str = "https://api.notion.com/v1/oauth/token"
+    notion_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    notion_publish_mode: Literal["mock", "real"] = "mock"
 
 
 @lru_cache

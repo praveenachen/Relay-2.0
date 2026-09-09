@@ -3,16 +3,23 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Response
+from fastapi.responses import RedirectResponse
 
 from app.api.dependencies import Repository
 from app.auth.users import CurrentUser, UserRead
+from app.connectors.notion import NotionDestinationService, NotionOAuthClient, NotionOAuthService
+from app.core.config import get_settings
 from app.domain.enums import ApprovalStatus, Provider, WorkflowStatus
+from app.infrastructure.credentials import credential_store
 from app.schemas.domain import (
     ApprovalInput,
     ApprovalRead,
     AuditRead,
+    AuthorizationRead,
     ConnectionRead,
     DefinitionRead,
+    NotionDestinationInput,
+    NotionDestinationRead,
     PreferenceInput,
     PreferenceRead,
     ProfileInput,
@@ -150,11 +157,94 @@ async def disconnect(provider: Provider, user: CurrentUser, repo: Repository) ->
     return Response(status_code=204)
 
 
-@router.get("/connections/{provider}/authorize", tags=["connections"])
-async def authorize(provider: Provider, user: CurrentUser, repo: Repository) -> None:
+def notion_oauth() -> NotionOAuthClient:
+    settings = get_settings()
+    return NotionOAuthClient(
+        settings.notion_client_id,
+        settings.notion_client_secret.get_secret_value(),
+        settings.notion_redirect_uri,
+        authorize_url=settings.notion_oauth_authorize_url,
+        token_url=settings.notion_oauth_token_url,
+        timeout=settings.notion_timeout_seconds,
+    )
+
+
+def notion_destinations(repo: Repository) -> NotionDestinationService:
+    settings = get_settings()
+    return NotionDestinationService(
+        repo,
+        credential_store(),
+        api_base_url=settings.notion_api_base_url,
+        timeout=settings.notion_timeout_seconds,
+    )
+
+
+@router.get(
+    "/connections/{provider}/authorize", response_model=AuthorizationRead, tags=["connections"]
+)
+async def authorize(
+    provider: Provider, user: CurrentUser, repo: Repository
+) -> dict[str, str] | None:
+    if provider == Provider.NOTION:
+        return await NotionOAuthService(repo, notion_oauth(), credential_store()).start(user.id)
     ConnectionService(repo).authorize(provider)
+    return None
 
 
-@router.get("/connections/{provider}/callback", tags=["connections"])
-async def callback(provider: Provider, user: CurrentUser, repo: Repository) -> None:
+@router.get("/connections/{provider}/callback", response_model=None, tags=["connections"])
+async def callback(
+    provider: Provider,
+    user: CurrentUser,
+    repo: Repository,
+    state: str | None = None,
+    code: str | None = None,
+    error: str | None = None,
+) -> Response:
+    if provider == Provider.NOTION:
+        await NotionOAuthService(repo, notion_oauth(), credential_store()).callback(
+            user.id, state=state, code=code, error=error
+        )
+        return RedirectResponse(get_settings().frontend_origin + "/connections?connected=notion")
     ConnectionService(repo).callback(provider)
+    return Response(status_code=501)
+
+
+@router.get(
+    "/connections/NOTION/destinations",
+    response_model=list[NotionDestinationRead],
+    tags=["connections"],
+)
+async def notion_destination_list(
+    user: CurrentUser, repo: Repository
+) -> list[NotionDestinationRead]:
+    return [
+        NotionDestinationRead.model_validate(item)
+        for item in await notion_destinations(repo).list(user.id)
+    ]
+
+
+@router.post(
+    "/connections/NOTION/destinations/refresh",
+    response_model=list[NotionDestinationRead],
+    tags=["connections"],
+)
+async def notion_destination_refresh(
+    user: CurrentUser, repo: Repository
+) -> list[NotionDestinationRead]:
+    return [
+        NotionDestinationRead.model_validate(item)
+        for item in await notion_destinations(repo).refresh(user.id)
+    ]
+
+
+@router.put(
+    "/connections/NOTION/destinations/default",
+    response_model=NotionDestinationRead,
+    tags=["connections"],
+)
+async def notion_destination_select(
+    data: NotionDestinationInput, user: CurrentUser, repo: Repository
+) -> NotionDestinationRead:
+    return NotionDestinationRead.model_validate(
+        await notion_destinations(repo).select(user.id, data.destination_id)
+    )

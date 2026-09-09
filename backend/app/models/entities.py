@@ -106,6 +106,7 @@ class ConnectedAccount(Identity, Timestamps, Base):
     refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
     token_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     scopes: Mapped[list[str]] = mapped_column(PAYLOAD, default=list)
+    provider_metadata: Mapped[dict[str, Any]] = mapped_column(PAYLOAD, default=dict)
     status: Mapped[ConnectionStatus] = mapped_column(enum_type(ConnectionStatus))
 
 
@@ -197,6 +198,31 @@ class ExternalArtifact(Identity, Base):
     external_url: Mapped[str] = mapped_column(String(2048))
     idempotency_key: Mapped[str] = mapped_column(String(255), unique=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class OAuthState(Identity, Base):
+    __tablename__ = "oauth_state"
+    __table_args__ = (Index("ix_oauth_state_user_provider", "user_id", "provider"),)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    provider: Mapped[Provider] = mapped_column(enum_type(Provider))
+    state_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class NotionDestinationRecord(Identity, Timestamps, Base):
+    __tablename__ = "notion_destination"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "provider_page_id"),
+        Index("ix_notion_destination_user_connection", "user_id", "connection_id"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    connection_id: Mapped[UUID] = mapped_column(ForeignKey("connected_account.id"))
+    provider_page_id: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(255))
+    icon_url: Mapped[str | None] = mapped_column(String(2048))
+    selected: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
 class AuditEvent(Identity, Base):

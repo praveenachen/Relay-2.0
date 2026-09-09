@@ -31,6 +31,7 @@ class ConnectionService:
             provider=provider,
             external_account_id=credentials.external_account_id,
             display_name=credentials.display_name,
+            provider_metadata={},
             status=ConnectionStatus.CONNECTED,
         )
         self.replace_credentials(connection, credentials, store)
@@ -121,6 +122,13 @@ class ConnectionService:
                 "CONNECTION_DISCONNECTED",
                 metadata={"connection_id": str(connection.id), "provider": provider.value},
             )
+            if provider == Provider.NOTION:
+                record(
+                    self.session,
+                    owner,
+                    "NOTION_DISCONNECTED",
+                    metadata={"connection_id": str(connection.id)},
+                )
         await self.session.commit()
 
     def authorize(self, provider: Provider) -> None:

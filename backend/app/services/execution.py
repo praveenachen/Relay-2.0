@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from sqlalchemy import select
+
 from app.connectors.notion import ExternalArtifactResult
 from app.domain.enums import ActionProvider, ActionStatus, ApprovalStatus
 from app.domain.enums import WorkflowStatus as S
@@ -32,6 +34,22 @@ class ExecutionService:
         if approval.status != ApprovalStatus.APPROVED or approval.approved_payload is None:
             raise ApprovalRequired()
         workflow = WorkflowService(self.repo)
+        key = f"learn:{run.id}:{approval.id}"
+        existing = await self.session.scalar(
+            select(ExternalArtifact).where(ExternalArtifact.idempotency_key == key)
+        )
+        if existing is not None:
+            run.result_payload = {
+                "artifact_id": str(existing.id),
+                "artifact": {
+                    "external_id": existing.external_id,
+                    "external_url": existing.external_url,
+                },
+            }
+            action.status = ActionStatus.COMPLETED
+            await workflow.apply_transition(run, S.COMPLETED, owner)
+            await self.session.commit()
+            return RunRead.model_validate(run)
         await workflow.apply_transition(run, S.QUEUED, owner)
         action.status = ActionStatus.QUEUED
         record(self.session, owner, "EXECUTION_SUBMITTED", run.id)
@@ -39,10 +57,10 @@ class ExecutionService:
         run = await self.repo.run(run_id, owner, lock=True)
         await workflow.apply_transition(run, S.EXECUTING, owner)
         action.status = ActionStatus.EXECUTING
-        record(self.session, owner, "EXECUTION_STARTED", run.id)
+        record(self.session, owner, "EXTERNAL_EXECUTION_STARTED", run.id)
+        record(self.session, owner, "NOTION_PAGE_CREATE_STARTED", run.id)
         # Inline local side effects and their records commit together. Runtime never reads a
         # mutable proposal: only the approved snapshot crosses this boundary.
-        key = f"learn:{run.id}:{approval.id}"
         snapshot = await self.runtime.submit_execution(
             ExecutionRequest(
                 operation=action.action_type,
@@ -54,12 +72,15 @@ class ExecutionService:
         run.result_payload = {"execution": snapshot.model_dump(mode="json")}
         if snapshot.status == ExecutionStatus.SUCCEEDED and snapshot.result is not None:
             result = ExternalArtifactResult.model_validate(snapshot.result)
+            connection_id = approval.approved_payload.get("connection_id")
             artifact = ExternalArtifact(
                 workflow_run_id=run.id,
                 proposed_action_id=action.id,
-                connected_account_id=None,
+                connected_account_id=UUID(connection_id) if connection_id else None,
                 provider=ActionProvider.NOTION,
-                artifact_type="mock_notion_study_page",
+                artifact_type="notion_study_page"
+                if not result.simulated
+                else "mock_notion_study_page",
                 external_id=result.external_id,
                 external_url=result.external_url,
                 idempotency_key=key,
@@ -75,15 +96,44 @@ class ExecutionService:
                 run.id,
                 {
                     "artifact_id": str(artifact.id),
-                    "simulated": True,
+                    "simulated": result.simulated,
                 },
+            )
+            record(
+                self.session,
+                owner,
+                "NOTION_PAGE_CREATED",
+                run.id,
+                {
+                    "artifact_id": str(artifact.id),
+                    "destination_id": result.destination_id,
+                },
+            )
+            record(
+                self.session,
+                owner,
+                "EXTERNAL_ARTIFACT_RECORDED",
+                run.id,
+                {"artifact_id": str(artifact.id)},
             )
             await workflow.apply_transition(run, S.COMPLETED, owner)
             record(self.session, owner, "WORKFLOW_COMPLETED", run.id)
         else:
             action.status = ActionStatus.FAILED
             run.error_code = snapshot.error_code or "EXECUTION_FAILED"
-            run.error_message = "Simulated publishing failed. No Notion page was created."
+            run.error_message = (
+                "Relay could not publish the approved notes. Check the Notion connection "
+                "and destination."
+            )
+            record(
+                self.session,
+                owner,
+                "NOTION_PAGE_CREATE_FAILED",
+                run.id,
+                {
+                    "error_code": run.error_code,
+                },
+            )
             record(
                 self.session,
                 owner,
