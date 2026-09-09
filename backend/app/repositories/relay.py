@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domain.enums import ApprovalStatus, Provider, WorkflowStatus
 from app.domain.errors import ApprovalNotFound, UnauthorizedResourceAccess, WorkflowNotFound
+from app.domain.workflows import TERMINAL_STATES
 from app.models.entities import (
     ApprovalRequest,
     AuditEvent,
@@ -62,8 +63,11 @@ class RelayRepository:
         since: datetime | None = None,
         limit: int = 50,
         offset: int = 0,
+        incomplete: bool = False,
     ) -> Sequence[WorkflowRun]:
         query = select(WorkflowRun).where(WorkflowRun.user_id == owner)
+        if incomplete:
+            query = query.where(WorkflowRun.status.not_in(TERMINAL_STATES))
         if status is not None:
             query = query.where(WorkflowRun.status == status)
         if definition_id is not None:

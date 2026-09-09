@@ -72,11 +72,12 @@ async def runs(
     created_since: datetime | None = None,
     limit: Limit = 50,
     offset: Offset = 0,
+    incomplete: bool = False,
 ) -> list[RunRead]:
     return [
         RunRead.model_validate(item)
         for item in await repo.runs(
-            user.id, status, workflow_definition_id, created_since, limit, offset
+            user.id, status, workflow_definition_id, created_since, limit, offset, incomplete
         )
     ]
 

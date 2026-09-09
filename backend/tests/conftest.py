@@ -10,6 +10,7 @@ from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from alembic import command
+from app.auth.users import cookie_transport
 from app.core.config import get_settings
 from app.db.session import get_session
 from app.main import create_app
@@ -48,7 +49,8 @@ async def session_factory(tmp_path: Path) -> AsyncIterator[async_sessionmaker[As
 
 
 @pytest.fixture
-async def client(session_factory) -> AsyncIterator[httpx.AsyncClient]:
+async def client(session_factory, monkeypatch) -> AsyncIterator[httpx.AsyncClient]:
+    monkeypatch.setattr(cookie_transport, "cookie_secure", True)
     app = create_app()
 
     async def session_override():

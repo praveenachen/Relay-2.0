@@ -5,6 +5,7 @@ import pytest
 from sqlalchemy import select
 from test_application import proposed
 
+from app.core.config import get_settings
 from app.domain.enums import WorkflowStatus
 from app.domain.errors import ApprovalAlreadyResolved, DomainError
 from app.models.entities import (
@@ -60,6 +61,8 @@ async def test_resolved_snapshot_and_audit_cannot_be_edited(client, account, ses
 async def test_expired_session_is_rejected(client, account, session_factory):
     async with session_factory() as session:
         token = await session.scalar(select(AccessToken))
-        token.created_at = datetime.now(UTC) - timedelta(days=2)
+        token.created_at = datetime.now(UTC) - timedelta(
+            seconds=get_settings().session_lifetime_seconds + 1
+        )
         await session.commit()
     assert (await client.get("/users/me")).status_code == 401

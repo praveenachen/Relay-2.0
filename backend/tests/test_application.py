@@ -12,6 +12,7 @@ from app.models.entities import (
     AuditEvent,
     ProposedAction,
     WorkflowDefinition,
+    WorkflowRun,
 )
 from app.repositories.relay import RelayRepository
 from app.services.workflows import WorkflowService
@@ -173,3 +174,19 @@ async def test_preference_validation_and_audit(client, account):
     value["maximum_session_minutes"] = 10
     assert (await client.put("/preferences", json=value)).status_code == 422
     assert (await client.get("/preferences")).json()["preferred_session_minutes"] == 50
+
+
+async def test_incomplete_filter_ignores_newer_completed_runs(client, account, session_factory):
+    draft = await create_run(client)
+    async with session_factory() as session:
+        for _ in range(51):
+            session.add(
+                WorkflowRun(
+                    user_id=UUID(account["id"]),
+                    workflow_definition_id=UUID(draft["workflow_definition_id"]),
+                    status=S.COMPLETED,
+                )
+            )
+        await session.commit()
+    response = await client.get("/workflow-runs?incomplete=true&limit=1")
+    assert [run["id"] for run in response.json()] == [draft["id"]]

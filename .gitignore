@@ -13,3 +13,6 @@ frontend/out/
 *.tsbuildinfo
 .coverage
 .DS_Store
+
+frontend/playwright-report/
+frontend/test-results/

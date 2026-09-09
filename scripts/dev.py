@@ -58,11 +58,13 @@ def main() -> None:
         backend("alembic", "upgrade", "head")
     elif command == "test":
         backend("pytest")
+        run([NPM, "test"], FRONTEND)
     elif command == "lint":
         backend("ruff", "check", ".", "../scripts")
         backend("ruff", "format", "--check", ".", "../scripts")
         backend("mypy", "app")
         run([NPM, "run", "lint"], FRONTEND)
+        run([NPM, "run", "format:check"], FRONTEND)
         run([NPM, "run", "typecheck"], FRONTEND)
     elif command == "build":
         run([NPM, "run", "build"], FRONTEND)
