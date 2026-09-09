@@ -75,7 +75,9 @@ async def test_connection_lifecycle_and_isolation(client, account, session_facto
 
 
 async def test_oauth_is_honestly_unavailable(client, account):
-    for path in ["/connections/GOOGLE/authorize", "/connections/GOOGLE/callback"]:
+    # GOOGLE and NOTION have real OAuth implementations (see test_plan_connectors.py
+    # and test_notion_integration.py); GITHUB (COLLABORATE, a later phase) does not yet.
+    for path in ["/connections/GITHUB/authorize", "/connections/GITHUB/callback"]:
         response = await client.get(path)
         assert response.status_code == 501
         assert response.json()["code"] == "OAUTH_NOT_CONFIGURED"

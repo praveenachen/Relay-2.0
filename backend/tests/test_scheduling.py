@@ -12,6 +12,7 @@ from app.scheduling.models import (
     SchedulingStatus,
     StudySession,
 )
+from app.scheduling.objectives import SchedulingWeights
 from app.scheduling.solver import CPSATStudyScheduler, decompose_minutes
 
 TZ = ZoneInfo("America/Toronto")
@@ -235,3 +236,67 @@ def test_invalid_naive_deadline_is_rejected() -> None:
             priority=3,
             status="todo",
         )
+
+
+def test_decomposition_never_exceeds_preferred_or_maximum() -> None:
+    # preferred always bounds fragment size when preferred <= maximum (the
+    # only valid configuration, enforced by SchedulingPreference); maximum
+    # is a ceiling that preferred can never cross, not an active target.
+    chunks = decompose_minutes(200, preferred=60, maximum=75)
+    assert chunks == (60, 60, 60, 20)
+    for chunk in chunks:
+        assert chunk <= 60
+        assert chunk <= 75
+
+
+def test_priority_breaks_ties_between_equal_deadlines() -> None:
+    result = solve(
+        problem(
+            (
+                task("low", dt(1, 6, 17), 60, priority=5),
+                task("high", dt(1, 6, 17), 60, priority=1),
+            ),
+            (AvailabilityWindow(start=dt(1, 5, 9), end=dt(1, 5, 11)),),
+        )
+    )
+
+    assert result.sessions[0].task_id == "high"
+
+
+def test_daily_balance_weight_spreads_large_task_across_days() -> None:
+    """Small real experiment (see docs/experiments/daily-balance-weight.md):
+    does raising the daily_balance weight actually spread a large task's
+    sessions across more of the available days, instead of clustering them
+    on whichever single day the deadline-urgency term scores highest?
+
+    Setup: one 240-minute task, a 5-day window with generous daily study
+    hours, and 60-minute preferred/maximum sessions (so the task always
+    decomposes into four fixed 60-minute fragments regardless of weight;
+    only which days the solver assigns them to can change).
+
+    Result, from an actual weight sweep against this scenario (0, 4, 20,
+    50, 100, 200, 500, 1000): distinct days used were 1, 1, 2, 3, 4, 4, 4,
+    4. The shipped default (4) does not move the outcome at all here --
+    deadline urgency dominates it -- and the effect only saturates at 4
+    distinct days once the weight reaches 100 (Jan 5 stays unused at any
+    weight because it falls outside the 7-day urgency lookback and never
+    gets picked over closer days).
+    """
+    big_task = (task("project", dt(1, 12, 17), 240),)
+    windows = tuple(
+        AvailabilityWindow(start=dt(1, day, 8), end=dt(1, day, 22)) for day in range(5, 10)
+    )
+    preference = prefs(preferred_session_minutes=60, maximum_session_minutes=60)
+
+    unbalanced = CPSATStudyScheduler(SchedulingWeights(daily_balance=0)).solve(
+        problem(big_task, windows, preference=preference)
+    )
+    balanced = CPSATStudyScheduler(SchedulingWeights(daily_balance=100)).solve(
+        problem(big_task, windows, preference=preference)
+    )
+
+    def days_used(result) -> set:
+        return {session.start.date() for session in result.sessions}
+
+    assert len(days_used(unbalanced)) == 1
+    assert len(days_used(balanced)) == 4

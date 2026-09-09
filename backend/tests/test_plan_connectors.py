@@ -11,6 +11,9 @@ from app.connectors.google.calendar import GoogleCalendarApiClient
 from app.connectors.google.errors import CalendarRateLimited, GoogleAuthorizationFailed
 from app.connectors.google.schemas import GoogleOAuthToken, GoogleTokenInfo
 from app.connectors.google.service import GoogleCalendarService
+from app.connectors.notion.errors import NotionTaskDatabaseNotFound
+from app.connectors.notion.schemas import NotionTaskDatabase
+from app.connectors.notion.service import NotionTaskSourceService
 from app.connectors.notion.tasks import NotionTaskMapper, NotionTaskPropertyMapping
 from app.domain.enums import Provider
 from app.infrastructure.credentials import FernetCredentialStore
@@ -246,3 +249,158 @@ async def test_google_calendar_selection_persists(account, session_factory) -> N
         assert selected.summary == "School"
         refreshed = await session.get(ConnectedAccount, connection.id)
         assert refreshed.provider_metadata["default_calendar_id"] == "school"
+
+
+async def test_google_calendar_maps_403_and_timeout() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/forbidden"):
+            return httpx.Response(403, json={"error": "forbidden"})
+        raise httpx.TimeoutException("timed out", request=request)
+
+    transport = httpx.MockTransport(handler)
+
+    from app.connectors.google.calendar import google_error
+    from app.connectors.google.errors import (
+        CalendarRequestTimeout,
+        CalendarUnavailable,
+        GooglePermissionDenied,
+    )
+
+    class TestClient(GoogleCalendarApiClient):
+        async def request(self, method, path, *, json=None, params=None):
+            try:
+                async with httpx.AsyncClient(
+                    transport=transport, base_url="https://www.googleapis.com/calendar/v3"
+                ) as client:
+                    response = await client.request(method, path, json=json, params=params)
+            except httpx.TimeoutException as error:
+                raise CalendarRequestTimeout() from error
+            except httpx.HTTPError as error:
+                raise CalendarUnavailable() from error
+            if response.status_code >= 400:
+                raise google_error(response)
+            return response.json()
+
+    client = TestClient("token")
+    with pytest.raises(GooglePermissionDenied):
+        await client.request("GET", "/forbidden")
+    with pytest.raises(CalendarRequestTimeout):
+        await client.request("GET", "/anything")
+
+
+def test_all_day_busy_event_is_treated_as_utc_midnight() -> None:
+    from app.connectors.google.mapper import busy_interval_from_event
+
+    interval = busy_interval_from_event(
+        {
+            "id": "all-day-1",
+            "start": {"date": "2026-01-05"},
+            "end": {"date": "2026-01-06"},
+        }
+    )
+    assert interval.start.isoformat() == "2026-01-05T00:00:00+00:00"
+    assert interval.end.isoformat() == "2026-01-06T00:00:00+00:00"
+    assert interval.source_event_id == "all-day-1"
+
+
+async def test_google_token_refresh_updates_stored_credentials(account, session_factory) -> None:
+    store = FernetCredentialStore([Fernet.generate_key().decode()])
+    async with session_factory() as session:
+        connection = ConnectedAccount(
+            user_id=UUID(account["id"]),
+            provider=Provider.GOOGLE,
+            external_account_id="google-user-1",
+            display_name="student@example.com",
+            access_token_encrypted=store.encrypt("stale-access"),
+            refresh_token_encrypted=store.encrypt("refresh-1"),
+            token_expires_at=datetime(2020, 1, 1),
+            scopes=["https://www.googleapis.com/auth/calendar.events"],
+            provider_metadata={},
+            status="CONNECTED",
+        )
+        session.add(connection)
+        await session.commit()
+
+        oauth = GoogleOAuthClient("client", "secret", "https://relay.test/callback")
+
+        async def refresh(refresh_token: str) -> GoogleOAuthToken:
+            assert refresh_token == "refresh-1"
+            return GoogleOAuthToken(access_token="fresh-access", expires_in=3600)
+
+        oauth.refresh = refresh
+        service = GoogleCalendarService(RelayRepository(session), store, oauth=oauth)
+        refreshed = await service.connection(UUID(account["id"]))
+        assert store.decrypt(refreshed.access_token_encrypted) == "fresh-access"
+        assert refreshed.token_expires_at is not None
+
+
+async def test_google_token_refresh_without_refresh_token_marks_expired(
+    account, session_factory
+) -> None:
+    store = FernetCredentialStore([Fernet.generate_key().decode()])
+    async with session_factory() as session:
+        connection = ConnectedAccount(
+            user_id=UUID(account["id"]),
+            provider=Provider.GOOGLE,
+            external_account_id="google-user-1",
+            display_name="student@example.com",
+            access_token_encrypted=store.encrypt("stale-access"),
+            refresh_token_encrypted=None,
+            token_expires_at=datetime(2020, 1, 1),
+            scopes=["https://www.googleapis.com/auth/calendar.events"],
+            provider_metadata={},
+            status="CONNECTED",
+        )
+        session.add(connection)
+        await session.commit()
+
+        service = GoogleCalendarService(RelayRepository(session), store)
+        with pytest.raises(GoogleAuthorizationFailed):
+            await service.connection(UUID(account["id"]))
+        refreshed = await session.get(ConnectedAccount, connection.id)
+        assert refreshed.status == "EXPIRED"
+
+
+async def test_notion_task_database_discovery_select_and_default(account, session_factory) -> None:
+    store = FernetCredentialStore([Fernet.generate_key().decode()])
+    async with session_factory() as session:
+        connection = ConnectedAccount(
+            user_id=UUID(account["id"]),
+            provider=Provider.NOTION,
+            external_account_id="workspace-1",
+            display_name="Student Workspace",
+            access_token_encrypted=store.encrypt("notion-token"),
+            scopes=["read_content", "insert_content"],
+            provider_metadata={"workspace_id": "workspace-1"},
+            status="CONNECTED",
+        )
+        session.add(connection)
+        await session.commit()
+
+        class FakeClient:
+            async def search_databases(self):
+                return [
+                    NotionTaskDatabase(id="db-1", title="Assignments"),
+                    NotionTaskDatabase(id="db-2", title="Archive"),
+                ]
+
+        class Service(NotionTaskSourceService):
+            async def client(self, connection):
+                return FakeClient()
+
+        service = Service(RelayRepository(session), store)
+        owner = UUID(account["id"])
+        refreshed = await service.refresh(owner)
+        assert {item.title for item in refreshed} == {"Assignments", "Archive"}
+
+        with pytest.raises(NotionTaskDatabaseNotFound):
+            await service.select(owner, "missing", mapping())
+
+        selected = await service.select(owner, "db-1", mapping())
+        assert selected.title == "Assignments"
+
+        default = await service.default(owner)
+        assert default is not None
+        database_id, saved_mapping = default
+        assert database_id == "db-1"
+        assert saved_mapping.title == mapping().title

@@ -23,9 +23,12 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
     .click();
   await expect(page).toHaveURL(/\/onboarding$/);
   await page.getByRole("button", { name: "Get started" }).click();
+  // GitHub (COLLABORATE) is the one provider still unimplemented in this
+  // phase; GOOGLE and NOTION both have real OAuth now.
   await page
+    .getByRole("article")
+    .filter({ hasText: "GitHub" })
     .getByRole("button", { name: "Connect", exact: true })
-    .first()
     .click();
   await expect(
     page.getByRole("alert").filter({ hasText: "not implemented yet" }),

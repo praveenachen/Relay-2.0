@@ -14,6 +14,9 @@ export default defineConfig({
           : "../backend/.venv/bin/python ../backend/tests/browser_server.py",
       url: "http://127.0.0.1:8010/health",
       timeout: 60_000,
+      // Falls back to PYTHONPATH when the backend venv has no editable
+      // install of `app` (e.g. a Python version below pyproject's pin).
+      env: { PYTHONPATH: "../backend" },
     },
     {
       command: "npm run dev -- --port 3010",
