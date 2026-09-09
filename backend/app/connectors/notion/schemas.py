@@ -67,3 +67,8 @@ class NotionConnector(Protocol):
         action: CreateNotionStudyPageAction,
         idempotency_key: str,
     ) -> ExternalArtifactResult: ...
+
+
+class NotionTaskDatabase(StrictModel):
+    id: str
+    title: str

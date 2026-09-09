@@ -18,6 +18,7 @@ from app.connectors.notion.schemas import (
     ExternalArtifactResult,
     NotionBlock,
     NotionDestination,
+    NotionTaskDatabase,
 )
 
 NOTION_VERSION = "2026-03-11"
@@ -124,6 +125,41 @@ class NotionApiClient:
                             object_type="page",
                         )
                     )
+            cursor = data.get("next_cursor") if data.get("has_more") else None
+            if not cursor:
+                return results
+
+    async def search_databases(self) -> list[NotionTaskDatabase]:
+        results: list[NotionTaskDatabase] = []
+        cursor: str | None = None
+        while True:
+            payload: dict[str, Any] = {
+                "page_size": 100,
+                "filter": {"property": "object", "value": "database"},
+            }
+            if cursor:
+                payload["start_cursor"] = cursor
+            data = await self.request("POST", "/v1/search", payload)
+            for item in data.get("results", []):
+                if item.get("object") == "database" and isinstance(item.get("id"), str):
+                    title_parts = item.get("title", [])
+                    title = "Untitled database"
+                    if title_parts and isinstance(title_parts[0], dict):
+                        title = title_parts[0].get("plain_text") or title
+                    results.append(NotionTaskDatabase(id=item["id"], title=title))
+            cursor = data.get("next_cursor") if data.get("has_more") else None
+            if not cursor:
+                return results
+
+    async def query_database(self, database_id: str) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        cursor: str | None = None
+        while True:
+            payload: dict[str, Any] = {"page_size": 100}
+            if cursor:
+                payload["start_cursor"] = cursor
+            data = await self.request("POST", f"/v1/databases/{database_id}/query", payload)
+            results.extend(item for item in data.get("results", []) if isinstance(item, dict))
             cursor = data.get("next_cursor") if data.get("has_more") else None
             if not cursor:
                 return results

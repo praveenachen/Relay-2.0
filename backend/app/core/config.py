@@ -34,6 +34,14 @@ class Settings(BaseSettings):
     notion_oauth_token_url: str = "https://api.notion.com/v1/oauth/token"
     notion_timeout_seconds: int = Field(default=20, ge=1, le=120)
     notion_publish_mode: Literal["mock", "real"] = "mock"
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    google_redirect_uri: str = "http://localhost:8000/connections/GOOGLE/callback"
+    google_calendar_api_base_url: str = "https://www.googleapis.com/calendar/v3"
+    google_oauth_authorize_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    google_oauth_token_url: str = "https://oauth2.googleapis.com/token"
+    google_userinfo_url: str = "https://openidconnect.googleapis.com/v1/userinfo"
+    google_timeout_seconds: int = Field(default=20, ge=1, le=120)
 
 
 @lru_cache

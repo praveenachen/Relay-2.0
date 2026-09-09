@@ -22,6 +22,7 @@ from app.connectors.notion.schemas import (
     NotionDestination,
     NotionOAuthToken,
     NotionStudyPageContent,
+    NotionTaskDatabase,
 )
 from app.connectors.notion.service import NotionDestinationService
 
@@ -35,6 +36,7 @@ __all__ = [
     "NotionBlock",
     "NotionConnector",
     "NotionDestination",
+    "NotionTaskDatabase",
     "NotionDestinationNotFound",
     "NotionDestinationService",
     "NotionNotConnected",
@@ -50,4 +52,18 @@ __all__ = [
     "NotionUnavailable",
     "NotionValidationFailed",
     "RealNotionConnector",
+]
+
+from app.connectors.notion.tasks import (
+    NotionTaskImportResult,
+    NotionTaskMapper,
+    NotionTaskPropertyMapping,
+    TaskMappingIssue,
+)
+
+__all__ += [
+    "NotionTaskImportResult",
+    "NotionTaskMapper",
+    "NotionTaskPropertyMapping",
+    "TaskMappingIssue",
 ]

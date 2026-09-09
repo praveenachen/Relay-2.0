@@ -7,6 +7,9 @@ from fastapi.responses import RedirectResponse
 
 from app.api.dependencies import Repository
 from app.auth.users import CurrentUser, UserRead
+from app.connectors.google import GoogleOAuthClient, GoogleOAuthService
+from app.connectors.google.schemas import CalendarListItem
+from app.connectors.google.service import GoogleCalendarService
 from app.connectors.notion import NotionDestinationService, NotionOAuthClient, NotionOAuthService
 from app.core.config import get_settings
 from app.domain.enums import ApprovalStatus, Provider, WorkflowStatus
@@ -169,6 +172,29 @@ def notion_oauth() -> NotionOAuthClient:
     )
 
 
+def google_oauth() -> GoogleOAuthClient:
+    settings = get_settings()
+    return GoogleOAuthClient(
+        settings.google_client_id,
+        settings.google_client_secret.get_secret_value(),
+        settings.google_redirect_uri,
+        authorize_url=settings.google_oauth_authorize_url,
+        token_url=settings.google_oauth_token_url,
+        userinfo_url=settings.google_userinfo_url,
+        timeout=settings.google_timeout_seconds,
+    )
+
+
+def google_calendars(repo: Repository) -> GoogleCalendarService:
+    settings = get_settings()
+    return GoogleCalendarService(
+        repo,
+        credential_store(),
+        api_base_url=settings.google_calendar_api_base_url,
+        timeout=settings.google_timeout_seconds,
+    )
+
+
 def notion_destinations(repo: Repository) -> NotionDestinationService:
     settings = get_settings()
     return NotionDestinationService(
@@ -187,6 +213,8 @@ async def authorize(
 ) -> dict[str, str] | None:
     if provider == Provider.NOTION:
         return await NotionOAuthService(repo, notion_oauth(), credential_store()).start(user.id)
+    if provider == Provider.GOOGLE:
+        return await GoogleOAuthService(repo, google_oauth(), credential_store()).start(user.id)
     ConnectionService(repo).authorize(provider)
     return None
 
@@ -205,6 +233,11 @@ async def callback(
             user.id, state=state, code=code, error=error
         )
         return RedirectResponse(get_settings().frontend_origin + "/connections?connected=notion")
+    if provider == Provider.GOOGLE:
+        await GoogleOAuthService(repo, google_oauth(), credential_store()).callback(
+            user.id, state=state, code=code, error=error
+        )
+        return RedirectResponse(get_settings().frontend_origin + "/connections?connected=google")
     ConnectionService(repo).callback(provider)
     return Response(status_code=501)
 
@@ -248,3 +281,32 @@ async def notion_destination_select(
     return NotionDestinationRead.model_validate(
         await notion_destinations(repo).select(user.id, data.destination_id)
     )
+
+
+@router.get(
+    "/connections/GOOGLE/calendars",
+    response_model=list[CalendarListItem],
+    tags=["connections"],
+)
+async def google_calendar_list(user: CurrentUser, repo: Repository) -> list[CalendarListItem]:
+    return await google_calendars(repo).list(user.id)
+
+
+@router.post(
+    "/connections/GOOGLE/calendars/refresh",
+    response_model=list[CalendarListItem],
+    tags=["connections"],
+)
+async def google_calendar_refresh(user: CurrentUser, repo: Repository) -> list[CalendarListItem]:
+    return await google_calendars(repo).refresh(user.id)
+
+
+@router.put(
+    "/connections/GOOGLE/calendars/default",
+    response_model=CalendarListItem,
+    tags=["connections"],
+)
+async def google_calendar_select(
+    data: NotionDestinationInput, user: CurrentUser, repo: Repository
+) -> CalendarListItem:
+    return await google_calendars(repo).select(user.id, data.destination_id)

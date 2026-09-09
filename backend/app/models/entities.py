@@ -225,6 +225,35 @@ class NotionDestinationRecord(Identity, Timestamps, Base):
     selected: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+class GoogleCalendarRecord(Identity, Timestamps, Base):
+    __tablename__ = "google_calendar"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "provider_calendar_id"),
+        Index("ix_google_calendar_user_connection", "user_id", "connection_id"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    connection_id: Mapped[UUID] = mapped_column(ForeignKey("connected_account.id"))
+    provider_calendar_id: Mapped[str] = mapped_column(String(255))
+    summary: Mapped[str] = mapped_column(String(255))
+    time_zone: Mapped[str | None] = mapped_column(String(100))
+    primary: Mapped[bool] = mapped_column(Boolean, default=False)
+    selected: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+class NotionTaskDatabaseRecord(Identity, Timestamps, Base):
+    __tablename__ = "notion_task_database"
+    __table_args__ = (
+        UniqueConstraint("connection_id", "provider_database_id"),
+        Index("ix_notion_task_database_user_connection", "user_id", "connection_id"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    connection_id: Mapped[UUID] = mapped_column(ForeignKey("connected_account.id"))
+    provider_database_id: Mapped[str] = mapped_column(String(255))
+    title: Mapped[str] = mapped_column(String(255))
+    property_mapping: Mapped[dict[str, Any]] = mapped_column(PAYLOAD, default=dict)
+    selected: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
 class AuditEvent(Identity, Base):
     __tablename__ = "audit_event"
     __table_args__ = (Index("ix_audit_run_created", "workflow_run_id", "created_at"),)
