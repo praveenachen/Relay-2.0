@@ -3,21 +3,21 @@
 ```mermaid
 flowchart TB
     Browser[Browser] --> Web[Next.js frontend]
-    Browser -->|Health or docs| API[FastAPI API]
-    Web -.->|Planned JSON requests| API
-    API -.-> Services[Planned application services]
-    Services -.-> Domain[Planned domain rules]
-    Services -.-> Repositories[Planned repository interfaces]
-    Services -.-> Connectors[Planned Relay connectors]
+    Web -->|Proxy JSON and cookie sessions| API[FastAPI routes]
+    API --> Services[Application services]
+    Services --> Domain[Pure domain rules and ports]
+    Services --> Repo[Owner-scoped SQLAlchemy repository]
+    Services --> Credentials[Fernet credential adapter]
+    Repo --> DB[(PostgreSQL)]
+    API --> Auth[FastAPI Users adapter]
+    Auth --> DB
     Services -.-> Contract[RuntimeClient Protocol only]
-    Repositories -.-> SQL[Configured SQLAlchemy and Alembic]
-    SQL -.-> DB[(PostgreSQL)]
-    Contract -.-> Runtime[Planned Agent Runtime adapter]
-    Connectors -.-> Providers[Notion / Google Calendar / GitHub / LLM]
+    Contract -.-> Runtime[Agent Runtime: not integrated]
+    Domain -.-> Providers[OAuth provider adapters: not implemented]
 ```
 
-Local processes: browser-facing Next.js on 3000, FastAPI on 8000, and Compose PostgreSQL on localhost 5432. Only PostgreSQL is containerized. There is no worker or runtime service in this repository.
+Next.js runs on 3000, FastAPI on 8000, and Compose PostgreSQL on localhost 5432. Only PostgreSQL is containerized. The browser uses a same-origin proxy; cookies never enter localStorage. Protected layouts validate sessions server-side and FastAPI authorizes every resource independently.
 
-Routes will translate HTTP requests and responses, delegate to services, and avoid business rules. Services will coordinate domain validation, repositories, and connector/runtime ports. Domain code must not import FastAPI, provider SDKs, or transport clients. SQLAlchemy and concrete transport adapters are infrastructure; API schema models are distinct from future persistence models.
+The domain package contains pure rules and ports. Application services import the domain plus persistence/API schemas and coordinate atomic transactions. The repository encapsulates owner-scoped queries and locks. The current application repository is a concrete SQLAlchemy adapter; there is no speculative generic repository framework. Infrastructure-specific encryption implements the domain CredentialStore port. Provider adapters and Runtime transports are absent.
 
-Synchronous SQLAlchemy is sufficient for this foundation. Future blocking DB work must run in synchronous handlers/dependencies or an appropriate thread context, not block the async event loop. No runtime submit endpoint exists.
+Async SQLAlchemy application sessions accommodate FastAPI Users and avoid blocking the event loop. Alembic/diagnostics use the synchronous psycopg driver; application requests use asyncpg. No worker, scheduling solver, document processor or model provider is installed.

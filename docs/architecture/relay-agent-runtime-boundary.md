@@ -27,6 +27,6 @@ sequenceDiagram
     Relay-->>User: Verified outcome and workflow history (planned)
 ```
 
-Every step in this sequence is future behavior. Relay must durably bind approval to an immutable proposal version and intended destinations before submission. Edits invalidate approval. Runtime submission is not a substitute for approval or authorization. Partial success and stale provider state must remain visible to the user; retries must not duplicate side effects.
+Approval requests and exact payload snapshots now exist in Relay. Runtime submission and verification remain future behavior. Before integration, Relay must also bind destination accounts and versioned proposal edits before submission. Edits invalidate approval. Runtime submission is not a substitute for approval or authorization. Partial success and stale provider state must remain visible to the user; retries must not duplicate side effects.
 
 Before integration, agree operation registration, credential access, callback/connector execution placement, error taxonomy, cancellation races, result verification, authentication, tenant isolation, and idempotency retention. Credentials should not become arbitrary payload fields. Runtime cancellation will be best effort; completed external actions cannot be assumed reversible. No retry loop, queue, or execution-state persistence is implemented in Relay.

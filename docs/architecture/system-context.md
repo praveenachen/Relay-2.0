@@ -1,18 +1,17 @@
 # System context
 
-Relay is the student-facing application. Solid edges indicate current behavior; dotted edges indicate planned relationships. PostgreSQL is configured but stores no domain records yet.
+Solid edges are implemented relationships; dotted edges are planned integrations.
 
 ```mermaid
 flowchart LR
-    User[Student] --> Frontend[Relay Frontend]
-    User -->|Health and API docs| API[Relay API]
-    Frontend -.->|Planned application requests| API
-    API -.->|Configured, no domain persistence yet| DB[(PostgreSQL)]
-    API -.->|Planned execution contract| Runtime[Agent Runtime]
+    User[Student] --> Frontend[Relay Next.js Frontend]
+    Frontend -->|Same-origin API proxy and server session checks| API[Relay FastAPI API]
+    API --> DB[(PostgreSQL)]
+    API -.->|RuntimeClient Protocol only| Runtime[Agent Runtime]
     API -.->|Planned interpretation| LLM[LLM Provider]
-    API -.->|Planned connector logic| Notion[Notion]
-    API -.->|Planned connector logic| Calendar[Google Calendar]
-    API -.->|Planned connector logic| GitHub[GitHub]
+    API -.->|Planned OAuth and connector| Notion[Notion]
+    API -.->|Planned OAuth and connector| Calendar[Google Calendar]
+    API -.->|Planned OAuth and connector| GitHub[GitHub]
 ```
 
-The frontend links to API documentation; it does not yet fetch application data. External account configuration and provider-specific interpretation belong to Relay. Runtime is separate, and its eventual execution transport is unresolved. No external service is contacted in Phase 0.
+Relay accounts, sessions, preferences, draft runs, lifecycle services and approval persistence exist. Connected-account persistence and encryption exist but provider OAuth routes return 501. No external integration is contacted. Relay owns OAuth configuration and connector-specific domain logic; Runtime must remain independent of student and provider-domain concepts.

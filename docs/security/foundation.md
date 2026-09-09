@@ -1,9 +1,7 @@
 # Security boundaries
 
-Phase 0 has no login, uploads, OAuth tokens, or external writes. The public health route returns only static liveness information. The local API and database are intended for development, not a public deployment.
+Phases 1 and 2 add real Relay authentication, owner-scoped resources, explicit approval snapshots, audit history and encrypted connection persistence. See [authentication](authentication.md), [credential storage](credential-storage.md), and [external connections](external-connections.md) for implementation details and limitations.
 
-Before handling real student data, implement identity and tenant authorization, validate uploads and retention rules, encrypt provider tokens with managed key rotation, and redact sensitive logs. Future model output is untrusted data: schema validation and deterministic domain checks precede proposals. Uploaded instructions must never grant permissions.
+Workflow inputs and future model output are untrusted data. Typed schemas and deterministic validation precede authorization. This phase accepts draft payloads but does not interpret instructions, upload files or execute actions. User-provided content never grants access to another user's resources.
 
-Explicit approval must bind to the exact action set, destination accounts, and proposal version. Recheck ownership and permissions at execution. Proposal edits require renewed approval. Keep approval history separate from Runtime execution state, and model partial outcomes without automatically reissuing successful actions.
-
-`.env.example` contains only public local database defaults and blank future secrets. Local env files and generated artifacts are ignored. Never expose provider secrets in browser configuration. CI uses a disposable PostgreSQL service with public test credentials. Production secret storage, encryption, deployment hardening, and abuse controls remain future work.
+Provider tokens do not appear in response schemas or audit metadata. Validation errors omit submitted inputs, and database/domain exceptions map to safe responses. Secret settings are redacted types and local env files are ignored. Deployment, log/backup access, rate limiting, email verification, recovery, retention and key rotation operations need further production work.

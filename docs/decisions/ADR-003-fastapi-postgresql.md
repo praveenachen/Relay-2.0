@@ -25,3 +25,7 @@ There are Python and TypeScript toolchains. Sessions have explicit transaction o
 # When We Would Reconsider
 
 Revisit synchronous access if measured concurrency and database wait times justify async complexity; revisit storage only for demonstrated query or consistency requirements.
+
+## Phase 1/2 update
+
+Application sessions now use async SQLAlchemy with asyncpg to fit FastAPI Users and avoid blocking the event loop. Alembic and diagnostics retain synchronous psycopg access. This is an integration requirement, not a performance benchmark result.
