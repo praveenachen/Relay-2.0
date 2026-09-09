@@ -13,6 +13,10 @@ export function RunDetail({ id }: { id: string }) {
     definitions.data?.find(
       (item) => item.id === run.data.workflow_definition_id,
     )?.name || "Relay";
+  const isLearn =
+    definitions.data?.find(
+      (item) => item.id === run.data.workflow_definition_id,
+    )?.key === "lecture_to_notion";
   return (
     <>
       <PageTitle
@@ -22,20 +26,41 @@ export function RunDetail({ id }: { id: string }) {
       />
       <RelayLine status={run.data.status} />
       <div className="my-8">
-        <Empty
-          title={
-            run.data.status === "DRAFT"
-              ? "Your draft is saved."
-              : "Execution is not available yet."
-          }
-        >
-          Workflow automation is planned for a later phase. No content has been
-          analyzed and no external action has run from this workspace.
-        </Empty>
+        {isLearn ? (
+          <Empty
+            title={
+              run.data.status === "DRAFT"
+                ? "Your draft is saved."
+                : "LEARN processing is available."
+            }
+            action={
+              <Link className="button" href={`/workflows/learn/${run.data.id}`}>
+                Open LEARN review
+              </Link>
+            }
+          >
+            Continue with upload, parsing, summary review, approval, and mock
+            publishing from the dedicated LEARN workspace.
+          </Empty>
+        ) : (
+          <Empty
+            title={
+              run.data.status === "DRAFT"
+                ? "Your draft is saved."
+                : "Execution is not available yet."
+            }
+          >
+            Workflow automation is planned for a later phase. No content has
+            been analyzed and no external action has run from this workspace.
+          </Empty>
+        )}
       </div>
       {run.data.status === "AWAITING_APPROVAL" && (
-        <Link className="button mb-8" href="/approvals">
-          Review approvals
+        <Link
+          className="button mb-8"
+          href={isLearn ? `/workflows/learn/${run.data.id}` : "/approvals"}
+        >
+          Review approval
         </Link>
       )}
       <section>

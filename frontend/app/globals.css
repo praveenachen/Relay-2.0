@@ -535,6 +535,79 @@ p {
   font: 10px var(--font-system);
   border-radius: 3px;
 }
+.learn-drop {
+  display: grid;
+  place-items: center;
+  gap: 12px;
+  min-height: 150px;
+  border: 1px dashed #abb5aa;
+  border-radius: var(--radius-control);
+  background: var(--surface-soft);
+  color: var(--muted);
+  text-align: center;
+  padding: 22px;
+  font-size: 13px;
+  font-weight: 550;
+}
+.learn-drop input {
+  max-width: 100%;
+}
+.learn-steps {
+  display: grid;
+  gap: 14px;
+  counter-reset: learn-step;
+}
+.learn-steps li {
+  list-style: none;
+  display: grid;
+  grid-template-columns: 28px 1fr;
+  gap: 12px;
+  align-items: start;
+  font-size: 13px;
+  color: var(--muted);
+}
+.learn-steps li::before {
+  counter-increment: learn-step;
+  content: counter(learn-step);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--accent);
+  background: var(--surface);
+  font: 600 12px var(--font-body);
+}
+.learn-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
+}
+.learn-row textarea,
+.learn-card textarea,
+.learn-card input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 10px 12px;
+  font: inherit;
+}
+.learn-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 16px;
+  background: #fffefa;
+}
+.learn-result {
+  border-left: 2px solid var(--accent);
+  padding-left: 16px;
+}
 @media (max-width: 700px) {
   .page-header {
     align-items: flex-start;
@@ -594,6 +667,9 @@ p {
   }
   .relay-line figcaption {
     flex-direction: column;
+  }
+  .learn-row {
+    grid-template-columns: 1fr;
   }
 }
 @media (prefers-reduced-motion: reduce) {

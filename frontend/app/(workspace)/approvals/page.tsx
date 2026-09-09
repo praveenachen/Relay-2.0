@@ -37,7 +37,7 @@ export default function Approvals() {
       <PageTitle
         eyebrow="You are in control"
         title="Approvals"
-        description="Review the exact proposed payload before making a decision. Approved actions are saved; execution is not available yet."
+        description="Review the exact proposed payload before making a decision. LEARN approvals can be edited in the review workspace before publishing to the local mock Notion connector."
       />
       <ErrorMessage error={resolve.error} />
       {!query.data.length ? (
@@ -52,9 +52,9 @@ export default function Approvals() {
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <Link
                   className="font-medium underline"
-                  href={`/runs/${approval.workflow_run_id}`}
+                  href={`/workflows/learn/${approval.workflow_run_id}`}
                 >
-                  View workflow run
+                  Open LEARN review
                 </Link>
                 <Status value={approval.status} />
               </div>
