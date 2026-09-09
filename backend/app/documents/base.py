@@ -1,0 +1,13 @@
+from typing import Protocol
+
+from app.documents.models import ParsedDocument, UploadedDocument
+
+
+class DocumentParser(Protocol):
+    async def parse(self, file: UploadedDocument) -> ParsedDocument: ...
+
+
+class FileStore(Protocol):
+    async def save(self, content: bytes) -> str: ...
+    async def read(self, key: str) -> bytes: ...
+    async def delete(self, key: str) -> None: ...

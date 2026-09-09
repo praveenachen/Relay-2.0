@@ -12,6 +12,8 @@ frontend/.next/
 frontend/out/
 *.tsbuildinfo
 .coverage
+**/.data/
+.tools/
 .DS_Store
 
 frontend/playwright-report/
