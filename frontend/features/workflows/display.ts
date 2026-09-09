@@ -42,7 +42,7 @@ export const workflowDisplay = {
     ],
     inputLabel: "Tasks and availability",
     inputHint:
-      "Task retrieval, calendar availability, and scheduling are planned for a later phase.",
+      "Relay imports Notion tasks and Google Calendar availability, then a CP-SAT solver -- not a language model -- decides the actual study times.",
   },
   project_meeting: {
     key: "project_meeting",

@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useConnections } from "@/hooks/queries";
 import { connections } from "@/features/connections/api";
 import { Provider } from "@/lib/schemas";
@@ -61,8 +61,8 @@ export function ConnectionCards() {
   return (
     <>
       <p className="notice mb-6">
-        Notion connects through OAuth and stores encrypted credentials. Google
-        Calendar and GitHub stay unavailable for now.
+        Notion and Google Calendar connect through OAuth and store encrypted
+        credentials. GitHub stays unavailable for now.
       </p>
       <div className="grid gap-5 md:grid-cols-3">
         {tools.map((tool) => {
@@ -129,7 +129,7 @@ export function ConnectionCards() {
                       Disconnect
                     </button>
                   )
-                ) : tool.provider === "NOTION" ? (
+                ) : tool.provider === "NOTION" || tool.provider === "GOOGLE" ? (
                   <button
                     className="button secondary"
                     disabled={connect.isPending}
@@ -162,6 +162,9 @@ export function ConnectionCards() {
                     destinations={destinations.data || []}
                     select={(id) => selectDestination.mutate(id)}
                   />
+                )}
+                {tool.provider === "GOOGLE" && accounts.length > 0 && (
+                  <GoogleCalendarPicker account={accounts[0]} />
                 )}
               </div>
             </article>
@@ -228,6 +231,73 @@ function NotionDestinationPicker({
             {destinations.map((destination) => (
               <option key={destination.id} value={destination.id}>
                 {destination.title}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function GoogleCalendarPicker({
+  account,
+}: {
+  account: { provider_metadata: Record<string, unknown> };
+}) {
+  const cache = useQueryClient();
+  const calendars = useQuery({
+    queryKey: ["connections", "google-calendars"],
+    queryFn: connections.googleCalendars,
+  });
+  const invalidate = () =>
+    cache.invalidateQueries({ queryKey: ["connections"] });
+  const refresh = useMutation({
+    mutationFn: connections.refreshGoogleCalendars,
+    onSuccess: async (data) => {
+      cache.setQueryData(["connections", "google-calendars"], data);
+      await invalidate();
+    },
+  });
+  const select = useMutation({
+    mutationFn: connections.selectGoogleCalendar,
+    onSuccess: invalidate,
+  });
+  const selected =
+    typeof account.provider_metadata.default_calendar_summary === "string"
+      ? account.provider_metadata.default_calendar_summary
+      : undefined;
+  const loading = refresh.isPending || select.isPending;
+  const items = calendars.data || [];
+  return (
+    <div className="mt-5 border-t border-line pt-5">
+      <p className="text-sm font-medium">Calendar Relay schedules into</p>
+      <p className="mt-2 text-sm text-muted">
+        {selected || "No calendar selected"}
+      </p>
+      <ErrorMessage error={calendars.error || refresh.error || select.error} />
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          className="button secondary"
+          disabled={loading}
+          onClick={() => refresh.mutate()}
+        >
+          Refresh calendars
+        </button>
+        {items.length > 0 && (
+          <select
+            className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
+            disabled={loading}
+            defaultValue=""
+            onChange={(event) =>
+              event.target.value && select.mutate(event.target.value)
+            }
+          >
+            <option value="">Choose calendar</option>
+            {items.map((calendar) => (
+              <option key={calendar.id} value={calendar.id}>
+                {calendar.summary}
+                {calendar.primary ? " (primary)" : ""}
               </option>
             ))}
           </select>
