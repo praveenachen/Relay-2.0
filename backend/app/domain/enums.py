@@ -1,0 +1,59 @@
+from enum import StrEnum
+
+
+class Provider(StrEnum):
+    GOOGLE = "GOOGLE"
+    NOTION = "NOTION"
+    GITHUB = "GITHUB"
+
+
+class ActionProvider(StrEnum):
+    GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
+    NOTION = "NOTION"
+    GITHUB = "GITHUB"
+
+
+class ConnectionStatus(StrEnum):
+    CONNECTED = "CONNECTED"
+    EXPIRED = "EXPIRED"
+    REVOKED = "REVOKED"
+    ERROR = "ERROR"
+
+
+class WorkflowStatus(StrEnum):
+    DRAFT = "DRAFT"
+    ANALYZING = "ANALYZING"
+    PLAN_READY = "PLAN_READY"
+    AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    APPROVED = "APPROVED"
+    QUEUED = "QUEUED"
+    EXECUTING = "EXECUTING"
+    COMPLETED = "COMPLETED"
+    PARTIALLY_COMPLETED = "PARTIALLY_COMPLETED"
+    FAILED = "FAILED"
+    REJECTED = "REJECTED"
+    CANCELLED = "CANCELLED"
+
+
+class ActionStatus(StrEnum):
+    PROPOSED = "PROPOSED"
+    EDITED = "EDITED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    QUEUED = "QUEUED"
+    EXECUTING = "EXECUTING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+
+
+class RiskLevel(StrEnum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"

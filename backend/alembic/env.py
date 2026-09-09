@@ -3,8 +3,8 @@ from sqlalchemy import create_engine, pool
 from alembic import context
 from app.core.config import get_settings
 from app.db.base import Base
+from app.models import entities  # noqa: F401
 
-# Import future mapped models here so autogenerate sees their metadata.
 target_metadata = Base.metadata
 
 
@@ -21,6 +21,12 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
+    supplied = context.config.attributes.get("connection")
+    if supplied is not None:
+        context.configure(connection=supplied, target_metadata=target_metadata, compare_type=True)
+        with context.begin_transaction():
+            context.run_migrations()
+        return
     engine = create_engine(str(get_settings().database_url), poolclass=pool.NullPool)
     try:
         with engine.connect() as connection:
