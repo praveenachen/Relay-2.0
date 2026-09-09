@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { useUser } from "@/hooks/queries";
@@ -55,6 +56,16 @@ export default function Settings() {
         <section className="panel">
           <h2 className="section-title">Your study preferences</h2>
           <PreferencesForm />
+        </section>
+        <section className="panel">
+          <h2 className="section-title">Connected tools</h2>
+          <p className="text-sm text-muted">
+            Notion, Google Calendar, and GitHub connections are managed
+            separately from your Relay account.
+          </p>
+          <Link className="text-link mt-4 inline-flex" href="/connections">
+            Manage connections
+          </Link>
         </section>
       </div>
     </>

@@ -70,6 +70,9 @@ export type WorkflowDisplay = (typeof workflows)[number];
 export function displayFor(key?: string): WorkflowDisplay | undefined {
   return workflows.find((workflow) => workflow.key === key);
 }
+export function displayForSlug(slug?: string): WorkflowDisplay | undefined {
+  return workflows.find((workflow) => workflow.slug === slug);
+}
 export function runTitle(run: Run, display?: WorkflowDisplay): string {
   const title = run.input_payload.title;
   return typeof title === "string" && title.trim()

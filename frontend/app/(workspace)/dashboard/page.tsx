@@ -10,6 +10,7 @@ import {
   useUser,
 } from "@/hooks/queries";
 import { runs as runApi } from "@/features/workflow-runs/api";
+import { displayFor } from "@/features/workflows/display";
 import { Empty, ErrorMessage, Loading, PageTitle } from "@/components/ui";
 import { RunList } from "@/components/run-list";
 
@@ -107,26 +108,41 @@ export default function Dashboard() {
           later phase.
         </p>
         <div className="grid gap-5 md:grid-cols-3">
-          {definitions.data?.map((definition, index) => (
-            <article key={definition.id} className="panel">
-              <p className="eyebrow">0{index + 1} / DRAFT ONLY</p>
-              <h3 className="mt-5 text-2xl font-semibold">{definition.name}</h3>
-              <p className="mb-6 mt-3 min-h-18 text-sm leading-6 text-muted">
-                {definition.description}
-              </p>
-              <button
-                className="button secondary"
-                disabled={!definition.enabled || create.isPending}
-                onClick={() => create.mutate(definition.id)}
-              >
-                {!definition.enabled
-                  ? "Unavailable"
-                  : create.isPending && create.variables === definition.id
-                    ? "Creating..."
-                    : "Create draft"}
-              </button>
-            </article>
-          ))}
+          {definitions.data?.map((definition, index) => {
+            const display = displayFor(definition.key);
+            return (
+              <article key={definition.id} className="panel">
+                <p className="eyebrow">0{index + 1} / DRAFT ONLY</p>
+                <h3 className="mt-5 text-2xl font-semibold">
+                  {definition.name}
+                </h3>
+                <p className="mb-6 mt-3 min-h-18 text-sm leading-6 text-muted">
+                  {definition.description}
+                </p>
+                <div className="flex flex-wrap items-center gap-4">
+                  <button
+                    className="button secondary"
+                    disabled={!definition.enabled || create.isPending}
+                    onClick={() => create.mutate(definition.id)}
+                  >
+                    {!definition.enabled
+                      ? "Unavailable"
+                      : create.isPending && create.variables === definition.id
+                        ? "Creating..."
+                        : "Create draft"}
+                  </button>
+                  {display && (
+                    <Link
+                      className="text-sm text-accent underline"
+                      href={`/workflows/${display.slug}`}
+                    >
+                      How it works
+                    </Link>
+                  )}
+                </div>
+              </article>
+            );
+          })}
         </div>
         <ErrorMessage error={create.error} />
       </section>

@@ -5,6 +5,20 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useUser } from "@/hooks/queries";
 import { auth } from "@/features/auth/api";
 import { ErrorMessage } from "@/components/ui";
+import { workflows } from "@/features/workflows/display";
+
+const primaryLinks = [
+  ["/dashboard", "Overview"],
+  ...workflows.map(
+    (workflow) => [`/workflows/${workflow.slug}`, workflow.title] as const,
+  ),
+  ["/approvals", "Approvals"],
+  ["/runs", "History"],
+];
+const secondaryLinks = [
+  ["/connections", "Connections"],
+  ["/settings", "Settings"],
+];
 
 export function WorkspaceNav({ name }: { name: string }) {
   const path = usePathname();
@@ -29,18 +43,34 @@ export function WorkspaceNav({ name }: { name: string }) {
           ↗ relay
         </Link>
         <nav aria-label="Workspace" className="flex flex-wrap gap-1">
-          {[
-            ["/dashboard", "Overview"],
-            ["/runs", "Runs"],
-            ["/approvals", "Approvals"],
-            ["/connections", "Connections"],
-            ["/settings", "Settings"],
-          ].map(([href, label]) => (
+          {primaryLinks.map(([href, label]) => {
+            const active =
+              path === href ||
+              (href !== "/dashboard" && path?.startsWith(`${href}/`));
+            return (
+              <Link
+                key={href}
+                href={href}
+                aria-current={active ? "page" : undefined}
+                className={`rounded-lg px-3 py-2 text-sm ${active ? "bg-background font-semibold text-accent" : "text-muted"}`}
+              >
+                {label}
+              </Link>
+            );
+          })}
+        </nav>
+        <nav
+          aria-label="Account and system"
+          className="flex flex-wrap gap-4 border-l border-line pl-5 text-xs"
+        >
+          {secondaryLinks.map(([href, label]) => (
             <Link
               key={href}
               href={href}
               aria-current={path === href ? "page" : undefined}
-              className={`rounded-lg px-3 py-2 text-sm ${path === href ? "bg-background font-semibold text-accent" : "text-muted"}`}
+              className={
+                path === href ? "font-semibold text-accent" : "text-muted"
+              }
             >
               {label}
             </Link>
