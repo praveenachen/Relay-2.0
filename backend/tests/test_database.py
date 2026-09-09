@@ -14,7 +14,7 @@ def test_database_and_migration_baseline() -> None:
         with engine.connect() as connection:
             assert connection.scalar(text("SELECT 1")) == 1
             assert connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0003_workflow_definitions"
+                "0005_notion_integration"
             )
     finally:
         engine.dispose()
