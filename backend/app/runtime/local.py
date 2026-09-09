@@ -1,8 +1,13 @@
+from typing import Any
 from uuid import UUID, uuid4
 
+from pydantic import JsonValue
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.connectors.google.calendar import GoogleCalendarApiClient, GoogleCalendarConnector
+from app.connectors.google.errors import GoogleAuthorizationFailed, GoogleNotConnected
+from app.connectors.google.schemas import CalendarEventResult, CreateCalendarStudyBlockAction
 from app.connectors.notion import (
     CreateNotionStudyPageAction,
     ExternalArtifactResult,
@@ -17,14 +22,27 @@ from app.domain.errors import ApprovalPayloadMismatch, DomainError, Unauthorized
 from app.domain.ports import CredentialStore
 from app.models.entities import ConnectedAccount, LocalExecution, now
 from app.runtime.client import ExecutionRequest, ExecutionSnapshot, ExecutionStatus
-from app.workflows.lecture_notes.actions import OPERATION
+from app.workflows.lecture_notes.actions import OPERATION as LEARN_OPERATION
+from app.workflows.study_plan.actions import (
+    OPERATION as PLAN_OPERATION,
+)
+from app.workflows.study_plan.actions import (
+    CreateCalendarStudyPlanAction,
+)
 
 
 class LocalRuntimeClient:
     """Synchronous local execution. Caller owns transaction; no background queue or retries."""
 
-    def __init__(self, session: AsyncSession, connector: NotionConnector):
-        self.session, self.connector = session, connector
+    def __init__(
+        self,
+        session: AsyncSession,
+        connector: NotionConnector | None = None,
+        calendar_connector: Any | None = None,
+    ):
+        self.session = session
+        self.connector = connector
+        self.calendar_connector = calendar_connector
 
     async def submit_execution(self, request: ExecutionRequest) -> ExecutionSnapshot:
         existing = await self.session.scalar(
@@ -47,12 +65,58 @@ class LocalRuntimeClient:
             started_at=instant,
         )
         try:
-            if request.operation != OPERATION:
+            if request.operation == LEARN_OPERATION:
+                if self.connector is None:
+                    raise ValueError("Notion connector is not configured")
+                action = CreateNotionStudyPageAction.model_validate(request.payload)
+                notion_result = await self.connector.create_study_page(
+                    action, request.idempotency_key
+                )
+                snapshot.result = notion_result.model_dump(mode="json")
+                snapshot.status = ExecutionStatus.SUCCEEDED
+            elif request.operation == PLAN_OPERATION:
+                if self.calendar_connector is None:
+                    raise ValueError("Google Calendar connector is not configured")
+                plan = CreateCalendarStudyPlanAction.model_validate(request.payload)
+                created: list[JsonValue] = []
+                failed: list[JsonValue] = []
+                first_error_code: str | None = None
+                # Each study block is created independently: one failing
+                # event must not discard calendar events already created for
+                # other tasks, and must not block retrying only the rest.
+                for index, event in enumerate(plan.events):
+                    try:
+                        calendar_result = await self.calendar_connector.create_study_block(
+                            event, f"{request.idempotency_key}:{index}"
+                        )
+                        created.append(
+                            {
+                                "index": index,
+                                "task_id": event.task_id,
+                                "event": calendar_result.model_dump(mode="json"),
+                            }
+                        )
+                    except Exception as event_error:
+                        error_code = (
+                            event_error.code
+                            if isinstance(event_error, DomainError)
+                            else "EXECUTION_FAILED"
+                        )
+                        first_error_code = first_error_code or error_code
+                        failed.append(
+                            {"index": index, "task_id": event.task_id, "error_code": error_code}
+                        )
+                snapshot.result = {"created": created, "failed": failed}
+                if not failed:
+                    snapshot.status = ExecutionStatus.SUCCEEDED
+                elif created:
+                    snapshot.status = ExecutionStatus.PARTIAL
+                    snapshot.error_code = first_error_code
+                else:
+                    snapshot.status = ExecutionStatus.FAILED
+                    snapshot.error_code = first_error_code
+            else:
                 raise ValueError("Unsupported local operation")
-            action = CreateNotionStudyPageAction.model_validate(request.payload)
-            result = await self.connector.create_study_page(action, request.idempotency_key)
-            snapshot.result = result.model_dump(mode="json")
-            snapshot.status = ExecutionStatus.SUCCEEDED
         except Exception as error:
             snapshot.status = ExecutionStatus.FAILED
             snapshot.error_code = (
@@ -115,6 +179,48 @@ class DatabaseNotionConnector:
                 NotionApiClient(token, base_url=self.api_base_url, timeout=self.timeout)
             ).create_study_page(action, idempotency_key)
         except NotionAuthorizationFailed:
+            connection.status = ConnectionStatus.REVOKED
+            connection.access_token_encrypted = None
+            connection.refresh_token_encrypted = None
+            raise
+
+
+class DatabaseGoogleCalendarConnector:
+    def __init__(
+        self,
+        session: AsyncSession,
+        store: CredentialStore,
+        *,
+        api_base_url: str,
+        timeout: int,
+    ):
+        self.session = session
+        self.store = store
+        self.api_base_url = api_base_url
+        self.timeout = timeout
+
+    async def create_study_block(
+        self,
+        action: CreateCalendarStudyBlockAction,
+        idempotency_key: str,
+    ) -> CalendarEventResult:
+
+        if not action.connection_id:
+            raise GoogleNotConnected()
+        connection = await self.session.get(ConnectedAccount, UUID(action.connection_id))
+        if (
+            connection is None
+            or connection.provider != Provider.GOOGLE
+            or connection.status != ConnectionStatus.CONNECTED
+            or connection.access_token_encrypted is None
+        ):
+            raise GoogleNotConnected()
+        token = self.store.decrypt(connection.access_token_encrypted)
+        try:
+            return await GoogleCalendarConnector(
+                GoogleCalendarApiClient(token, base_url=self.api_base_url, timeout=self.timeout)
+            ).create_study_block(action, idempotency_key)
+        except GoogleAuthorizationFailed:
             connection.status = ConnectionStatus.REVOKED
             connection.access_token_encrypted = None
             connection.refresh_token_encrypted = None

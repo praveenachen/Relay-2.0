@@ -1,8 +1,9 @@
-from datetime import UTC
+from datetime import UTC, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
 
+from app.connectors.google.auth import GoogleOAuthClient
 from app.connectors.google.calendar import GoogleCalendarApiClient
 from app.connectors.google.errors import GoogleAuthorizationFailed, GoogleNotConnected
 from app.connectors.google.schemas import CalendarListItem
@@ -19,12 +20,14 @@ class GoogleCalendarService:
         repo: RelayRepository,
         store: CredentialStore,
         *,
+        oauth: GoogleOAuthClient | None = None,
         api_base_url: str = "https://www.googleapis.com/calendar/v3",
         timeout: int = 20,
     ):
         self.repo = repo
         self.session = repo.session
         self.store = store
+        self.oauth = oauth
         self.api_base_url = api_base_url
         self.timeout = timeout
 
@@ -38,8 +41,36 @@ class GoogleCalendarService:
             raise GoogleNotConnected()
         connection = connections[0]
         if connection.token_expires_at and connection.token_expires_at.replace(tzinfo=UTC) <= now():
-            raise GoogleAuthorizationFailed()
+            await self._refresh(connection)
         return connection
+
+    async def _refresh(self, connection: ConnectedAccount) -> None:
+        """Google access tokens expire (unlike Notion's), so this is the one
+        provider whose service owns real refresh-token handling. See
+        ADR-018: providers keep their own token lifecycle rather than a
+        shared abstraction."""
+        if self.oauth is None or not connection.refresh_token_encrypted:
+            connection.status = ConnectionStatus.EXPIRED
+            await self.session.commit()
+            raise GoogleAuthorizationFailed()
+        refresh_token = self.store.decrypt(connection.refresh_token_encrypted)
+        try:
+            token = await self.oauth.refresh(refresh_token)
+        except GoogleAuthorizationFailed:
+            connection.status = ConnectionStatus.EXPIRED
+            await self.session.commit()
+            raise
+        connection.access_token_encrypted = self.store.encrypt(token.access_token)
+        if token.refresh_token:
+            connection.refresh_token_encrypted = self.store.encrypt(token.refresh_token)
+        connection.token_expires_at = now() + timedelta(seconds=token.expires_in or 3600)
+        record(
+            self.session,
+            connection.user_id,
+            "GOOGLE_TOKEN_REFRESHED",
+            metadata={"connection_id": str(connection.id)},
+        )
+        await self.session.commit()
 
     async def client(self, connection: ConnectedAccount) -> GoogleCalendarApiClient:
         if connection.access_token_encrypted is None:

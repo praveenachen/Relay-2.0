@@ -1,5 +1,6 @@
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta
+from datetime import date, datetime, time, timedelta
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from ortools.sat.python import cp_model
@@ -130,6 +131,7 @@ def _subtract_locked(
 def _slot_score(
     task: AcademicTask,
     start: datetime,
+    duration_minutes: int,
     preferences: SchedulingPreference,
     weights: SchedulingWeights,
 ) -> int:
@@ -145,7 +147,17 @@ def _slot_score(
         preferred = weights.preferred_period
     elif preferences.preferred_period == "evening" and 17 <= local.hour < 22:
         preferred = weights.preferred_period
-    return urgency + priority + preferred
+    # Heuristic, not empirically tuned: reward candidate slots that fill a
+    # full preferred-length block instead of leaving the solver free to pick
+    # an oddly-sized leftover fragment when a clean block would fit as well.
+    fragmentation = (
+        weights.fragmentation if duration_minutes >= preferences.preferred_session_minutes else 0
+    )
+    return urgency + priority + preferred + fragmentation
+
+
+def _local_day(moment: datetime, zone: ZoneInfo) -> date:
+    return moment.astimezone(zone).date()
 
 
 def _locked_minutes_by_task(locked: tuple[StudySession, ...]) -> dict[str, int]:
@@ -200,6 +212,9 @@ class CPSATStudyScheduler:
         for index, candidate in enumerate(candidates):
             scheduled_value = candidate.duration_minutes * self.weights.unscheduled_minute
             objective_terms.append(selected[index] * (scheduled_value + candidate.score))
+        objective_terms.extend(
+            self._daily_balance_penalties(model, candidates, selected, problem, locked_minutes)
+        )
         model.maximize(sum(objective_terms) if objective_terms else 0)
 
         solver = cp_model.CpSolver()
@@ -227,6 +242,46 @@ class CPSATStudyScheduler:
             locked_minutes,
             result_status,
         )
+
+    def _daily_balance_penalties(
+        self,
+        model: cp_model.CpModel,
+        candidates: list[CandidateSlot],
+        selected: list[Any],
+        problem: SchedulingProblem,
+        locked_minutes: dict[str, int],
+    ) -> list[Any]:
+        """Soft penalty (heuristic, not empirically tuned) for days that carry
+        more than a fair share of the remaining workload, so large tasks
+        spread across the available window instead of clustering on one day.
+
+        The fair share is based on total *required* minutes across tasks,
+        not the number of candidate slots -- candidates are alternative
+        start-time options for the same work, not additional work, so
+        summing their durations would wildly overstate the target.
+        """
+        if not candidates or self.weights.daily_balance <= 0:
+            return []
+        zone = ZoneInfo(problem.preferences.timezone)
+        day_groups: dict[date, list[int]] = {}
+        for index, candidate in enumerate(candidates):
+            day_groups.setdefault(_local_day(candidate.start, zone), []).append(index)
+        if len(day_groups) < 2:
+            return []
+        total_required = sum(
+            max(0, task.estimated_minutes - locked_minutes.get(task.id, 0))
+            for task in problem.tasks
+        )
+        if total_required == 0:
+            return []
+        daily_target = total_required // len(day_groups)
+        penalties = []
+        for day, indices in day_groups.items():
+            day_total = sum(selected[i] * candidates[i].duration_minutes for i in indices)
+            overage = model.new_int_var(0, total_required, f"overage_{day.isoformat()}")
+            model.add(overage >= day_total - daily_target)
+            penalties.append(-overage * self.weights.daily_balance)
+        return penalties
 
     def _candidate_slots(
         self,
@@ -260,7 +315,9 @@ class CPSATStudyScheduler:
                                 end=end,
                                 fragment_id=fragment_id,
                                 duration_minutes=minutes,
-                                score=_slot_score(task, start, problem.preferences, self.weights),
+                                score=_slot_score(
+                                    task, start, minutes, problem.preferences, self.weights
+                                ),
                             )
                         )
                         start += timedelta(minutes=SLOT_MINUTES)
