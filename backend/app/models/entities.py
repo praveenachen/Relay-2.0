@@ -190,7 +190,7 @@ class ExternalArtifact(Identity, Base):
     )
     workflow_run_id: Mapped[UUID] = mapped_column(ForeignKey("workflow_run.id"))
     proposed_action_id: Mapped[UUID] = mapped_column(Uuid)
-    connected_account_id: Mapped[UUID] = mapped_column(ForeignKey("connected_account.id"))
+    connected_account_id: Mapped[UUID | None] = mapped_column(ForeignKey("connected_account.id"))
     provider: Mapped[ActionProvider] = mapped_column(enum_type(ActionProvider))
     artifact_type: Mapped[str] = mapped_column(String(100))
     external_id: Mapped[str] = mapped_column(String(255))
@@ -207,3 +207,28 @@ class AuditEvent(Identity, Base):
     event_type: Mapped[str] = mapped_column(String(100))
     event_metadata: Mapped[dict[str, Any]] = mapped_column("metadata", PAYLOAD, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class SourceDocument(Identity, Base):
+    __tablename__ = "source_document"
+    __table_args__ = (
+        CheckConstraint("status IN ('UPLOADED', 'PARSED', 'FAILED')", name="source_status"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"), index=True)
+    workflow_run_id: Mapped[UUID] = mapped_column(ForeignKey("workflow_run.id"), unique=True)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int]
+    storage_key: Mapped[str] = mapped_column(String(32), unique=True)
+    checksum: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default="UPLOADED")
+    parsed_payload: Mapped[dict[str, Any] | None] = mapped_column(PAYLOAD)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class LocalExecution(Identity, Base):
+    __tablename__ = "local_execution"
+    idempotency_key: Mapped[str] = mapped_column(String(255), unique=True)
+    operation: Mapped[str] = mapped_column(String(100))
+    request_payload: Mapped[dict[str, Any]] = mapped_column(PAYLOAD)
+    snapshot: Mapped[dict[str, Any]] = mapped_column(PAYLOAD)

@@ -1,0 +1,1 @@
+"""Typed language model boundary."""

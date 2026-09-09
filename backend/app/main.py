@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.responses import Response
 
 from app.api.health import router as health_router
+from app.api.learn import router as learn_router
 from app.api.routes import router
 from app.auth.users import UserCreate, UserRead, backend, users
 from app.core.config import get_settings
@@ -79,6 +80,7 @@ def create_app() -> FastAPI:
         users.get_auth_router(backend), prefix="/auth", tags=["authentication"]
     )
     application.include_router(router)
+    application.include_router(learn_router)
     return application
 
 

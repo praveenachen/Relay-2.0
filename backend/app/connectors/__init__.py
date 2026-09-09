@@ -1,0 +1,1 @@
+"""External destination adapters."""

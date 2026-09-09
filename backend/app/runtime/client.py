@@ -1,5 +1,6 @@
-"""Domain-neutral contract only. No execution transport is implemented."""
+"""Domain-neutral execution contract shared by local and future remote runtimes."""
 
+from datetime import datetime
 from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
@@ -30,6 +31,9 @@ class ExecutionSnapshot(BaseModel):
     status: ExecutionStatus
     result: dict[str, JsonValue] | None = None
     error_code: str | None = None
+    submitted_at: datetime | None = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
 
 
 class RuntimeClient(Protocol):
