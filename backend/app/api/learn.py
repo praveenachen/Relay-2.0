@@ -55,7 +55,7 @@ def service(
 
 
 def runtime_client(repo: Repository) -> RuntimeClient:
-    return build_runtime_client(repo, get_settings())
+    return build_runtime_client(repo, get_settings(), capabilities=("notion",))
 
 
 Learn = Annotated[LectureNotesWorkflowService, Depends(service)]
