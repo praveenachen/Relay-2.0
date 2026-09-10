@@ -88,4 +88,4 @@ class CredentialStorageUnavailable(DomainError):
 class OAuthNotConfigured(DomainError):
     code = "OAUTH_NOT_CONFIGURED"
     status_code = 501
-    message = "Provider OAuth is not implemented yet. You can continue without connecting tools."
+    message = "Provider OAuth is not configured. You can continue with mock/local workflow paths."

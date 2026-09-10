@@ -1,64 +1,101 @@
 # Relay
 
-Relay is a student workflow platform that turns information into understanding, a plan, and actions a person explicitly approves.
+Relay is a student workflow automation platform that turns lectures, deadlines, and project meetings into structured, human-approved actions across Notion, Google Calendar, and GitHub.
 
-**Status: Phase 8 Agent Runtime integration implemented.** Relay has real accounts and revocable sessions, saved preferences, workflow drafts, private document/transcript ingestion, typed AI summarization and meeting extraction, editable approval payloads, real Notion OAuth, Google Calendar OAuth, GitHub OAuth, deterministic PLAN scheduling, COLLABORATE project workspaces, approved Notion/GitHub/Calendar actions, Agent Runtime HTTP execution, local runtime fallback for tests/development, external artifact records, encrypted connection infrastructure, and a working onboarding/workspace UI. Retrieval, refresh workers, audio/video transcription, generic chat, and autonomous code generation are not implemented.
+Relay's core thesis is simple: probabilistic interpretation can help understand messy student work, but deterministic typed actions and human approval must control every external side effect. The product separates interpretation, planning, approval, execution, and provider artifact records so a user can see exactly what will happen before Relay writes to another system.
 
-## Three planned workflows
+## Problem
 
-| Workflow | Planned outcome |
-| --- | --- |
-| Learn (`lecture_to_notion`) | Lecture notes become structured Notion notes. |
-| Plan (`study_scheduler`) | Tasks, calendar availability and preferences become a realistic study schedule. |
-| Collaborate (`project_meeting`) | Meeting transcripts become Notion action items and GitHub work. |
+Students keep academic work across lecture notes, syllabi, calendars, Notion workspaces, GitHub repositories, and meeting transcripts. Generic assistants can summarize or suggest actions, but they often blur the line between a guess and an irreversible write. Relay turns that gap into an explicit workflow: understand the input, validate a typed proposal, let the student edit and approve it, execute through a runtime boundary, then record the artifact that was actually created.
 
-The dashboard reads versioned definitions from the API. LEARN accepts PDF, DOCX, Markdown, and plain text source files, parses them locally, generates typed study notes, and publishes to a selected Notion parent page after approval. PLAN imports tasks, combines preferences with Google Calendar availability, solves a deterministic CP-SAT schedule, and creates approved study blocks. COLLABORATE parses meeting transcripts, extracts typed decisions/action items, resolves owners against project members, and creates approved Notion tasks, GitHub issues, or review requests.
+## Three workflows
 
-## Technical thesis
+| Workflow                        | Implemented flow                                                                                                                              |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| LEARN (`lecture_to_notion`)     | Lecture notes -> structured review -> approval -> Notion study page.                                                                          |
+| PLAN (`study_scheduler`)        | Notion tasks + Google Calendar availability -> CP-SAT schedule -> review -> approval -> Google Calendar study blocks.                         |
+| COLLABORATE (`project_meeting`) | Meeting transcript -> typed decisions/actions -> identity resolution -> review -> approval -> Notion tasks and GitHub issues/review requests. |
 
-How do we safely convert probabilistic interpretation into deterministic external actions?
+LEARN accepts PDF, DOCX, Markdown, and plain text sources, parses them locally, generates typed study notes, and publishes to a selected Notion parent page after approval. PLAN imports Notion tasks, loads Google Calendar availability, combines saved preferences with hard scheduling constraints, solves a deterministic CP-SAT schedule, and creates approved calendar blocks. COLLABORATE parses transcripts, extracts typed decisions/action items, resolves owners against project members, validates repository context where possible, and executes approved Notion/GitHub actions independently so partial success remains truthful.
 
-```text
-Input -> Understand -> Structure -> Validate -> Propose
-  -> Human review -> Approve -> Execute -> Verify
+## Architecture
+
+```mermaid
+flowchart LR
+    Browser[Browser / Next.js] --> Relay[Relay FastAPI API]
+    Relay --> DB[(PostgreSQL)]
+    Relay --> LM[Language Model]
+    Relay --> Runtime[Agent Runtime]
+    Runtime --> Notion[Notion]
+    Runtime --> Calendar[Google Calendar]
+    Runtime --> GitHub[GitHub]
 ```
 
-Relay decides **what should happen**. The separate Agent Runtime owns **how it executes reliably**. Relay owns users, domain planning, approvals, OAuth and connector behavior; Runtime owns queues, retries, timeout handling, idempotency support, execution state and operational telemetry. The typed `RuntimeClient` now has both a local adapter and an authenticated Agent Runtime HTTP adapter.
+The domain layer contains lifecycle rules, typed errors, preference rules, and ports. Application services own transactional workflow orchestration, approval gates, audit events, and owner-scoped access. Provider SDK details stay behind connector services and typed schemas. `ExternalArtifact` records provider side effects with idempotency keys and external URLs; it is the source of truth for what Relay actually created.
 
-## Repository and architecture
+Important boundaries:
 
-```text
-frontend/
-  app/                     Landing, auth and protected workspace pages
-  components/              Reusable forms, cards, navigation and Relay Line
-  features/                Auth, runs, definitions, approvals, preferences, connections and workflow API modules
-  hooks/                   TanStack Query server-state hooks
-  lib/                     Zod schemas, API transport and server session validation
-  tests/                   Playwright browser flows
-backend/
-  app/api/                 Thin HTTP routes and error mapping
-  app/auth/                FastAPI Users configuration and account adapter
-  app/domain/              Pure enums, lifecycle rules, errors and ports
-  app/models/              SQLAlchemy entities and immutable-record guards
-  app/repositories/        Owner-scoped queries and row locks
-  app/services/            Transactional workflows, approvals, accounts and audit
-  app/infrastructure/      Fernet credential adapter
-  app/db/                  SQLAlchemy configuration
-  app/runtime/             Runtime contract, Agent Runtime HTTP adapter and local fallback executor
-  app/documents/           Private source storage, validation and PDF/DOCX/MD/TXT parsers
-  app/workflows/           Workflow-specific orchestration and typed summaries
-  alembic/                 Static schema migrations and definition seed
-  tests/                   Domain, API, authorization, encryption and concurrency tests
-scripts/                   Portable developer commands
-.github/workflows/         CI with PostgreSQL and browser tests
-docs/                      Architecture, security and ADRs
+- AI interpretation is separate from deterministic domain logic.
+- Approval payloads are immutable snapshots, separate from later execution.
+- Relay owns users, OAuth, workflow state, approvals, and artifact records.
+- Agent Runtime owns execution attempts, provider calls, runtime status, and operational retry behavior.
+- Workflow state is mapped from runtime state in one place instead of leaking runtime enums through the product.
+
+```mermaid
+sequenceDiagram
+    actor Student
+    participant Relay
+    participant Model as Language Model
+    participant Runtime as Agent Runtime
+    participant Provider as Notion / Calendar / GitHub
+    participant DB as PostgreSQL
+
+    Student->>Relay: Upload notes, tasks, or transcript
+    Relay->>Model: Request typed interpretation when needed
+    Model-->>Relay: Schema-validated result
+    Relay->>DB: Store typed proposal and approval request
+    Student->>Relay: Edit/reject/approve exact payload
+    Relay->>Runtime: Submit approved payload with idempotency key
+    Runtime->>Provider: Execute provider action
+    Provider-->>Runtime: Created resource or normalized failure
+    Runtime-->>Relay: Runtime snapshot
+    Relay->>DB: Record ExternalArtifact / failure / audit event
 ```
 
-The core domain imports no FastAPI, SQLAlchemy, React, OAuth SDK, or language-model client. API routes return explicit schemas and delegate mutations to services. Async SQLAlchemy sessions support FastAPI Users and application services; synchronous database access is reserved for Alembic/diagnostics. Migrations, not application startup, own schema creation.
+## Relay ? Agent Runtime boundary
 
-Read [system context](docs/architecture/system-context.md), [domain model](docs/architecture/domain-model.md), [workflow state machine](docs/architecture/workflow-state-machine.md), [runtime boundary](docs/architecture/relay-agent-runtime-boundary.md), [LEARN workflow](docs/architecture/learn-workflow.md), [document processing](docs/architecture/document-processing.md), [Notion publishing](docs/architecture/notion-publishing.md), [scheduling engine](docs/architecture/scheduling-engine.md), [PLAN sequence](docs/architecture/plan-sequence.md), [COLLABORATE sequence](docs/architecture/collaborate-sequence.md), [Notion integration](docs/integrations/notion.md), [Google Calendar integration](docs/integrations/google-calendar.md), and [GitHub integration](docs/integrations/github.md). Design decisions are recorded in [ADRs](docs/decisions).
+Relay submits only approved action snapshots through the `RuntimeClient` contract. The request contains `workflow_run_id`, `proposed_action_id`, `action_type`, `approved_payload`, `idempotency_key`, and `correlation_id`; it does not include ORM objects, provider SDK clients, or service credentials. Local development and tests use `LocalRuntimeClient`; production-style configuration can use `AgentRuntimeHttpClient` with server-side `AGENT_RUNTIME_BASE_URL` and `AGENT_RUNTIME_API_KEY`.
 
-## Local development
+Timeouts, transport failures, and rate limits are treated as uncertain runtime state rather than confirmed execution failure. Retry paths reuse the same approved payload and idempotency key. COLLABORATE records each action independently, so a successful Notion task is not discarded because a sibling GitHub write failed.
+
+## Tech stack
+
+- Frontend: Next.js 16, React 19, TypeScript, TanStack Query, Zod, Playwright.
+- Backend: FastAPI, Pydantic v2, SQLAlchemy 2, Alembic, FastAPI Users, Fernet credential encryption.
+- Data/execution: PostgreSQL, local SQLite test databases, OR-Tools CP-SAT, HTTP runtime adapter, provider-specific connectors.
+- Integrations: OpenAI-compatible typed model adapter, Notion OAuth/API, Google OAuth/Calendar API, GitHub OAuth/API.
+- Tooling: Ruff, mypy, ESLint, Prettier, Docker Compose, GitHub Actions.
+
+## Key engineering decisions
+
+- Structure-aware document parsing keeps source references and avoids sending raw documents through list/detail APIs.
+- Typed AI outputs turn model responses into validated domain objects before proposals are created.
+- CP-SAT scheduling handles hard availability/deadline constraints more defensibly than asking a model to place calendar blocks.
+- Human approval is mandatory before provider side effects.
+- Approved payload immutability prevents edits from silently changing authorized work.
+- Provider data is normalized into Relay schemas before entering workflow logic.
+- Application-level idempotency protects retries across Notion, Google Calendar, GitHub, and runtime boundaries.
+- Partial completion is explicit; successful artifacts remain recorded instead of attempting distributed rollback.
+
+See [ADRs](docs/decisions) for the decision log.
+
+## Reliability / human approval
+
+Every workflow reaches `AWAITING_APPROVAL` before execution, and every approved action is stored as an exact payload snapshot. Approve/reject operations are owner-scoped and serialized by run-level locking. Audit records track state changes, approval decisions, runtime submissions, recoverable runtime failures, provider outcomes, and artifact recording without storing secrets or large source content.
+
+Provider credentials are encrypted at rest with Fernet and decrypted only server-side. OAuth disconnects clear encrypted tokens and provider metadata. Normal CI and local demo mode use fake language-model output, mock connectors, and local runtime behavior, so external credentials are optional for development.
+
+## Local setup
 
 Prerequisites: Python 3.12, Node.js 24 LTS with npm, Docker with Compose v2. GNU Make is optional.
 
@@ -69,65 +106,55 @@ python scripts/dev.py setup
 python scripts/dev.py dev
 ```
 
-Setup creates `backend/.venv`, installs pinned dependencies, and copies example environment files without overwriting existing values. Dev starts PostgreSQL, applies migrations (including the three definitions), and runs both applications. Ctrl+C stops the servers. PostgreSQL remains running until `python scripts/dev.py db-down`.
+Setup creates `backend/.venv`, installs pinned dependencies, and copies `.env.example` / `frontend/.env.example` without overwriting existing local values. Dev starts PostgreSQL, applies migrations, and runs the backend and frontend.
 
-- Relay: http://localhost:3000
-- Signup: http://localhost:3000/signup
-- API liveness: http://localhost:8000/health
-- API docs: http://localhost:8000/docs
+Useful URLs:
 
-Root `.env` configures the API and Compose. `frontend/.env.local` holds `API_INTERNAL_URL` for the Next.js same-origin `/api` proxy. Cookie writes require exactly `FRONTEND_ORIGIN`; use localhost consistently. `COOKIE_SECURE=false` is for local HTTP only. Production must use HTTPS and Secure cookies.
+- Relay: <http://localhost:3000>
+- Signup: <http://localhost:3000/signup>
+- API liveness: <http://localhost:8000/health>
+- API docs: <http://localhost:8000/docs>
 
-**Upgrading from Phase 0:** add `COOKIE_SECURE=false`, `FRONTEND_ORIGIN=http://localhost:3000`, and `SESSION_LIFETIME_SECONDS=86400` to your existing local `.env` if missing; add `API_INTERNAL_URL=http://127.0.0.1:8000` to the frontend env file. Run setup to update dependencies, then migrate. The setup command preserves existing env files.
+No OAuth keys are required for mock/local flows. To use real integrations locally, set `TOKEN_ENCRYPTION_KEY` and the relevant Notion, Google, or GitHub OAuth values in `.env`. To call a real model, set `LANGUAGE_MODEL_PROVIDER=openai` and `OPENAI_API_KEY`. To use a separate Agent Runtime service, set `RUNTIME_BACKEND=agent_runtime`, `AGENT_RUNTIME_BASE_URL`, and `AGENT_RUNTIME_API_KEY`. Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
 
-No OAuth keys or encryption key are required to sign up and use mock/local workflow paths. LEARN and COLLABORATE use `LANGUAGE_MODEL_PROVIDER=fake` by default for deterministic test data. To call OpenAI for typed summaries or meeting extraction, set `LANGUAGE_MODEL_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`; responses are requested with schema parsing and `store=false`. To use real provider writes locally, configure `TOKEN_ENCRYPTION_KEY` plus the relevant Notion, Google Calendar, or GitHub OAuth values described in [Notion integration](docs/integrations/notion.md), [Google Calendar integration](docs/integrations/google-calendar.md), and [GitHub integration](docs/integrations/github.md). To send approved actions to the separate Agent Runtime service, set `RUNTIME_BACKEND=agent_runtime`, `AGENT_RUNTIME_BASE_URL`, and `AGENT_RUNTIME_API_KEY`; these values are server-side only. Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
-
-| Make command | Portable equivalent | Purpose |
-| --- | --- | --- |
-| `make setup` | `python scripts/dev.py setup` | Install dependencies and initialize env files |
-| `make dev` | `python scripts/dev.py dev` | Start DB, migrate, run apps |
-| `make test` | `python scripts/dev.py test` | Backend tests and browser flows |
-| `make lint` | `python scripts/dev.py lint` | Ruff, mypy, ESLint, Prettier, TypeScript |
-| `make build` | `python scripts/dev.py build` | Production frontend build |
-| `make migrate` | `python scripts/dev.py migrate` | Upgrade database to head |
-| `make db-up` | `python scripts/dev.py db-up` | Start PostgreSQL and wait for health |
-| `make db-down` | `python scripts/dev.py db-down` | Stop DB without deleting data |
-
-On Windows use the Python commands without Make or PowerShell activation; direct npm commands can use `npm.cmd`. To run apps individually, use the backend virtual environment to run `python -m uvicorn app.main:app --reload` from `backend/`, and `npm run dev` from `frontend/`. Authentication requires a migrated PostgreSQL database; `/health` is liveness only.
+| Make command   | Portable equivalent             | Purpose                                       |
+| -------------- | ------------------------------- | --------------------------------------------- |
+| `make setup`   | `python scripts/dev.py setup`   | Install dependencies and initialize env files |
+| `make dev`     | `python scripts/dev.py dev`     | Start DB, migrate, run apps                   |
+| `make test`    | `python scripts/dev.py test`    | Backend tests and browser flows               |
+| `make lint`    | `python scripts/dev.py lint`    | Ruff, mypy, ESLint, Prettier, TypeScript      |
+| `make build`   | `python scripts/dev.py build`   | Production frontend build                     |
+| `make migrate` | `python scripts/dev.py migrate` | Upgrade database to head                      |
+| `make db-up`   | `python scripts/dev.py db-up`   | Start PostgreSQL and wait for health          |
+| `make db-down` | `python scripts/dev.py db-down` | Stop DB without deleting data                 |
 
 ## Testing
 
-Install the browser once from `frontend/`:
+Backend tests cover domain rules, API authorization, approval immutability, credential encryption, provider connector mocks, workflow integration, runtime HTTP normalization, idempotency/recovery, migration drift, and PostgreSQL-specific locking when `RELAY_TEST_DATABASE=1` is set. Frontend Playwright tests exercise signup, protected routing, onboarding/workspace surfaces, connection setup affordances, preferences, and the LEARN mock publish path.
 
 ```sh
-npx playwright install chromium
+python scripts/dev.py lint
+python scripts/dev.py test
+python scripts/dev.py build
 ```
 
-On Linux CI, use `npx playwright install --with-deps chromium`. Then run `make test` or its portable equivalent. Browser tests launch isolated servers on ports 3010/8010 and a temporary migrated SQLite database, exercise the real API, and never modify your development data. They cover signup, optional connection setup, preferences, saved drafts, logout/login, route protection, and the LEARN upload to mock publish flow. Generated traces stay ignored.
+Normal CI does not require OpenAI, Notion, Google, GitHub, or a live Agent Runtime service. External integration testing is manual/optional and requires local credentials.
 
-Backend tests run with `backend/.venv` and use temporary databases created with Alembic. Local PostgreSQL tests are opt-in: start/migrate a disposable PostgreSQL database and set `RELAY_TEST_DATABASE=1` (PowerShell: `$env:RELAY_TEST_DATABASE="1"`; POSIX: `export RELAY_TEST_DATABASE=1`). API tests then create isolated schemas; the test account needs schema-create permission. CI runs this mode, including concurrent approval resolution, plus schema-drift and migration upgrade/downgrade/re-upgrade checks. SQLite tests do not claim to validate PostgreSQL locking.
+## Known limitations
 
-Frontend versions are locked in `package-lock.json`; backend dependencies are pinned in `requirements-dev.lock`. Refresh in a clean environment, omit the editable Relay path from the lock file, and rerun checks. No benchmarks are claimed.
+- Provider APIs cannot guarantee exactly-once side effects; Relay mitigates with application idempotency keys and artifact checks.
+- Runtime status sync uses bounded polling rather than webhook callbacks.
+- GitHub integration uses OAuth today; a GitHub App would allow narrower repository-scoped installation permissions.
+- Transcript parsing expects text-oriented meeting notes, not audio/video transcription.
+- CP-SAT objective weights are heuristic and should be tuned with real student feedback.
+- Local/demo document storage is filesystem-based; production deployment needs durable object storage and operational backups.
+- Account recovery, email verification, edge abuse protection, and production observability are documented but not fully implemented.
 
-## API scope
+## Documentation map
 
-- `/auth/register`, `/auth/login`, `/auth/logout`: library-managed Relay authentication.
-- `/users/me`, `/users/me/onboarding`, `/preferences`: profile, onboarding and validated preferences.
-- `/workflow-definitions`, `/workflow-runs`, `/workflow-runs/{id}/events`: definitions, owned drafts and history. Run lists support definition, status, date, incomplete-state filtering, limit and offset.
-- `/workflows/learn`: LEARN run creation, private source upload/download, parse, summarize, edit proposed summary, refresh selected Notion destination, execute/cancel approved Notion publishing, and owned artifact lookup.
-- `/workflows/plan`: PLAN setup, Notion task import, Google availability loading, deterministic schedule solve, session edits/locks, approval, and approved Calendar execution/cancellation.
-- `/workflows/collaborate`: project-backed transcript upload/parse/analyze, action review, approval, Notion task creation, GitHub issue creation, review requests, idempotent execution/cancellation, and partial completion.
-- `/projects`: owned project workspace and member configuration for COLLABORATE identity/repository context.
-- `/approvals`: owned requests and exact-payload approve/reject.
-- `/connections`: safe metadata/disconnect; Notion, Google Calendar, and GitHub OAuth plus destination/repository/calendar lookup.
-
-No arbitrary state-change, audit-edit, real external-artifact, or generic workflow-execution endpoint exists. Unsafe requests require the configured Origin header as well as a session where applicable.
-
-## Boundaries and next phase
-
-Approval snapshots, lifecycle rules and audit records are implemented. LEARN, PLAN, and COLLABORATE all execute approved provider actions behind the `RuntimeClient` boundary. `LocalRuntimeClient` remains available for tests and local fallback; production can use `AgentRuntimeHttpClient` with server-side Runtime credentials. Retrieval, refresh workers, account recovery/email verification, production abuse protection and deployment hardening remain outstanding. See [authentication](docs/security/authentication.md), [external connections](docs/security/external-connections.md), [OAuth security](docs/security/oauth.md), and [AI and document handling](docs/security/ai-and-document-handling.md) for precise limits.
-
-The recommended next phase is Phase 9 after the Agent Runtime service contract is accepted in an integrated environment. Do not start Phase 9 until Phase 8 behavior is accepted.
+- Architecture: [system context](docs/architecture/system-context.md), [container diagram](docs/architecture/container-diagram.md), [domain model](docs/architecture/domain-model.md), [workflow state machine](docs/architecture/workflow-state-machine.md), [runtime boundary](docs/architecture/relay-agent-runtime-boundary.md).
+- Workflow details: [LEARN](docs/architecture/learn-workflow.md), [PLAN](docs/architecture/plan-sequence.md), [COLLABORATE](docs/architecture/collaborate-sequence.md), [scheduling engine](docs/architecture/scheduling-engine.md), [document processing](docs/architecture/document-processing.md).
+- Integrations/security: [Notion](docs/integrations/notion.md), [Google Calendar](docs/integrations/google-calendar.md), [GitHub](docs/integrations/github.md), [OAuth security](docs/security/oauth.md), [credential storage](docs/security/credential-storage.md), [external connections](docs/security/external-connections.md), [AI and document handling](docs/security/ai-and-document-handling.md).
 
 ## License
 

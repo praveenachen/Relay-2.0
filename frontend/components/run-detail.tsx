@@ -53,11 +53,12 @@ export function RunDetail({ id }: { id: string }) {
             title={
               run.data.status === "DRAFT"
                 ? "Your draft is saved."
-                : "Execution is not available yet."
+                : "Open the workflow."
             }
           >
-            Workflow automation is planned for a later phase. No content has
-            been analyzed and no external action has run from this workspace.
+            This run belongs to a workflow that does not have a dedicated
+            workspace route in the current UI. Its activity log remains
+            available below.
           </Empty>
         )}
       </div>

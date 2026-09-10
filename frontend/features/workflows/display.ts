@@ -22,7 +22,7 @@ export const workflowDisplay = {
     ],
     inputLabel: "Lecture notes",
     inputHint:
-      "PDF and DOCX support is planned. Document upload and processing are not available yet.",
+      "Upload PDF, DOCX, Markdown, or text notes. Relay parses them locally, generates typed study notes, and waits for approval before publishing.",
   },
   study_scheduler: {
     key: "study_scheduler",

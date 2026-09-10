@@ -16,4 +16,4 @@ Implemented:
 
 Publishing can wait until after notes are generated. A student may upload, parse, summarize, and edit without a Notion connection. Approval for real publishing requires a connected Notion workspace and selected default destination.
 
-PLAN and COLLABORATE are not implemented beyond draft workflows.
+PLAN and COLLABORATE are implemented as separate workflow verticals with their own review, approval, execution, and artifact-recording paths.

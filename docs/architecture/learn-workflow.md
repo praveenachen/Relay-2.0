@@ -1,6 +1,6 @@
 # LEARN workflow
 
-LEARN is the first implemented Relay workflow. It turns a user-owned lecture source into a typed study-page proposal, lets the user edit the proposal, records an immutable approved payload, and executes a local mock Notion publish.
+LEARN is the first implemented Relay workflow. It turns a user-owned lecture source into a typed study-page proposal, lets the user edit the proposal, records an immutable approved payload, and executes an approved Notion publish through the runtime boundary.
 
 The workflow definition key is `lecture_to_notion`. It uses the existing workflow state machine:
 
@@ -11,8 +11,8 @@ sequenceDiagram
     participant API as Relay API
     participant Store as Local file store
     participant Model as Language model
-    participant Runtime as LocalRuntimeClient
-    participant Notion as MockNotionConnector
+    participant Runtime as RuntimeClient
+    participant Notion as Notion
 
     User->>UI: Upload or paste notes
     UI->>API: Create LEARN run
@@ -29,12 +29,12 @@ sequenceDiagram
     UI->>API: Replace pending proposal payload
     User->>UI: Approve exact payload
     UI->>API: Resolve approval
-    User->>UI: Publish mock page
+    User->>UI: Publish approved page
     API->>Runtime: Submit approved payload
-    Runtime->>Notion: Simulate page creation
+    Runtime->>Notion: Create or simulate page
     Notion-->>Runtime: Mock artifact
     Runtime-->>API: Execution snapshot
-    API-->>UI: Completed artifact record
+    API-->>UI: Completed ExternalArtifact record
 ```
 
 ## Backend responsibilities
@@ -50,7 +50,7 @@ The service does not expose storage keys or raw extracted text in list/detail pa
 The LEARN workspace has two routes:
 
 - `/workflows/learn`: upload a PDF, DOCX, Markdown, or text file, or paste plain text.
-- `/workflows/learn/{id}`: inspect source status, parse, summarize, edit notes, approve, execute, and view the mock artifact.
+- `/workflows/learn/{id}`: inspect source status, parse, summarize, edit notes, approve, execute, and view the recorded artifact.
 
 Generic run detail and approval pages link LEARN runs into the richer review route. PLAN and COLLABORATE continue to use draft-only generic surfaces.
 
@@ -62,4 +62,4 @@ OpenAI integration is a provider adapter behind `LanguageModel`; the LEARN workf
 
 ## Out of scope
 
-LEARN does not retrieve content from Notion, perform OCR, implement retrieval-augmented generation, or use Agent Runtime workers. PLAN and COLLABORATE automation remain future work.
+LEARN does not retrieve content from Notion, perform OCR, or implement retrieval-augmented generation.
