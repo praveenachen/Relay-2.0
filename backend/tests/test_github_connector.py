@@ -41,6 +41,22 @@ def test_github_oauth_url_uses_repo_scope_only() -> None:
     assert "workflow" not in url
 
 
+def test_github_oauth_token_accepts_expiring_user_token_metadata() -> None:
+    token = GitHubOAuthToken.model_validate(
+        {
+            "access_token": "github-access",
+            "token_type": "bearer",
+            "scope": "repo",
+            "expires_in": 28800,
+            "refresh_token": "github-refresh",
+            "refresh_token_expires_in": 15638400,
+        }
+    )
+
+    assert token.access_token == "github-access"
+    assert token.scope == "repo"
+
+
 async def test_github_oauth_state_exchange_encrypts_tokens(account, session_factory) -> None:
     store = FernetCredentialStore([Fernet.generate_key().decode()])
     async with session_factory() as session:

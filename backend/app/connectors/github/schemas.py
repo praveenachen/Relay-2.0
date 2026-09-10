@@ -1,11 +1,13 @@
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.workflows.lecture_notes.schemas import StrictModel
 
 
 class GitHubOAuthToken(StrictModel):
+    model_config = ConfigDict(extra="ignore")
+
     access_token: str
     token_type: str = "bearer"
     scope: str = ""
