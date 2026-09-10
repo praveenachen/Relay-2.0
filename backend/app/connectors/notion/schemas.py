@@ -1,6 +1,6 @@
 from typing import Any, Literal, Protocol
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.workflows.lecture_notes.schemas import LectureSummary, StrictModel
 
@@ -51,6 +51,8 @@ class NotionDestination(StrictModel):
 
 
 class NotionOAuthToken(StrictModel):
+    model_config = ConfigDict(extra="ignore")
+
     access_token: str
     refresh_token: str | None = None
     bot_id: str

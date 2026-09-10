@@ -55,6 +55,26 @@ def action() -> CreateNotionStudyPageAction:
     )
 
 
+def test_notion_oauth_token_accepts_response_metadata() -> None:
+    from app.connectors.notion.schemas import NotionOAuthToken
+
+    token = NotionOAuthToken.model_validate(
+        {
+            "access_token": "secret-access",
+            "refresh_token": "secret-refresh",
+            "bot_id": "bot-1",
+            "workspace_id": "workspace-1",
+            "workspace_name": "Student Workspace",
+            "owner": {"type": "user", "user": {"id": "owner-1"}},
+            "token_type": "bearer",
+            "request_id": "636b4ac3-2ba8-40c7-9b04-c28e5e059aee",
+        }
+    )
+
+    assert token.access_token == "secret-access"
+    assert token.workspace_id == "workspace-1"
+
+
 def test_mapper_orders_sections_and_splits_long_text():
     mapped = NotionStudyPageMapper().map(summary().model_copy(update={"overview": "word " * 900}))
     assert [block.kind for block in mapped][:3] == ["paragraph", "paragraph", "paragraph"]
