@@ -1,12 +1,14 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import Field
+from pydantic import ConfigDict, Field
 
 from app.workflows.lecture_notes.schemas import StrictModel
 
 
 class GoogleOAuthToken(StrictModel):
+    model_config = ConfigDict(extra="ignore")
+
     access_token: str
     expires_in: int | None = None
     refresh_token: str | None = None

@@ -93,6 +93,22 @@ def test_google_oauth_url_uses_calendar_scopes_only() -> None:
     assert "gmail" not in url.lower()
 
 
+def test_google_oauth_token_accepts_google_testing_refresh_expiry_field() -> None:
+    token = GoogleOAuthToken.model_validate(
+        {
+            "access_token": "google-access",
+            "expires_in": 3600,
+            "refresh_token": "google-refresh",
+            "refresh_token_expires_in": 604799,
+            "scope": "https://www.googleapis.com/auth/calendar.events",
+            "token_type": "Bearer",
+        }
+    )
+
+    assert token.access_token == "google-access"
+    assert token.refresh_token == "google-refresh"
+
+
 async def test_google_oauth_state_exchange_encrypts_tokens(account, session_factory) -> None:
     store = FernetCredentialStore([Fernet.generate_key().decode()])
     async with session_factory() as session:
