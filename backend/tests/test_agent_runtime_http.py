@@ -9,6 +9,7 @@ from app.runtime.errors import (
     RuntimeExecutionFailed,
     RuntimeExecutionNotFound,
     RuntimeMalformedResponse,
+    RuntimeRateLimited,
     RuntimeRequestTimeout,
     RuntimeUnauthorized,
     RuntimeUnavailable,
@@ -143,3 +144,14 @@ async def test_malformed_response(response: httpx.Response) -> None:
         await AgentRuntimeHttpClient(
             "https://runtime.test", "secret", transport=transport
         ).submit_execution(request())
+
+
+async def test_runtime_rate_limit_preserves_retry_after() -> None:
+    transport = httpx.MockTransport(
+        lambda req: httpx.Response(429, headers={"retry-after": "12"}, json={"error": "slow"})
+    )
+    with pytest.raises(RuntimeRateLimited) as raised:
+        await AgentRuntimeHttpClient(
+            "https://runtime.test", "secret", transport=transport
+        ).submit_execution(request())
+    assert raised.value.retry_after_seconds == 12

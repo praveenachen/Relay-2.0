@@ -35,6 +35,6 @@ Runtime states are translated in one place: `queued -> QUEUED`, `running -> EXEC
 
 Cancellation is best effort. Relay validates ownership and state, records the cancel request, calls `RuntimeClient.cancel_execution` when a runtime execution id exists, and syncs a cancelled snapshot. Completed external side effects are not rolled back.
 
-Transport uncertainty is not treated as confirmed execution failure. Timeouts and unavailable-runtime errors stay recoverable: approved payloads and idempotency keys remain in Relay, so retrying the same logical action uses the same key.
+Transport uncertainty is not treated as confirmed execution failure. Timeouts and unavailable-runtime errors stay recoverable: approved payloads and idempotency keys remain in Relay, so retrying the same logical action uses the same key. Rate-limit responses follow the same recoverable path. Relay records only safe workflow, action, correlation, and error-code identifiers in audit metadata; it does not log approved payload content or provider tokens.
 
 Normal CI uses mocks and local runtime behavior. Live Agent Runtime verification should be run as an optional integration test once the service is deployed with the documented endpoints.

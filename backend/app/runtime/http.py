@@ -10,6 +10,7 @@ from app.runtime.errors import (
     RuntimeExecutionFailed,
     RuntimeExecutionNotFound,
     RuntimeMalformedResponse,
+    RuntimeRateLimited,
     RuntimeRequestTimeout,
     RuntimeUnauthorized,
     RuntimeUnavailable,
@@ -81,6 +82,11 @@ class AgentRuntimeHttpClient:
             raise RuntimeUnauthorized()
         if response.status_code == 404:
             raise RuntimeExecutionNotFound()
+        if response.status_code == 429:
+            retry_after = response.headers.get("retry-after")
+            raise RuntimeRateLimited(
+                int(retry_after) if retry_after and retry_after.isdigit() else None
+            )
         if response.status_code >= 500:
             raise RuntimeUnavailable()
         if response.status_code >= 400:

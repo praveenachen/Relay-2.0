@@ -10,6 +10,7 @@ from app.domain.errors import ApprovalRequired
 from app.models.entities import ExternalArtifact
 from app.repositories.relay import RelayRepository
 from app.runtime.client import ExecutionRequest, ExecutionStatus, RuntimeClient
+from app.runtime.recovery import RECOVERABLE_RUNTIME_ERRORS, run_has_recoverable_runtime_error
 from app.runtime.state import runtime_status_is_terminal, workflow_status_for_runtime
 from app.runtime.sync import poll_until_terminal
 from app.schemas.domain import RunRead
@@ -42,7 +43,8 @@ class CollaborateExecutionService:
         run = await self.repo.run(run_id, owner, lock=True)
         if run.status == S.COMPLETED:
             return RunRead.model_validate(run)
-        if run.status != S.APPROVED:
+        recoverable_retry = run_has_recoverable_runtime_error(run)
+        if run.status != S.APPROVED and not recoverable_retry:
             raise CollaborateWorkflowInvalidState()
         actions = await self.repo.actions(run_id)
         approvals = await self.repo.run_approvals(run_id)
@@ -58,11 +60,14 @@ class CollaborateExecutionService:
             raise ApprovalRequired()
 
         workflow = WorkflowService(self.repo)
-        await workflow.apply_transition(run, S.QUEUED, owner)
-        record(self.session, owner, "EXECUTION_SUBMITTED", run.id, {"action_count": len(actions)})
-        await self.session.commit()
-        run = await self.repo.run(run_id, owner, lock=True)
-        await workflow.apply_transition(run, S.EXECUTING, owner)
+        if run.status == S.APPROVED:
+            await workflow.apply_transition(run, S.QUEUED, owner)
+            record(
+                self.session, owner, "EXECUTION_SUBMITTED", run.id, {"action_count": len(actions)}
+            )
+            await self.session.commit()
+            run = await self.repo.run(run_id, owner, lock=True)
+            await workflow.apply_transition(run, S.EXECUTING, owner)
         record(self.session, owner, "EXTERNAL_EXECUTION_STARTED", run.id)
         await self.session.commit()
 
@@ -72,16 +77,56 @@ class CollaborateExecutionService:
             action.status = ActionStatus.EXECUTING
             idempotency_key = f"collaborate:{run.id}:{action.id}"
             correlation_id = f"collaborate:{run.id}:{action.id}"
-            snapshot = await self.runtime.submit_execution(
-                ExecutionRequest(
-                    workflow_run_id=run.id,
-                    proposed_action_id=action.id,
-                    action_type=action.action_type,
-                    approved_payload=approval.approved_payload,
-                    idempotency_key=idempotency_key,
-                    correlation_id=correlation_id,
-                )
+            existing = await self.session.scalar(
+                select(ExternalArtifact).where(ExternalArtifact.idempotency_key == idempotency_key)
             )
+            if existing is not None:
+                action.status = ActionStatus.COMPLETED
+                results.append(
+                    {
+                        "action_id": str(action.id),
+                        "action_type": action.action_type,
+                        "status": ExecutionStatus.SUCCEEDED.value,
+                        "artifact_id": str(existing.id),
+                        "external_url": existing.external_url,
+                        "correlation_id": correlation_id,
+                    }
+                )
+                continue
+            try:
+                snapshot = await self.runtime.submit_execution(
+                    ExecutionRequest(
+                        workflow_run_id=run.id,
+                        proposed_action_id=action.id,
+                        action_type=action.action_type,
+                        approved_payload=approval.approved_payload,
+                        idempotency_key=idempotency_key,
+                        correlation_id=correlation_id,
+                    )
+                )
+            except RECOVERABLE_RUNTIME_ERRORS as error:
+                action.status = ActionStatus.QUEUED
+                results.append(
+                    {
+                        "action_id": str(action.id),
+                        "action_type": action.action_type,
+                        "status": ExecutionStatus.QUEUED.value,
+                        "correlation_id": correlation_id,
+                        "error_code": error.code,
+                    }
+                )
+                record(
+                    self.session,
+                    owner,
+                    "RUNTIME_RECOVERABLE_FAILURE",
+                    run.id,
+                    {
+                        "action_id": str(action.id),
+                        "correlation_id": correlation_id,
+                        "error_code": error.code,
+                    },
+                )
+                continue
             snapshot = await poll_until_terminal(
                 self.runtime,
                 snapshot,
@@ -151,7 +196,22 @@ class CollaborateExecutionService:
             "total_count": len(results),
         }
         if pending:
-            await workflow.apply_transition(run, workflow_status_for_runtime(statuses[0]), owner)
+            pending_codes = [
+                item.get("error_code")
+                for item in results
+                if item.get("status") == ExecutionStatus.QUEUED.value
+            ]
+            if pending_codes:
+                run.error_code = next(code for code in pending_codes if code)
+                run.error_message = (
+                    "Execution status is uncertain. Retry will reuse approved payloads "
+                    "and idempotency keys."
+                )
+            target_status = workflow_status_for_runtime(statuses[0])
+            if run.status != target_status and not (
+                run.status == S.EXECUTING and target_status == S.QUEUED
+            ):
+                await workflow.apply_transition(run, target_status, owner)
             record(
                 self.session,
                 owner,

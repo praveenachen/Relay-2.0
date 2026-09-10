@@ -7,6 +7,16 @@ class RuntimeUnavailable(DomainError):
     message = "Agent Runtime is unavailable. Retry the approved action later."
 
 
+class RuntimeRateLimited(DomainError):
+    code = "RUNTIME_RATE_LIMITED"
+    status_code = 429
+    message = "Agent Runtime is rate limited. Retry the approved action later."
+
+    def __init__(self, retry_after_seconds: int | None = None) -> None:
+        self.retry_after_seconds = retry_after_seconds
+        super().__init__()
+
+
 class RuntimeUnauthorized(DomainError):
     code = "RUNTIME_UNAUTHORIZED"
     status_code = 503
