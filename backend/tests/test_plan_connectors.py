@@ -109,6 +109,24 @@ def test_google_oauth_token_accepts_google_testing_refresh_expiry_field() -> Non
     assert token.refresh_token == "google-refresh"
 
 
+def test_google_userinfo_accepts_standard_profile_metadata() -> None:
+    info = GoogleTokenInfo.model_validate(
+        {
+            "sub": "google-user-1",
+            "email": "student@example.com",
+            "email_verified": True,
+            "name": "Student Example",
+            "given_name": "Student",
+            "family_name": "Example",
+            "picture": "https://example.test/avatar.png",
+        }
+    )
+
+    assert info.sub == "google-user-1"
+    assert info.email == "student@example.com"
+    assert info.name == "Student Example"
+
+
 async def test_google_oauth_state_exchange_encrypts_tokens(account, session_factory) -> None:
     store = FernetCredentialStore([Fernet.generate_key().decode()])
     async with session_factory() as session:

@@ -18,6 +18,8 @@ class GoogleOAuthToken(StrictModel):
 
 
 class GoogleTokenInfo(StrictModel):
+    model_config = ConfigDict(extra="ignore")
+
     sub: str | None = None
     email: str | None = None
     name: str | None = None
