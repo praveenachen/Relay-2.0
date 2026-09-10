@@ -11,10 +11,11 @@ from app.connectors.notion import NotionTaskSourceService
 from app.core.config import get_settings
 from app.infrastructure.credentials import credential_store
 from app.runtime.client import RuntimeClient
-from app.runtime.local import DatabaseGoogleCalendarConnector, LocalRuntimeClient
+from app.runtime.factory import runtime_client as build_runtime_client
 from app.scheduling.models import StudySession
 from app.scheduling.service import StudySchedulingService
 from app.schemas.domain import RunRead
+from app.services.runtime_execution import RuntimeExecutionService
 from app.workflows.study_plan.execution import StudyPlanExecutionService
 from app.workflows.study_plan.schemas import (
     LockSessionInput,
@@ -57,16 +58,7 @@ def service(repo: Repository) -> StudyPlanWorkflowService:
 
 
 def runtime_client(repo: Repository) -> RuntimeClient:
-    settings = get_settings()
-    return LocalRuntimeClient(
-        repo.session,
-        calendar_connector=DatabaseGoogleCalendarConnector(
-            repo.session,
-            credential_store(),
-            api_base_url=settings.google_calendar_api_base_url,
-            timeout=settings.google_timeout_seconds,
-        ),
-    )
+    return build_runtime_client(repo, get_settings())
 
 
 Plan = Annotated[StudyPlanWorkflowService, Depends(service)]
@@ -165,3 +157,9 @@ async def request_approval(run_id: UUID, user: CurrentUser, plan: Plan) -> dict[
 async def execute(run_id: UUID, user: CurrentUser, plan: Plan, runtime: Runtime) -> RunRead:
     await plan.owned_run(run_id, user.id)
     return await StudyPlanExecutionService(plan.repo, runtime).execute(run_id, user.id)
+
+
+@router.post("/{run_id}/cancel", response_model=RunRead)
+async def cancel(run_id: UUID, user: CurrentUser, runtime: Runtime, plan: Plan) -> RunRead:
+    await plan.owned_run(run_id, user.id)
+    return await RuntimeExecutionService(plan.repo, runtime).cancel(run_id, user.id)

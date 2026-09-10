@@ -1,32 +1,40 @@
 # Relay and Agent Runtime boundary
 
-Relay owns what should happen; Agent Runtime owns reliable execution. They remain separate repositories and deployable systems.
+Relay owns what should happen; Agent Runtime owns reliable execution. They remain separate deployable systems connected through Relay's `RuntimeClient` port.
 
 | Relay | Agent Runtime |
 | --- | --- |
 | Users, OAuth configuration, account connections | Asynchronous execution and workers |
-| Document processing and AI interpretation | Queues, retries, backoff, timeouts |
-| Learn, Plan, Collaborate and scheduling | Cancellation and execution state |
-| Proposals, validation, approval and history | Idempotency support and structured results |
-| Connector-specific domain behavior | Tracing and operational metrics |
+| Document/transcript processing and AI interpretation | Queues, retries, backoff and timeouts |
+| LEARN, PLAN, COLLABORATE planning and approval | Cancellation and execution state |
+| Proposed actions, immutable approved payloads and audit history | Runtime status, telemetry and idempotent execution |
+| External artifact records and user-facing workflow state | Structured execution results |
 
-`backend/app/runtime/client.py` defines a typed asynchronous `RuntimeClient` Protocol with submit, get, and cancel methods. Requests carry an operation identifier, JSON payload, and idempotency key. Snapshots carry execution identity, state, optional result, error code, and timestamps.
+`backend/app/runtime/client.py` defines the Relay-owned contract: `submit_execution`, `get_execution`, and `cancel_execution`. The HTTP adapter is `AgentRuntimeHttpClient`; tests and local development can still use `LocalRuntimeClient`.
 
-`LocalRuntimeClient` now serves both the LEARN and PLAN slices. It is an in-process adapter that persists local execution snapshots and, after approval, calls either a Notion connector (mock or DB-backed real) for LEARN, or a DB-backed Google Calendar connector for PLAN -- creating each approved study block independently so a mid-batch failure doesn't discard the blocks that already succeeded (see `docs/architecture/plan-sequence.md`). `AgentRuntimeHttpClient` remains a future adapter and is out of scope for this phase. Runtime must not interpret lectures, assignments, courses, study sessions, Notion tasks, or GitHub issues. An eventual opaque operation payload is not permission to teach Runtime domain rules.
+Relay submits only the exact approved action snapshot. The runtime request contains `workflow_run_id`, `proposed_action_id`, `action_type`, `approved_payload`, `idempotency_key`, and `correlation_id`. Relay never sends ORM objects, provider SDK clients, or service credentials in that payload. Runtime credentials come only from server-side `AGENT_RUNTIME_BASE_URL` and `AGENT_RUNTIME_API_KEY` when `RUNTIME_BACKEND=agent_runtime`.
 
 ```mermaid
 sequenceDiagram
     actor User
     participant Relay
-    participant Runtime as Agent Runtime (planned)
-    User->>Relay: Review exact proposed actions
-    User->>Relay: Approve proposal version (planned)
-    Relay->>Relay: Revalidate identity, permissions and proposal version
-    Relay-->>Runtime: Submit opaque execution with idempotency key
-    Runtime-->>Relay: Execution identity and structured status
-    Relay-->>User: Verified outcome and workflow history
+    participant Runtime as Agent Runtime
+    participant Provider as External provider
+    User->>Relay: Approve exact proposed action
+    Relay->>Relay: Validate owner, run state and approved payload
+    Relay->>Runtime: POST /executions with action, payload, idempotency key, correlation id
+    Runtime-->>Relay: queued/running/succeeded/failed/cancelled snapshot
+    Relay->>Runtime: GET /executions/{id} while bounded polling is useful
+    Runtime->>Provider: Execute provider action
+    Runtime-->>Relay: Structured result or normalized failure
+    Relay->>Relay: Record artifacts, audit event and workflow state
+    Relay-->>User: Current run state and artifact/failure details
 ```
 
-Approval requests and exact payload snapshots exist in Relay. LEARN submits only approved payloads through the runtime boundary. Relay binds the selected Notion account and destination before approval. Edits invalidate pending approval payloads. Runtime submission is not a substitute for approval or authorization. Partial success and stale provider state must remain visible to the user; retries must not duplicate side effects.
+Runtime states are translated in one place: `queued -> QUEUED`, `running -> EXECUTING`, `succeeded -> COMPLETED`, `failed -> FAILED`, and `cancelled -> CANCELLED`. PLAN and COLLABORATE retain partial-completion behavior: successful sibling actions remain recorded when another approved action fails. Relay does not perform distributed rollback.
 
-Before Agent Runtime integration, agree operation registration, credential access, callback/connector execution placement, error taxonomy, cancellation races, result verification, authentication, tenant isolation, and idempotency retention. Credentials should not become arbitrary payload fields. Runtime cancellation will be best effort; completed external actions cannot be assumed reversible. No retry loop, queue, or remote execution-state persistence is implemented in Relay.
+Cancellation is best effort. Relay validates ownership and state, records the cancel request, calls `RuntimeClient.cancel_execution` when a runtime execution id exists, and syncs a cancelled snapshot. Completed external side effects are not rolled back.
+
+Transport uncertainty is not treated as confirmed execution failure. Timeouts and unavailable-runtime errors stay recoverable: approved payloads and idempotency keys remain in Relay, so retrying the same logical action uses the same key.
+
+Normal CI uses mocks and local runtime behavior. Live Agent Runtime verification should be run as an optional integration test once the service is deployed with the documented endpoints.

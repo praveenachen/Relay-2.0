@@ -8,17 +8,16 @@ from app.ai.base import LanguageModel
 from app.api.dependencies import Repository
 from app.api.learn import language_model
 from app.auth.users import CurrentUser
-from app.connectors.github.mock import MockGitHubConnector
 from app.connectors.github.service import GitHubService
-from app.connectors.notion import MockNotionConnector
 from app.core.config import get_settings
 from app.documents.errors import DocumentTooLarge
 from app.documents.service import DocumentService
 from app.documents.storage import LocalFileStore
 from app.infrastructure.credentials import credential_store
 from app.runtime.client import RuntimeClient
-from app.runtime.local import DatabaseGitHubConnector, DatabaseNotionConnector, LocalRuntimeClient
+from app.runtime.factory import runtime_client as build_runtime_client
 from app.schemas.domain import RunRead
+from app.services.runtime_execution import RuntimeExecutionService
 from app.workflows.project_meeting.analysis import MeetingAnalysisService
 from app.workflows.project_meeting.execution import CollaborateExecutionService
 from app.workflows.project_meeting.schemas import ActionItemsInput, CreateCollaborateRunInput
@@ -56,28 +55,7 @@ def service(
 
 
 def runtime_client(repo: Repository) -> RuntimeClient:
-    settings = get_settings()
-    notion_connector = (
-        MockNotionConnector()
-        if settings.notion_publish_mode == "mock"
-        else DatabaseNotionConnector(
-            repo.session,
-            credential_store(),
-            api_base_url=settings.notion_api_base_url,
-            timeout=settings.notion_timeout_seconds,
-        )
-    )
-    github_connector = (
-        MockGitHubConnector()
-        if settings.github_publish_mode == "mock"
-        else DatabaseGitHubConnector(
-            repo.session,
-            credential_store(),
-            api_base_url=settings.github_api_base_url,
-            timeout=settings.github_timeout_seconds,
-        )
-    )
-    return LocalRuntimeClient(repo.session, notion_connector, github_connector=github_connector)
+    return build_runtime_client(repo, get_settings())
 
 
 Collaborate = Annotated[ProjectMeetingWorkflowService, Depends(service)]
@@ -155,3 +133,11 @@ async def execute(
 ) -> RunRead:
     await collaborate.owned_run(run_id, user.id)
     return await CollaborateExecutionService(collaborate.repo, runtime).execute(run_id, user.id)
+
+
+@router.post("/{run_id}/cancel", response_model=RunRead)
+async def cancel(
+    run_id: UUID, user: CurrentUser, runtime: Runtime, collaborate: Collaborate
+) -> RunRead:
+    await collaborate.owned_run(run_id, user.id)
+    return await RuntimeExecutionService(collaborate.repo, runtime).cancel(run_id, user.id)

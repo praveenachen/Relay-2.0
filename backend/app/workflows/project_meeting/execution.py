@@ -3,12 +3,15 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.domain.enums import ActionStatus, ApprovalStatus
 from app.domain.enums import WorkflowStatus as S
 from app.domain.errors import ApprovalRequired
 from app.models.entities import ExternalArtifact
 from app.repositories.relay import RelayRepository
 from app.runtime.client import ExecutionRequest, ExecutionStatus, RuntimeClient
+from app.runtime.state import runtime_status_is_terminal, workflow_status_for_runtime
+from app.runtime.sync import poll_until_terminal
 from app.schemas.domain import RunRead
 from app.services.audit import record
 from app.services.workflows import WorkflowService
@@ -68,19 +71,49 @@ class CollaborateExecutionService:
             approval = approval_by_action[action.id]
             action.status = ActionStatus.EXECUTING
             idempotency_key = f"collaborate:{run.id}:{action.id}"
+            correlation_id = f"collaborate:{run.id}:{action.id}"
             snapshot = await self.runtime.submit_execution(
                 ExecutionRequest(
-                    operation=action.action_type,
-                    payload=approval.approved_payload,
+                    workflow_run_id=run.id,
+                    proposed_action_id=action.id,
+                    action_type=action.action_type,
+                    approved_payload=approval.approved_payload,
                     idempotency_key=idempotency_key,
+                    correlation_id=correlation_id,
                 )
+            )
+            snapshot = await poll_until_terminal(
+                self.runtime,
+                snapshot,
+                max_attempts=get_settings().agent_runtime_poll_attempts,
+                interval_seconds=get_settings().agent_runtime_poll_interval_seconds,
             )
             outcome: dict[str, Any] = {
                 "action_id": str(action.id),
                 "action_type": action.action_type,
                 "status": snapshot.status.value,
+                "runtime_execution_id": str(snapshot.execution_id),
+                "correlation_id": correlation_id,
             }
-            if snapshot.status == ExecutionStatus.SUCCEEDED and snapshot.result is not None:
+            if not runtime_status_is_terminal(snapshot.status):
+                action.status = (
+                    ActionStatus.QUEUED
+                    if snapshot.status == ExecutionStatus.QUEUED
+                    else ActionStatus.EXECUTING
+                )
+                record(
+                    self.session,
+                    owner,
+                    "RUNTIME_STATUS_SYNCED",
+                    run.id,
+                    {
+                        "runtime_execution_id": str(snapshot.execution_id),
+                        "status": snapshot.status.value,
+                    },
+                )
+            elif snapshot.status == ExecutionStatus.CANCELLED:
+                action.status = ActionStatus.FAILED
+            elif snapshot.status == ExecutionStatus.SUCCEEDED and snapshot.result is not None:
                 artifact = await self._record_artifact(run.id, action, snapshot.result)
                 action.status = ActionStatus.COMPLETED
                 outcome["artifact_id"] = str(artifact.id) if artifact else None
@@ -105,7 +138,11 @@ class CollaborateExecutionService:
             results.append(outcome)
         await self.session.commit()
 
-        succeeded = sum(1 for item in results if item["status"] == ExecutionStatus.SUCCEEDED.value)
+        statuses = [ExecutionStatus(item["status"]) for item in results]
+        succeeded = sum(1 for status in statuses if status == ExecutionStatus.SUCCEEDED)
+        pending = any(
+            status in {ExecutionStatus.QUEUED, ExecutionStatus.RUNNING} for status in statuses
+        )
         run = await self.repo.run(run_id, owner, lock=True)
         run.result_payload = {
             "results": results,
@@ -113,7 +150,20 @@ class CollaborateExecutionService:
             "failed_count": len(results) - succeeded,
             "total_count": len(results),
         }
-        if succeeded == len(results):
+        if pending:
+            await workflow.apply_transition(run, workflow_status_for_runtime(statuses[0]), owner)
+            record(
+                self.session,
+                owner,
+                "RUNTIME_STATUS_SYNCED",
+                run.id,
+                {
+                    "pending_count": sum(
+                        1 for status in statuses if not runtime_status_is_terminal(status)
+                    )
+                },
+            )
+        elif succeeded == len(results):
             await workflow.apply_transition(run, S.COMPLETED, owner)
             record(self.session, owner, "WORKFLOW_COMPLETED", run.id)
         elif succeeded > 0:

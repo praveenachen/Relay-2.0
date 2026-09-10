@@ -50,6 +50,12 @@ class Settings(BaseSettings):
     github_oauth_token_url: str = "https://github.com/login/oauth/access_token"
     github_timeout_seconds: int = Field(default=20, ge=1, le=120)
     github_publish_mode: Literal["mock", "real"] = "mock"
+    runtime_backend: Literal["local", "agent_runtime"] = "local"
+    agent_runtime_base_url: str = ""
+    agent_runtime_api_key: SecretStr = SecretStr("")
+    agent_runtime_timeout_seconds: int = Field(default=20, ge=1, le=120)
+    agent_runtime_poll_attempts: int = Field(default=3, ge=0, le=20)
+    agent_runtime_poll_interval_seconds: float = Field(default=0.5, ge=0, le=10)
 
 
 @lru_cache

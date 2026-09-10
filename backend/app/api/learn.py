@@ -9,16 +9,15 @@ from app.ai.fake import FakeLanguageModel
 from app.ai.openai import OpenAIProvider
 from app.api.dependencies import Repository
 from app.auth.users import CurrentUser
-from app.connectors.notion import MockNotionConnector
 from app.core.config import get_settings
 from app.documents.errors import DocumentTooLarge
 from app.documents.service import DocumentService
 from app.documents.storage import LocalFileStore
-from app.infrastructure.credentials import credential_store
 from app.runtime.client import RuntimeClient
-from app.runtime.local import DatabaseNotionConnector, LocalRuntimeClient
+from app.runtime.factory import runtime_client as build_runtime_client
 from app.schemas.domain import RunRead
 from app.services.execution import ExecutionService
+from app.services.runtime_execution import RuntimeExecutionService
 from app.workflows.lecture_notes.schemas import LectureSummary, StrictModel
 from app.workflows.lecture_notes.service import LectureNotesWorkflowService
 from app.workflows.lecture_notes.summarization import SummaryService
@@ -56,18 +55,7 @@ def service(
 
 
 def runtime_client(repo: Repository) -> RuntimeClient:
-    settings = get_settings()
-    connector = (
-        MockNotionConnector()
-        if settings.notion_publish_mode == "mock"
-        else DatabaseNotionConnector(
-            repo.session,
-            credential_store(),
-            api_base_url=settings.notion_api_base_url,
-            timeout=settings.notion_timeout_seconds,
-        )
-    )
-    return LocalRuntimeClient(repo.session, connector)
+    return build_runtime_client(repo, get_settings())
 
 
 Learn = Annotated[LectureNotesWorkflowService, Depends(service)]
@@ -157,3 +145,9 @@ async def destination(run_id: UUID, user: CurrentUser, learn: Learn) -> dict[str
 async def execute(run_id: UUID, user: CurrentUser, learn: Learn, runtime: Runtime) -> RunRead:
     await learn.owned_run(run_id, user.id)
     return await ExecutionService(learn.repo, runtime).execute(run_id, user.id)
+
+
+@router.post("/{run_id}/cancel", response_model=RunRead)
+async def cancel(run_id: UUID, user: CurrentUser, runtime: Runtime, learn: Learn) -> RunRead:
+    await learn.owned_run(run_id, user.id)
+    return await RuntimeExecutionService(learn.repo, runtime).cancel(run_id, user.id)

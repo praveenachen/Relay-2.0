@@ -2,7 +2,7 @@
 
 Relay is a student workflow platform that turns information into understanding, a plan, and actions a person explicitly approves.
 
-**Status: Phase 7 COLLABORATE implemented.** Relay has real accounts and revocable sessions, saved preferences, workflow drafts, private document/transcript ingestion, typed AI summarization and meeting extraction, editable approval payloads, real Notion OAuth, Google Calendar OAuth, GitHub OAuth, deterministic PLAN scheduling, COLLABORATE project workspaces, approved Notion/GitHub/Calendar actions, mock publishing for tests/local isolation, external artifact records, encrypted connection infrastructure, and a working onboarding/workspace UI. Retrieval, refresh workers, audio/video transcription, generic chat, autonomous code generation, and Agent Runtime HTTP integration are not implemented.
+**Status: Phase 8 Agent Runtime integration implemented.** Relay has real accounts and revocable sessions, saved preferences, workflow drafts, private document/transcript ingestion, typed AI summarization and meeting extraction, editable approval payloads, real Notion OAuth, Google Calendar OAuth, GitHub OAuth, deterministic PLAN scheduling, COLLABORATE project workspaces, approved Notion/GitHub/Calendar actions, Agent Runtime HTTP execution, local runtime fallback for tests/development, external artifact records, encrypted connection infrastructure, and a working onboarding/workspace UI. Retrieval, refresh workers, audio/video transcription, generic chat, and autonomous code generation are not implemented.
 
 ## Three planned workflows
 
@@ -23,7 +23,7 @@ Input -> Understand -> Structure -> Validate -> Propose
   -> Human review -> Approve -> Execute -> Verify
 ```
 
-Relay decides **what should happen**. The separate Agent Runtime repository will own **how it executes reliably**. Relay owns users, domain planning, approvals, OAuth and connector behavior; Runtime will own queues, retries, timeout handling, idempotency support, execution state and operational telemetry. The typed RuntimeClient remains a Protocol without any implementation or HTTP integration.
+Relay decides **what should happen**. The separate Agent Runtime owns **how it executes reliably**. Relay owns users, domain planning, approvals, OAuth and connector behavior; Runtime owns queues, retries, timeout handling, idempotency support, execution state and operational telemetry. The typed `RuntimeClient` now has both a local adapter and an authenticated Agent Runtime HTTP adapter.
 
 ## Repository and architecture
 
@@ -44,7 +44,7 @@ backend/
   app/services/            Transactional workflows, approvals, accounts and audit
   app/infrastructure/      Fernet credential adapter
   app/db/                  SQLAlchemy configuration
-  app/runtime/             Runtime contract plus local mock executor adapter
+  app/runtime/             Runtime contract, Agent Runtime HTTP adapter and local fallback executor
   app/documents/           Private source storage, validation and PDF/DOCX/MD/TXT parsers
   app/workflows/           Workflow-specific orchestration and typed summaries
   alembic/                 Static schema migrations and definition seed
@@ -80,7 +80,7 @@ Root `.env` configures the API and Compose. `frontend/.env.local` holds `API_INT
 
 **Upgrading from Phase 0:** add `COOKIE_SECURE=false`, `FRONTEND_ORIGIN=http://localhost:3000`, and `SESSION_LIFETIME_SECONDS=86400` to your existing local `.env` if missing; add `API_INTERNAL_URL=http://127.0.0.1:8000` to the frontend env file. Run setup to update dependencies, then migrate. The setup command preserves existing env files.
 
-No OAuth keys or encryption key are required to sign up and use mock/local workflow paths. LEARN and COLLABORATE use `LANGUAGE_MODEL_PROVIDER=fake` by default for deterministic test data. To call OpenAI for typed summaries or meeting extraction, set `LANGUAGE_MODEL_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`; responses are requested with schema parsing and `store=false`. To use real provider writes, configure `TOKEN_ENCRYPTION_KEY` plus the relevant Notion, Google Calendar, or GitHub OAuth values described in [Notion integration](docs/integrations/notion.md), [Google Calendar integration](docs/integrations/google-calendar.md), and [GitHub integration](docs/integrations/github.md). Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
+No OAuth keys or encryption key are required to sign up and use mock/local workflow paths. LEARN and COLLABORATE use `LANGUAGE_MODEL_PROVIDER=fake` by default for deterministic test data. To call OpenAI for typed summaries or meeting extraction, set `LANGUAGE_MODEL_PROVIDER=openai`, `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`; responses are requested with schema parsing and `store=false`. To use real provider writes locally, configure `TOKEN_ENCRYPTION_KEY` plus the relevant Notion, Google Calendar, or GitHub OAuth values described in [Notion integration](docs/integrations/notion.md), [Google Calendar integration](docs/integrations/google-calendar.md), and [GitHub integration](docs/integrations/github.md). To send approved actions to the separate Agent Runtime service, set `RUNTIME_BACKEND=agent_runtime`, `AGENT_RUNTIME_BASE_URL`, and `AGENT_RUNTIME_API_KEY`; these values are server-side only. Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
 
 | Make command | Portable equivalent | Purpose |
 | --- | --- | --- |
@@ -114,9 +114,9 @@ Frontend versions are locked in `package-lock.json`; backend dependencies are pi
 - `/auth/register`, `/auth/login`, `/auth/logout`: library-managed Relay authentication.
 - `/users/me`, `/users/me/onboarding`, `/preferences`: profile, onboarding and validated preferences.
 - `/workflow-definitions`, `/workflow-runs`, `/workflow-runs/{id}/events`: definitions, owned drafts and history. Run lists support definition, status, date, incomplete-state filtering, limit and offset.
-- `/workflows/learn`: LEARN run creation, private source upload/download, parse, summarize, edit proposed summary, refresh selected Notion destination, execute approved Notion publishing, and owned artifact lookup.
-- `/workflows/plan`: PLAN setup, Notion task import, Google availability loading, deterministic schedule solve, session edits/locks, approval, and approved Calendar execution.
-- `/workflows/collaborate`: project-backed transcript upload/parse/analyze, action review, approval, Notion task creation, GitHub issue creation, review requests, idempotent execution, and partial completion.
+- `/workflows/learn`: LEARN run creation, private source upload/download, parse, summarize, edit proposed summary, refresh selected Notion destination, execute/cancel approved Notion publishing, and owned artifact lookup.
+- `/workflows/plan`: PLAN setup, Notion task import, Google availability loading, deterministic schedule solve, session edits/locks, approval, and approved Calendar execution/cancellation.
+- `/workflows/collaborate`: project-backed transcript upload/parse/analyze, action review, approval, Notion task creation, GitHub issue creation, review requests, idempotent execution/cancellation, and partial completion.
 - `/projects`: owned project workspace and member configuration for COLLABORATE identity/repository context.
 - `/approvals`: owned requests and exact-payload approve/reject.
 - `/connections`: safe metadata/disconnect; Notion, Google Calendar, and GitHub OAuth plus destination/repository/calendar lookup.
@@ -125,9 +125,9 @@ No arbitrary state-change, audit-edit, real external-artifact, or generic workfl
 
 ## Boundaries and next phase
 
-Approval snapshots, lifecycle rules and audit records are implemented. LEARN, PLAN, and COLLABORATE all execute approved provider actions behind the `RuntimeClient` boundary, but the implementation still uses `LocalRuntimeClient`; Agent Runtime HTTP integration is intentionally left for Phase 8. Retrieval, refresh workers, account recovery/email verification, production abuse protection and deployment hardening remain outstanding. See [authentication](docs/security/authentication.md), [external connections](docs/security/external-connections.md), [OAuth security](docs/security/oauth.md), and [AI and document handling](docs/security/ai-and-document-handling.md) for precise limits.
+Approval snapshots, lifecycle rules and audit records are implemented. LEARN, PLAN, and COLLABORATE all execute approved provider actions behind the `RuntimeClient` boundary. `LocalRuntimeClient` remains available for tests and local fallback; production can use `AgentRuntimeHttpClient` with server-side Runtime credentials. Retrieval, refresh workers, account recovery/email verification, production abuse protection and deployment hardening remain outstanding. See [authentication](docs/security/authentication.md), [external connections](docs/security/external-connections.md), [OAuth security](docs/security/oauth.md), and [AI and document handling](docs/security/ai-and-document-handling.md) for precise limits.
 
-The recommended next phase is Agent Runtime integration behind the existing `RuntimeClient` contract. Do not start Phase 8 until the local runtime behavior is accepted.
+The recommended next phase is Phase 9 after the Agent Runtime service contract is accepted in an integrated environment. Do not start Phase 9 until Phase 8 behavior is accepted.
 
 ## License
 
