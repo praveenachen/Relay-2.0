@@ -2,15 +2,14 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { useDefinitions } from "@/hooks/queries";
+import { workflows } from "@/features/workflows/display";
 import { auth } from "@/features/auth/api";
 import { ConnectionCards } from "@/components/connection-cards";
 import { PreferencesForm } from "@/components/preferences-form";
 import { ErrorMessage, PageTitle } from "@/components/ui";
 export default function Onboarding() {
   const [step, setStep] = useState(0);
-  const definitions = useDefinitions(),
-    router = useRouter(),
+  const router = useRouter(),
     cache = useQueryClient();
   const finish = useMutation({
     mutationFn: auth.finish,
@@ -47,16 +46,15 @@ export default function Onboarding() {
             description="Turn information into understanding, a plan, and actions you approve. Let us set up your workspace."
           />
           <div className="mb-8 grid gap-5 md:grid-cols-3">
-            {definitions.data?.map((item) => (
-              <article className="panel" key={item.id}>
-                <h2 className="text-xl font-semibold">{item.name}</h2>
+            {workflows.map((workflow) => (
+              <article className="panel" key={workflow.key}>
+                <h2 className="text-xl font-semibold">{workflow.pillar}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted">
-                  {item.description}
+                  {workflow.description}
                 </p>
               </article>
             ))}
           </div>
-          <ErrorMessage error={definitions.error} />
           <button className="button" onClick={() => setStep(1)}>
             Get started
           </button>
@@ -67,7 +65,7 @@ export default function Onboarding() {
           <PageTitle
             eyebrow="Step 2"
             title="Bring your tools together."
-            description="Connections are optional. Provider OAuth is not available yet, so you can skip this step and connect later."
+            description="Connections are optional for local demos. Connect tools now, or skip this step and come back later."
           />
           <ConnectionCards />
           <div className="mt-8 flex gap-3">
@@ -103,7 +101,7 @@ export default function Onboarding() {
           <PageTitle
             eyebrow="Ready when you are"
             title="Your workspace is ready."
-            description="Your preferences are saved. Create your first draft, explore your workspace, or connect tools when they become available."
+            description="Your preferences are saved. Create your first draft, explore your workspace, or connect tools whenever you are ready."
           />
           <button
             className="button"
