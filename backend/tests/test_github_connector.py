@@ -57,6 +57,28 @@ def test_github_oauth_token_accepts_expiring_user_token_metadata() -> None:
     assert token.scope == "repo"
 
 
+def test_github_userinfo_accepts_standard_profile_metadata() -> None:
+    info = GitHubUserInfo.model_validate(
+        {
+            "id": 128991391,
+            "login": "praveenachen",
+            "name": "Praveena Chenthooran",
+            "node_id": "U_kgDOB7BAnw",
+            "avatar_url": "https://avatars.githubusercontent.com/u/128991391?v=4",
+            "html_url": "https://github.com/praveenachen",
+            "type": "User",
+            "site_admin": False,
+            "email": None,
+            "public_repos": 11,
+            "created_at": "2023-03-26T16:10:11Z",
+        }
+    )
+
+    assert info.id == 128991391
+    assert info.login == "praveenachen"
+    assert info.name == "Praveena Chenthooran"
+
+
 async def test_github_oauth_state_exchange_encrypts_tokens(account, session_factory) -> None:
     store = FernetCredentialStore([Fernet.generate_key().decode()])
     async with session_factory() as session:

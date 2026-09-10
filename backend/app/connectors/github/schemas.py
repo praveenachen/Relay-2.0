@@ -14,6 +14,8 @@ class GitHubOAuthToken(StrictModel):
 
 
 class GitHubUserInfo(StrictModel):
+    model_config = ConfigDict(extra="ignore")
+
     id: int
     login: str
     name: str | None = None
