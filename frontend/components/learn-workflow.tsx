@@ -229,6 +229,7 @@ export function LearnRun({ id }: { id: string }) {
   if (detail.error) return <ErrorMessage error={detail.error} />;
   const data = detail.data;
   const pending = data.approval?.status === "PENDING";
+  const backendWorking = data.stage === "summarizing";
   const busy =
     parse.isPending ||
     summarize.isPending ||
@@ -254,7 +255,7 @@ export function LearnRun({ id }: { id: string }) {
     Boolean(file || pasted.trim()) &&
     !tooLarge &&
     !busy;
-  const nextStep = learnNextStep(data, busy, canUpload);
+  const nextStep = learnNextStep(data, busy || backendWorking, canUpload);
 
   return (
     <>
@@ -272,8 +273,8 @@ export function LearnRun({ id }: { id: string }) {
       <NextStepNotice {...nextStep} />
       <ErrorMessage
         error={
-          parse.error ||
-          summarize.error ||
+          (backendWorking ? null : parse.error) ||
+          (backendWorking ? null : summarize.error) ||
           save.error ||
           resolve.error ||
           upload.error ||
