@@ -833,6 +833,15 @@ function SummaryEditor({
             onChange={(items) => set("review_questions", items)}
           />
           <PairList
+            title="Mini lecture quiz"
+            values={value.quiz_questions}
+            first="question"
+            second="answer"
+            disabled={disabled}
+            collapsible
+            onChange={(items) => set("quiz_questions", items)}
+          />
+          <PairList
             title="Key concepts"
             values={value.key_concepts}
             first="name"
@@ -877,6 +886,7 @@ function SummaryEditor({
 }
 
 function StudyPagePreview({ summary }: { summary: LectureSummary }) {
+  const mainTakeaways = summary.takeaways.slice(0, 5);
   return (
     <article className="study-document">
       <header>
@@ -933,14 +943,27 @@ function StudyPagePreview({ summary }: { summary: LectureSummary }) {
           ))}
         </section>
       )}
-      {summary.takeaways.length > 0 && (
+      {mainTakeaways.length > 0 && (
         <section>
           <h2>Takeaways</h2>
           <ul>
-            {summary.takeaways.map((takeaway, index) => (
+            {mainTakeaways.map((takeaway, index) => (
               <li key={index}>{takeaway}</li>
             ))}
           </ul>
+        </section>
+      )}
+      {summary.quiz_questions.length > 0 && (
+        <section>
+          <h2>Mini lecture quiz</h2>
+          <div className="study-quiz-list">
+            {summary.quiz_questions.map((item, index) => (
+              <details className="study-quiz-item" key={index}>
+                <summary>{item.question}</summary>
+                <p>{item.answer}</p>
+              </details>
+            ))}
+          </div>
         </section>
       )}
       {summary.review_questions.length > 0 && (

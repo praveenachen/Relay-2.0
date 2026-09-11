@@ -68,11 +68,14 @@ def notion_rich_text(text: str) -> list[dict[str, Any]]:
 def notion_block(block: NotionBlock) -> dict[str, Any]:
     if block.kind == "equation":
         return {"object": "block", "type": "equation", "equation": {"expression": block.text}}
-    return {
+    payload: dict[str, Any] = {
         "object": "block",
         "type": block.kind,
         block.kind: {"rich_text": notion_rich_text(block.text)},
     }
+    if block.children:
+        payload[block.kind]["children"] = [notion_block(child) for child in block.children]
+    return payload
 
 
 class NotionApiClient:

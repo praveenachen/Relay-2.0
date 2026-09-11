@@ -27,8 +27,10 @@ class NotionBlock(StrictModel):
         "bulleted_list_item",
         "numbered_list_item",
         "equation",
+        "toggle",
     ]
     text: str
+    children: list["NotionBlock"] = Field(default_factory=list)
 
 
 class ExternalArtifactResult(StrictModel):

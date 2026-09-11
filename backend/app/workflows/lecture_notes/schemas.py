@@ -40,6 +40,12 @@ class ExampleSummary(StrictModel):
     source_refs: list[SourceReference] = Field(default_factory=list)
 
 
+class QuizQuestion(StrictModel):
+    question: str
+    answer: str
+    source_refs: list[SourceReference] = Field(default_factory=list)
+
+
 class LectureSummary(StrictModel):
     title: str = Field(min_length=1, max_length=255)
     overview: str = Field(min_length=1)
@@ -50,3 +56,4 @@ class LectureSummary(StrictModel):
     examples: list[ExampleSummary] = Field(default_factory=list)
     takeaways: list[str] = Field(default_factory=list)
     review_questions: list[str] = Field(default_factory=list)
+    quiz_questions: list[QuizQuestion] = Field(default_factory=list)

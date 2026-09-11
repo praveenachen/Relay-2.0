@@ -27,6 +27,7 @@ from app.workflows.lecture_notes.schemas import (
     KeyConcept,
     LectureSummary,
     SummarySection,
+    QuizQuestion,
 )
 
 
@@ -40,6 +41,12 @@ def summary() -> LectureSummary:
         formulas=[Formula(expression="Av = lambda v", description="Eigenvector equation.")],
         takeaways=["Eigenvectors keep their direction."],
         review_questions=["How do eigenvalues change under diagonalization?"],
+        quiz_questions=[
+            QuizQuestion(
+                question="What does an eigenvalue describe?",
+                answer="It describes the scalar scaling behavior of an eigenvector.",
+            )
+        ],
     )
 
 
@@ -77,19 +84,27 @@ def test_notion_oauth_token_accepts_response_metadata() -> None:
 
 def test_mapper_orders_sections_and_splits_long_text():
     mapped = NotionStudyPageMapper().map(summary().model_copy(update={"overview": "word " * 900}))
-    assert [block.kind for block in mapped][:3] == ["paragraph", "paragraph", "paragraph"]
+    assert [block.kind for block in mapped][:4] == [
+        "heading_1",
+        "paragraph",
+        "paragraph",
+        "paragraph",
+    ]
     assert all(len(block.text) <= 1900 for block in mapped)
     assert [block.text for block in mapped if block.kind == "heading_2"] == [
-        "Key Concepts",
-        "Eigenvalue",
-        "Detailed Summary",
+        "Notes",
         "Diagonalization",
-        "Important Definitions",
+        "Key Concepts",
+        "Definitions",
         "Formulas / Equations",
-        "Important Takeaways",
-        "Review Questions",
+        "Takeaways",
+        "Mini Lecture Quiz",
     ]
     assert any(block.kind == "equation" and block.text == "Av = lambda v" for block in mapped)
+    assert any(
+        block.kind == "toggle" and block.text == "What does an eigenvalue describe?"
+        for block in mapped
+    )
     assert chunks("x" * 2001) == ["x" * 1900, "x" * 101]
 
 

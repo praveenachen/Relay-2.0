@@ -47,6 +47,15 @@ export const summarySchema = z.object({
   ),
   takeaways: z.array(z.string()),
   review_questions: z.array(z.string()),
+  quiz_questions: z
+    .array(
+      z.object({
+        question: z.string(),
+        answer: z.string(),
+        source_refs: z.array(sourceReferenceSchema),
+      }),
+    )
+    .default([]),
 });
 
 export type LectureSummary = z.infer<typeof summarySchema>;

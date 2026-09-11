@@ -680,6 +680,12 @@ p {
   margin: 0;
   padding-left: 22px;
 }
+.study-document ul {
+  list-style: disc;
+}
+.study-document ol {
+  list-style: decimal;
+}
 .study-document-section {
   display: grid;
   gap: 8px;
@@ -701,6 +707,24 @@ p {
 }
 .study-document-list dd {
   margin: 0;
+}
+.study-quiz-list {
+  display: grid;
+  gap: 10px;
+}
+.study-quiz-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  padding: 14px 16px;
+}
+.study-quiz-item summary {
+  color: var(--foreground);
+  cursor: pointer;
+  font-weight: 700;
+}
+.study-quiz-item p {
+  margin-top: 10px;
 }
 .learn-result {
   border-left: 2px solid var(--accent);

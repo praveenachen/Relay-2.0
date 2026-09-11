@@ -1,7 +1,7 @@
 import re
 
 from app.connectors.notion.schemas import NotionBlock
-from app.workflows.lecture_notes.schemas import LectureSummary
+from app.workflows.lecture_notes.schemas import LectureSummary, SourceReference
 
 MAX_RICH_TEXT = 1900
 EQUATION = re.compile(r"^[\w\s+\-*/^=().,{}\\]+$")
@@ -27,24 +27,42 @@ def paragraph(text: str) -> list[NotionBlock]:
     return [NotionBlock(kind="paragraph", text=part) for part in chunks(text)]
 
 
+def source_note(refs: list[SourceReference]) -> str | None:
+    label = " | ".join(f"{ref.section_id}{f', p. {ref.page}' if ref.page else ''}" for ref in refs)
+    return f"Source: {label}" if label else None
+
+
 class NotionStudyPageMapper:
     def map(self, summary: LectureSummary) -> list[NotionBlock]:
         blocks: list[NotionBlock] = []
+        blocks.append(NotionBlock(kind="heading_1", text="Study Notes"))
         blocks.extend(paragraph(summary.overview))
-        if summary.key_concepts:
-            blocks.append(NotionBlock(kind="heading_2", text="Key Concepts"))
-            for concept in summary.key_concepts:
-                blocks.append(NotionBlock(kind="heading_2", text=concept.name))
-                blocks.extend(paragraph(concept.explanation))
         if summary.sections:
-            blocks.append(NotionBlock(kind="heading_2", text="Detailed Summary"))
+            blocks.append(NotionBlock(kind="heading_2", text="Notes"))
             for section in summary.sections:
                 blocks.append(NotionBlock(kind="heading_2", text=section.heading))
                 blocks.extend(paragraph(section.text))
+                note = source_note(section.source_refs)
+                if note:
+                    blocks.extend(paragraph(note))
+        if summary.key_concepts:
+            blocks.append(NotionBlock(kind="heading_2", text="Key Concepts"))
+            for concept in summary.key_concepts:
+                blocks.append(
+                    NotionBlock(
+                        kind="bulleted_list_item",
+                        text=f"{concept.name}: {concept.explanation}",
+                    )
+                )
         if summary.definitions:
-            blocks.append(NotionBlock(kind="heading_2", text="Important Definitions"))
+            blocks.append(NotionBlock(kind="heading_2", text="Definitions"))
             for definition in summary.definitions:
-                blocks.extend(paragraph(f"{definition.term}: {definition.definition}"))
+                blocks.append(
+                    NotionBlock(
+                        kind="bulleted_list_item",
+                        text=f"{definition.term}: {definition.definition}",
+                    )
+                )
         if summary.formulas:
             blocks.append(NotionBlock(kind="heading_2", text="Formulas / Equations"))
             for formula in summary.formulas:
@@ -59,15 +77,24 @@ class NotionStudyPageMapper:
             for example in summary.examples:
                 blocks.append(NotionBlock(kind="heading_2", text=example.title))
                 blocks.extend(paragraph(example.explanation))
-        if summary.takeaways:
-            blocks.append(NotionBlock(kind="heading_2", text="Important Takeaways"))
+        main_takeaways = summary.takeaways[:5]
+        if main_takeaways:
+            blocks.append(NotionBlock(kind="heading_2", text="Takeaways"))
             blocks.extend(
                 NotionBlock(kind="bulleted_list_item", text=item)
-                for takeaway in summary.takeaways
+                for takeaway in main_takeaways
                 for item in chunks(takeaway)
             )
-        if summary.review_questions:
-            blocks.append(NotionBlock(kind="heading_2", text="Review Questions"))
+        if summary.quiz_questions:
+            blocks.append(NotionBlock(kind="heading_2", text="Mini Lecture Quiz"))
+            for item in summary.quiz_questions:
+                children = paragraph(item.answer)
+                note = source_note(item.source_refs)
+                if note:
+                    children.extend(paragraph(note))
+                blocks.append(NotionBlock(kind="toggle", text=item.question, children=children))
+        elif summary.review_questions:
+            blocks.append(NotionBlock(kind="heading_2", text="Mini Lecture Quiz"))
             blocks.extend(
                 NotionBlock(kind="numbered_list_item", text=item)
                 for question in summary.review_questions
