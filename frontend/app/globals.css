@@ -314,7 +314,6 @@ p {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  border-top: 1px solid var(--line);
   padding: 30px 0;
 }
 .empty-state > svg {
@@ -519,6 +518,10 @@ p {
   padding: 22px;
   font-size: 13px;
   font-weight: 550;
+}
+.learn-drop.compact {
+  min-height: 115px;
+  padding: 18px;
 }
 .learn-drop input {
   max-width: 100%;

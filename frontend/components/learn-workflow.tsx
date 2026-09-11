@@ -208,6 +208,19 @@ export function LearnRun({ id }: { id: string }) {
     },
     onSuccess: invalidate,
   });
+  const [file, setFile] = useState<File | null>(null);
+  const [pasted, setPasted] = useState("");
+  const upload = useMutation({
+    mutationFn: async () => {
+      const selected = file || fileFromText(pasted);
+      return learn.upload(id, selected);
+    },
+    onSuccess: async () => {
+      setFile(null);
+      setPasted("");
+      await invalidate();
+    },
+  });
   const execute = useMutation({
     mutationFn: () => learn.execute(id),
     onSuccess: invalidate,
@@ -221,6 +234,7 @@ export function LearnRun({ id }: { id: string }) {
     summarize.isPending ||
     save.isPending ||
     resolve.isPending ||
+    upload.isPending ||
     execute.isPending ||
     refreshDestinations.isPending ||
     syncDestination.isPending;
@@ -231,6 +245,15 @@ export function LearnRun({ id }: { id: string }) {
   const hasDestination = Boolean(
     data.approval?.original_payload.parent_destination_id,
   );
+  const maxSize = config.data?.max_upload_bytes;
+  const chosenSize = file?.size || new Blob([pasted]).size;
+  const tooLarge = Boolean(maxSize && chosenSize > maxSize);
+  const canUpload =
+    data.run.status === "DRAFT" &&
+    !data.source &&
+    Boolean(file || pasted.trim()) &&
+    !tooLarge &&
+    !busy;
 
   return (
     <>
@@ -251,6 +274,7 @@ export function LearnRun({ id }: { id: string }) {
           summarize.error ||
           save.error ||
           resolve.error ||
+          upload.error ||
           execute.error ||
           refreshDestinations.error ||
           syncDestination.error ||
@@ -264,7 +288,17 @@ export function LearnRun({ id }: { id: string }) {
         </div>
       )}
       <section className="my-8 grid gap-5 lg:grid-cols-3">
-        <SourcePanel detail={data} />
+        <SourcePanel
+          detail={data}
+          file={file}
+          pasted={pasted}
+          tooLarge={tooLarge}
+          canUpload={canUpload}
+          uploading={upload.isPending}
+          setFile={setFile}
+          setPasted={setPasted}
+          upload={() => upload.mutate()}
+        />
         <ProcessingPanel
           detail={data}
           busy={busy}
@@ -389,8 +423,24 @@ function SummaryReview({
 
 function SourcePanel({
   detail,
+  file,
+  pasted,
+  tooLarge,
+  canUpload,
+  uploading,
+  setFile,
+  setPasted,
+  upload,
 }: {
   detail: Awaited<ReturnType<typeof learn.detail>>;
+  file: File | null;
+  pasted: string;
+  tooLarge: boolean;
+  canUpload: boolean;
+  uploading: boolean;
+  setFile: (file: File | null) => void;
+  setPasted: (text: string) => void;
+  upload: () => void;
 }) {
   return (
     <article className="panel">
@@ -410,6 +460,43 @@ function SourcePanel({
               : ""}
             .
           </p>
+        </div>
+      ) : detail.run.status === "DRAFT" ? (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Upload a lecture document or paste notes to continue this draft.
+          </p>
+          <label className="learn-drop compact">
+            <Upload aria-hidden="true" />
+            <span>
+              {file ? file.name : "Choose PDF, DOCX, Markdown, or text"}
+            </span>
+            <input
+              type="file"
+              accept=".pdf,.docx,.md,.markdown,.txt,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+              onChange={(event: ChangeEvent<HTMLInputElement>) =>
+                setFile(event.target.files?.[0] || null)
+              }
+            />
+          </label>
+          <label className="field">
+            Paste lecture text
+            <textarea
+              rows={5}
+              value={pasted}
+              onChange={(event) => setPasted(event.target.value)}
+              placeholder="Paste notes here when you do not have a file."
+            />
+          </label>
+          {tooLarge && (
+            <p className="text-sm text-danger">
+              This source is larger than the configured upload limit.
+            </p>
+          )}
+          <button className="button" disabled={!canUpload} onClick={upload}>
+            <Upload aria-hidden="true" />
+            {uploading ? "Uploading..." : "Upload source"}
+          </button>
         </div>
       ) : (
         <p className="text-sm text-muted">No source has been uploaded.</p>
