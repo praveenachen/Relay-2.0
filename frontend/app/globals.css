@@ -232,6 +232,11 @@ p {
     color: var(--danger);
     background: var(--danger-soft);
   }
+  .notice.next-step {
+    border-color: #b9c8bc;
+    background: #f2f7f1;
+    color: var(--foreground);
+  }
   .badge {
     display: inline-flex;
     border: 1px solid var(--line);

@@ -1,7 +1,5 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   usePendingApprovals,
   useIncompleteRun,
@@ -9,7 +7,6 @@ import {
   useRuns,
   useUser,
 } from "@/hooks/queries";
-import { runs as runApi } from "@/features/workflow-runs/api";
 import { displayFor } from "@/features/workflows/display";
 import { Empty, ErrorMessage, Loading, PageTitle } from "@/components/ui";
 import { RunList } from "@/components/run-list";
@@ -20,15 +17,6 @@ export default function Dashboard() {
     runs = useRuns(),
     approvals = usePendingApprovals(),
     unfinished = useIncompleteRun();
-  const router = useRouter(),
-    cache = useQueryClient();
-  const create = useMutation({
-    mutationFn: runApi.create,
-    onSuccess: async (run) => {
-      await cache.invalidateQueries({ queryKey: ["runs"] });
-      router.push(`/runs/${run.id}`);
-    },
-  });
   if (
     user.isPending ||
     definitions.isPending ||
@@ -104,8 +92,8 @@ export default function Dashboard() {
       <section className="mb-10">
         <h2 className="section-title">Start a Relay</h2>
         <p className="mb-5 text-sm text-muted">
-          Create a draft to organize your intent. Automation is coming in a
-          later phase.
+          Pick a workflow to upload sources, prepare a draft, and review the
+          exact action before Relay writes to your tools.
         </p>
         <div className="grid gap-5 md:grid-cols-3">
           {definitions.data?.map((definition, index) => {
@@ -119,32 +107,25 @@ export default function Dashboard() {
                 <p className="mb-6 mt-3 min-h-18 text-sm leading-6 text-muted">
                   {definition.description}
                 </p>
-                <div className="flex flex-wrap items-center gap-4">
-                  <button
-                    className="button secondary"
-                    disabled={!definition.enabled || create.isPending}
-                    onClick={() => create.mutate(definition.id)}
+                {display ? (
+                  <Link
+                    className="button"
+                    href={`/workflows/${display.slug}`}
+                    aria-disabled={!definition.enabled}
                   >
-                    {!definition.enabled
-                      ? "Unavailable"
-                      : create.isPending && create.variables === definition.id
-                        ? "Creating..."
-                        : "Create draft"}
+                    {definition.enabled
+                      ? `Start ${display.pillar.toLowerCase()}`
+                      : "Unavailable"}
+                  </Link>
+                ) : (
+                  <button className="button secondary" disabled>
+                    Unavailable
                   </button>
-                  {display && (
-                    <Link
-                      className="text-sm text-accent underline"
-                      href={`/workflows/${display.slug}`}
-                    >
-                      How it works
-                    </Link>
-                  )}
-                </div>
+                )}
               </article>
             );
           })}
         </div>
-        <ErrorMessage error={create.error} />
       </section>
       <section>
         <div className="mb-4 flex items-center justify-between">

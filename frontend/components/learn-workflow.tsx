@@ -254,6 +254,7 @@ export function LearnRun({ id }: { id: string }) {
     Boolean(file || pasted.trim()) &&
     !tooLarge &&
     !busy;
+  const nextStep = learnNextStep(data, busy, canUpload);
 
   return (
     <>
@@ -268,6 +269,7 @@ export function LearnRun({ id }: { id: string }) {
         destinations={[{ label: "Notion" }]}
         status={data.run.status}
       />
+      <NextStepNotice {...nextStep} />
       <ErrorMessage
         error={
           parse.error ||
@@ -381,6 +383,78 @@ export function LearnRun({ id }: { id: string }) {
         </section>
       )}
     </>
+  );
+}
+
+function learnNextStep(
+  detail: Awaited<ReturnType<typeof learn.detail>>,
+  busy: boolean,
+  canUpload: boolean,
+) {
+  if (busy) {
+    return {
+      title: "Relay is working on this step.",
+      description: "Wait for the current action to finish before moving on.",
+    };
+  }
+  if (canUpload || (detail.run.status === "DRAFT" && !detail.source)) {
+    return {
+      title: "Next: upload lecture notes.",
+      description:
+        "Use the Source card below to upload a file or paste text into this draft.",
+    };
+  }
+  if (detail.run.status === "DRAFT" && detail.source) {
+    return {
+      title: "Next: parse the source.",
+      description:
+        "Relay will read the uploaded document and break it into page-aware sections.",
+    };
+  }
+  if (detail.run.status === "ANALYZING" && detail.source?.status === "PARSED") {
+    return {
+      title: "Next: summarize the parsed source.",
+      description:
+        detail.provider === "fake"
+          ? "Local fake mode creates a demo draft from parsed text, so it may repeat headings instead of writing polished notes."
+          : "Relay will generate a sourced study-page draft for review.",
+    };
+  }
+  if (detail.approval?.status === "PENDING") {
+    return {
+      title: "Next: review and approve the study page.",
+      description:
+        "Edit anything that looks wrong, save changes if needed, then approve the exact payload before publishing.",
+    };
+  }
+  if (detail.run.status === "APPROVED") {
+    return {
+      title: "Next: publish to Notion.",
+      description:
+        "The payload is approved and ready to send to your selected Notion destination.",
+    };
+  }
+  return {
+    title: "Workflow status updated.",
+    description:
+      "Relay will show the next available action as the run progresses.",
+  };
+}
+
+function NextStepNotice({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="notice next-step my-6">
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="mt-1">{description}</p>
+      </div>
+    </div>
   );
 }
 
@@ -528,7 +602,7 @@ function ProcessingPanel({
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         <button
-          className="button secondary"
+          className={canParse && !busy ? "button" : "button secondary"}
           disabled={!canParse || busy}
           onClick={parse}
         >
@@ -536,7 +610,7 @@ function ProcessingPanel({
           Parse
         </button>
         <button
-          className="button secondary"
+          className={canSummarize && !busy ? "button" : "button secondary"}
           disabled={!canSummarize || busy}
           onClick={summarize}
         >
@@ -654,7 +728,14 @@ function SummaryEditor({
   return (
     <section className="panel">
       <div className="section-heading">
-        <h2 className="section-title">Study page draft</h2>
+        <div>
+          <h2 className="section-title">Study page draft</h2>
+          <p className="text-sm text-muted">
+            Relay extracted this editable draft from your source. Review it for
+            repeated headings, missing context, or anything you would not want
+            published to Notion.
+          </p>
+        </div>
         <div className="flex flex-wrap gap-3">
           <button
             className="button secondary"
@@ -664,11 +745,19 @@ function SummaryEditor({
             <RotateCcw aria-hidden="true" />
             Reset
           </button>
-          <button className="button" disabled={!canSave} onClick={onSave}>
+          <button
+            className={canSave ? "button" : "button secondary"}
+            disabled={!canSave}
+            onClick={onSave}
+          >
             <Save aria-hidden="true" />
             Save notes
           </button>
-          <button className="button" disabled={!canApprove} onClick={onApprove}>
+          <button
+            className={canApprove ? "button" : "button secondary"}
+            disabled={!canApprove}
+            onClick={onApprove}
+          >
             <Check aria-hidden="true" />
             Approve
           </button>
