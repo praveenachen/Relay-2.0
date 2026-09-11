@@ -365,13 +365,23 @@ p {
   padding: 30px 0 18px;
 }
 .relay-track {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(100px, 1fr) minmax(260px, 3fr) minmax(
       100px,
       1fr
     );
-  align-items: center;
+  align-items: start;
   gap: 0;
+}
+.relay-track::before {
+  content: "";
+  position: absolute;
+  top: 66px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--line);
 }
 .relay-endpoints .system-label {
   margin-bottom: 9px;
@@ -403,28 +413,12 @@ p {
   width: 13px;
   height: 13px;
 }
-.relay-endpoints.sources ul::after,
-.relay-endpoints.destinations ul::before {
-  content: "";
-  position: absolute;
-  top: 15px;
-  bottom: 15px;
-  width: 10px;
-  border-block: 1px solid var(--line);
-}
-.relay-endpoints.sources ul::after {
-  right: -10px;
-  border-right: 1px solid var(--line);
-}
-.relay-endpoints.destinations ul::before {
-  left: -10px;
-  border-left: 1px solid var(--line);
-}
 .relay-stages {
   display: grid;
   grid-template-columns: repeat(var(--stage-count, 4), minmax(0, 1fr));
   position: relative;
   padding-inline: 18px;
+  padding-top: 52px;
 }
 .relay-stage {
   position: relative;
@@ -434,27 +428,6 @@ p {
   text-align: center;
   min-width: 0;
   gap: 5px;
-}
-.relay-stage::before {
-  content: "";
-  position: absolute;
-  top: 13px;
-  height: 1px;
-  background: var(--line);
-  left: -50%;
-  right: 50%;
-}
-.relay-stage:first-child::before {
-  left: -18px;
-}
-.relay-stage:last-child::after {
-  content: "";
-  position: absolute;
-  top: 13px;
-  height: 1px;
-  background: var(--line);
-  left: 50%;
-  right: -18px;
 }
 .relay-node {
   position: relative;
@@ -480,9 +453,6 @@ p {
   background: var(--accent);
   color: white;
   border-color: var(--accent);
-}
-.relay-stage.complete::before {
-  background: var(--accent);
 }
 .relay-stage.active .relay-node {
   color: var(--accent);
