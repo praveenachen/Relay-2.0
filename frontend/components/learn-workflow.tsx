@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
+  ChevronDown,
   FileText,
+  Pencil,
   Play,
   Plus,
   RotateCcw,
@@ -483,14 +485,24 @@ function SummaryReview({
   onSave: (summary: LectureSummary, expectedPayload: unknown) => void;
 }) {
   const [draft, setDraft] = useState(summary);
+  const [editing, setEditing] = useState(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(summary);
   return (
     <SummaryEditor
       value={draft}
       onChange={setDraft}
       disabled={!pending || busy}
-      onSave={() => approvalPayload && onSave(draft, approvalPayload)}
-      onReset={() => setDraft(summary)}
+      editing={editing}
+      setEditing={setEditing}
+      onSave={() => {
+        if (!approvalPayload) return;
+        onSave(draft, approvalPayload);
+        setEditing(false);
+      }}
+      onReset={() => {
+        setDraft(summary);
+        setEditing(false);
+      }}
       canSave={Boolean(pending && dirty && approvalPayload) && !busy}
       canApprove={
         pending && !dirty && (!realPublish || hasDestination) && !busy
@@ -714,6 +726,8 @@ function SummaryEditor({
   value,
   onChange,
   disabled,
+  editing,
+  setEditing,
   onSave,
   onReset,
   canSave,
@@ -723,6 +737,8 @@ function SummaryEditor({
   value: LectureSummary;
   onChange: (value: LectureSummary) => void;
   disabled: boolean;
+  editing: boolean;
+  setEditing: (editing: boolean) => void;
   onSave: () => void;
   onReset: () => void;
   canSave: boolean;
@@ -739,28 +755,40 @@ function SummaryEditor({
         <div>
           <h2 className="section-title">Study page draft</h2>
           <p className="text-sm text-muted">
-            Relay extracted this editable draft from your source. Review it for
-            repeated headings, missing context, or anything you would not want
-            published to Notion.
+            Review this as one study document. Switch to edit mode only if you
+            need to adjust the generated notes before approval.
           </p>
         </div>
         <div className="flex flex-wrap gap-3">
-          <button
-            className="button secondary"
-            disabled={disabled}
-            onClick={onReset}
-          >
-            <RotateCcw aria-hidden="true" />
-            Reset
-          </button>
-          <button
-            className={canSave ? "button" : "button secondary"}
-            disabled={!canSave}
-            onClick={onSave}
-          >
-            <Save aria-hidden="true" />
-            Save notes
-          </button>
+          {editing ? (
+            <>
+              <button
+                className="button secondary"
+                disabled={disabled}
+                onClick={onReset}
+              >
+                <RotateCcw aria-hidden="true" />
+                Reset
+              </button>
+              <button
+                className={canSave ? "button" : "button secondary"}
+                disabled={!canSave}
+                onClick={onSave}
+              >
+                <Save aria-hidden="true" />
+                Save notes
+              </button>
+            </>
+          ) : (
+            <button
+              className="button secondary"
+              disabled={disabled}
+              onClick={() => setEditing(true)}
+            >
+              <Pencil aria-hidden="true" />
+              Edit notes
+            </button>
+          )}
           <button
             className={canApprove ? "button" : "button secondary"}
             disabled={!canApprove}
@@ -771,73 +799,161 @@ function SummaryEditor({
           </button>
         </div>
       </div>
-      <div className="grid gap-5">
-        <label className="field">
-          Title
-          <input
+      {editing ? (
+        <div className="grid gap-5">
+          <label className="field">
+            Title
+            <input
+              disabled={disabled}
+              value={value.title}
+              onChange={(event) => set("title", event.target.value)}
+            />
+          </label>
+          <label className="field">
+            Overview
+            <textarea
+              disabled={disabled}
+              rows={5}
+              value={value.overview}
+              onChange={(event) => set("overview", event.target.value)}
+            />
+          </label>
+          <TextList
+            title="Takeaways"
+            values={value.takeaways}
             disabled={disabled}
-            value={value.title}
-            onChange={(event) => set("title", event.target.value)}
+            collapsible
+            onChange={(items) => set("takeaways", items)}
           />
-        </label>
-        <label className="field">
-          Overview
-          <textarea
+          <TextList
+            title="Review questions"
+            values={value.review_questions}
             disabled={disabled}
-            rows={5}
-            value={value.overview}
-            onChange={(event) => set("overview", event.target.value)}
+            collapsible
+            onChange={(items) => set("review_questions", items)}
           />
-        </label>
-        <TextList
-          title="Takeaways"
-          values={value.takeaways}
-          disabled={disabled}
-          collapsible
-          onChange={(items) => set("takeaways", items)}
-        />
-        <TextList
-          title="Review questions"
-          values={value.review_questions}
-          disabled={disabled}
-          collapsible
-          onChange={(items) => set("review_questions", items)}
-        />
-        <PairList
-          title="Key concepts"
-          values={value.key_concepts}
-          first="name"
-          second="explanation"
-          disabled={disabled}
-          collapsible
-          onChange={(items) => set("key_concepts", items)}
-        />
-        <PairList
-          title="Study notes"
-          values={value.sections}
-          first="heading"
-          second="text"
-          disabled={disabled}
-          onChange={(items) => set("sections", items)}
-        />
-        <PairList
-          title="Definitions"
-          values={value.definitions}
-          first="term"
-          second="definition"
-          disabled={disabled}
-          onChange={(items) => set("definitions", items)}
-        />
-        <PairList
-          title="Examples"
-          values={value.examples}
-          first="title"
-          second="explanation"
-          disabled={disabled}
-          onChange={(items) => set("examples", items)}
-        />
-      </div>
+          <PairList
+            title="Key concepts"
+            values={value.key_concepts}
+            first="name"
+            second="explanation"
+            disabled={disabled}
+            collapsible
+            onChange={(items) => set("key_concepts", items)}
+          />
+          <PairList
+            title="Study notes"
+            values={value.sections}
+            first="heading"
+            second="text"
+            disabled={disabled}
+            collapsible
+            onChange={(items) => set("sections", items)}
+          />
+          <PairList
+            title="Definitions"
+            values={value.definitions}
+            first="term"
+            second="definition"
+            disabled={disabled}
+            collapsible
+            onChange={(items) => set("definitions", items)}
+          />
+          <PairList
+            title="Examples"
+            values={value.examples}
+            first="title"
+            second="explanation"
+            disabled={disabled}
+            collapsible
+            onChange={(items) => set("examples", items)}
+          />
+        </div>
+      ) : (
+        <StudyPagePreview summary={value} />
+      )}
     </section>
+  );
+}
+
+function StudyPagePreview({ summary }: { summary: LectureSummary }) {
+  return (
+    <article className="study-document">
+      <header>
+        <h1>{summary.title}</h1>
+        <p>{summary.overview}</p>
+      </header>
+      {summary.sections.length > 0 && (
+        <section>
+          <h2>Study notes</h2>
+          {summary.sections.map((section, index) => (
+            <div className="study-document-section" key={index}>
+              <h3>{section.heading}</h3>
+              <p>{section.text}</p>
+              <p className="context-tag">{refsLabel(section.source_refs)}</p>
+            </div>
+          ))}
+        </section>
+      )}
+      {summary.key_concepts.length > 0 && (
+        <section>
+          <h2>Key concepts</h2>
+          <dl className="study-document-list">
+            {summary.key_concepts.map((concept, index) => (
+              <div key={index}>
+                <dt>{concept.name}</dt>
+                <dd>{concept.explanation}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+      {summary.definitions.length > 0 && (
+        <section>
+          <h2>Definitions</h2>
+          <dl className="study-document-list">
+            {summary.definitions.map((definition, index) => (
+              <div key={index}>
+                <dt>{definition.term}</dt>
+                <dd>{definition.definition}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      )}
+      {summary.examples.length > 0 && (
+        <section>
+          <h2>Examples</h2>
+          {summary.examples.map((example, index) => (
+            <div className="study-document-section" key={index}>
+              <h3>{example.title}</h3>
+              <p>{example.explanation}</p>
+              <p className="context-tag">{refsLabel(example.source_refs)}</p>
+            </div>
+          ))}
+        </section>
+      )}
+      {summary.takeaways.length > 0 && (
+        <section>
+          <h2>Takeaways</h2>
+          <ul>
+            {summary.takeaways.map((takeaway, index) => (
+              <li key={index}>{takeaway}</li>
+            ))}
+          </ul>
+        </section>
+      )}
+      {summary.review_questions.length > 0 && (
+        <section>
+          <h2>Review questions</h2>
+          <ol>
+            {summary.review_questions.map((question, index) => (
+              <li key={index}>{question}</li>
+            ))}
+          </ol>
+        </section>
+      )}
+    </article>
   );
 }
 
@@ -901,9 +1017,7 @@ function TextList({
       <details className="learn-disclosure">
         <summary>
           <span>{title}</span>
-          <span className="text-sm text-muted">
-            {values.length} {values.length === 1 ? "item" : "items"}
-          </span>
+          <ChevronDown className="learn-disclosure-icon" aria-hidden="true" />
         </summary>
         <div className="mt-4">{content}</div>
       </details>
@@ -990,9 +1104,7 @@ function PairList<
       <details className="learn-disclosure">
         <summary>
           <span>{title}</span>
-          <span className="text-sm text-muted">
-            {values.length} {values.length === 1 ? "item" : "items"}
-          </span>
+          <ChevronDown className="learn-disclosure-icon" aria-hidden="true" />
         </summary>
         <div className="mt-4">{content}</div>
       </details>
