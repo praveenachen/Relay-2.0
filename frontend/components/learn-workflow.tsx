@@ -666,19 +666,36 @@ function ApprovalPanel({
 }) {
   const pending = detail.approval?.status === "PENDING";
   const payload = detail.approval?.original_payload;
+  const workspace = String(
+    payload?.workspace_name || connectionName || "Notion",
+  );
+  const destination = payload?.parent_destination_title
+    ? String(payload.parent_destination_title)
+    : realPublish
+      ? "Choose a Notion page before approval"
+      : "Mock Notion destination";
   return (
-    <article className="panel">
+    <article className="panel destination-panel">
       <h2 className="section-title">Destination</h2>
-      <p className="text-sm font-medium">
-        {String(payload?.workspace_name || connectionName || "Notion")}
-      </p>
-      <p className="mt-2 text-sm text-muted">
-        {String(payload?.parent_destination_title || "No destination selected")}
-      </p>
-      {realPublish && pending && !hasDestination && (
+      <div className="destination-summary">
+        <p className="text-sm text-muted">Workspace</p>
+        <p className="font-medium">{workspace}</p>
+      </div>
+      <div className="destination-summary mt-4">
+        <p className="text-sm text-muted">Publish location</p>
+        <p className="font-medium">{destination}</p>
+        {!realPublish && !hasDestination && (
+          <p className="mt-2 text-sm text-muted">
+            Local mock mode records a simulated Notion artifact, so no real page
+            is required.
+          </p>
+        )}
+      </div>
+      {realPublish && !hasDestination && (
         <div className="notice mt-4">
           <p>
-            Connect Notion and choose a default destination before approval.
+            Choose a default Notion page on Connections, then use it here before
+            approving.
           </p>
         </div>
       )}
@@ -699,12 +716,22 @@ function ApprovalPanel({
             disabled={busy}
             onClick={syncDestination}
           >
-            Use default
+            Use default page
           </button>
         </div>
       )}
       <h2 className="section-title mt-8">Approval</h2>
-      {detail.approval ? <Status value={detail.approval.status} /> : null}
+      <div className="approval-action-row">
+        <div>
+          {detail.approval ? <Status value={detail.approval.status} /> : null}
+        </div>
+        {detail.run.status === "APPROVED" && (
+          <button className="button" disabled={busy} onClick={execute}>
+            <Send aria-hidden="true" />
+            Publish to Notion
+          </button>
+        )}
+      </div>
       {pending && (
         <div className="mt-5 flex flex-wrap gap-3">
           <button className="button secondary" disabled={busy} onClick={reject}>
@@ -712,12 +739,6 @@ function ApprovalPanel({
             Reject
           </button>
         </div>
-      )}
-      {detail.run.status === "APPROVED" && (
-        <button className="button mt-5" disabled={busy} onClick={execute}>
-          <Send aria-hidden="true" />
-          Publish to Notion
-        </button>
       )}
     </article>
   );

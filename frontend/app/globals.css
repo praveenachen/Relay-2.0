@@ -626,6 +626,20 @@ p {
 .learn-disclosure[open] .learn-disclosure-icon {
   transform: rotate(180deg);
 }
+.destination-summary {
+  border-left: 2px solid var(--line);
+  padding-left: 14px;
+}
+.approval-action-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  justify-content: space-between;
+}
+.approval-action-row .button {
+  margin-left: auto;
+}
 .study-document {
   display: grid;
   gap: 30px;
