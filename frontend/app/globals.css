@@ -599,6 +599,32 @@ p {
   padding: 16px;
   background: #fffefa;
 }
+.learn-disclosure {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: #fffefa;
+  padding: 14px 16px;
+}
+.learn-disclosure summary {
+  display: flex;
+  cursor: pointer;
+  list-style: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-weight: 600;
+}
+.learn-disclosure summary::-webkit-details-marker {
+  display: none;
+}
+.learn-disclosure summary::after {
+  content: "+";
+  color: var(--muted);
+  font-weight: 400;
+}
+.learn-disclosure[open] summary::after {
+  content: "-";
+}
 .learn-result {
   border-left: 2px solid var(--accent);
   padding-left: 16px;

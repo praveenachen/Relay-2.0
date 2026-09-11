@@ -793,12 +793,14 @@ function SummaryEditor({
           title="Takeaways"
           values={value.takeaways}
           disabled={disabled}
+          collapsible
           onChange={(items) => set("takeaways", items)}
         />
         <TextList
           title="Review questions"
           values={value.review_questions}
           disabled={disabled}
+          collapsible
           onChange={(items) => set("review_questions", items)}
         />
         <PairList
@@ -807,6 +809,7 @@ function SummaryEditor({
           first="name"
           second="explanation"
           disabled={disabled}
+          collapsible
           onChange={(items) => set("key_concepts", items)}
         />
         <PairList
@@ -842,17 +845,19 @@ function TextList({
   title,
   values,
   disabled,
+  collapsible = false,
   onChange,
 }: {
   title: string;
   values: string[];
   disabled: boolean;
+  collapsible?: boolean;
   onChange: (values: string[]) => void;
 }) {
-  return (
-    <div>
+  const content = (
+    <>
       <div className="section-heading">
-        <h3 className="section-title">{title}</h3>
+        {!collapsible && <h3 className="section-title">{title}</h3>}
         <button
           className="button secondary"
           disabled={disabled}
@@ -888,8 +893,32 @@ function TextList({
           </div>
         ))}
       </div>
-    </div>
+    </>
   );
+
+  if (collapsible) {
+    return (
+      <details className="learn-disclosure">
+        <summary>
+          <span>{title}</span>
+          <span className="text-sm text-muted">
+            {values.length} {values.length === 1 ? "item" : "items"}
+          </span>
+        </summary>
+        <div className="mt-4">{content}</div>
+      </details>
+    );
+  }
+
+  return <div>{content}</div>;
+}
+
+function labelFor(field: string) {
+  return field
+    .replaceAll("_", " ")
+    .split(" ")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function PairList<
@@ -902,6 +931,7 @@ function PairList<
   first,
   second,
   disabled,
+  collapsible = false,
   onChange,
 }: {
   title: string;
@@ -909,51 +939,70 @@ function PairList<
   first: keyof T & string;
   second: keyof T & string;
   disabled: boolean;
+  collapsible?: boolean;
   onChange: (values: T[]) => void;
 }) {
+  const content = (
+    <div className="grid gap-4">
+      {values.map((item, index) => (
+        <article className="learn-card" key={index}>
+          <label className="field">
+            {labelFor(first)}
+            <input
+              disabled={disabled}
+              value={String(item[first] || "")}
+              onChange={(event) =>
+                onChange(
+                  values.map((value, i) =>
+                    i === index
+                      ? ({ ...value, [first]: event.target.value } as T)
+                      : value,
+                  ),
+                )
+              }
+            />
+          </label>
+          <label className="field">
+            {labelFor(second)}
+            <textarea
+              disabled={disabled}
+              rows={3}
+              value={String(item[second] || "")}
+              onChange={(event) =>
+                onChange(
+                  values.map((value, i) =>
+                    i === index
+                      ? ({ ...value, [second]: event.target.value } as T)
+                      : value,
+                  ),
+                )
+              }
+            />
+          </label>
+          <p className="context-tag">{refsLabel(item.source_refs)}</p>
+        </article>
+      ))}
+    </div>
+  );
+
+  if (collapsible) {
+    return (
+      <details className="learn-disclosure">
+        <summary>
+          <span>{title}</span>
+          <span className="text-sm text-muted">
+            {values.length} {values.length === 1 ? "item" : "items"}
+          </span>
+        </summary>
+        <div className="mt-4">{content}</div>
+      </details>
+    );
+  }
+
   return (
     <div>
       <h3 className="section-title">{title}</h3>
-      <div className="grid gap-4">
-        {values.map((item, index) => (
-          <article className="learn-card" key={index}>
-            <label className="field">
-              {first.replaceAll("_", " ")}
-              <input
-                disabled={disabled}
-                value={String(item[first] || "")}
-                onChange={(event) =>
-                  onChange(
-                    values.map((value, i) =>
-                      i === index
-                        ? ({ ...value, [first]: event.target.value } as T)
-                        : value,
-                    ),
-                  )
-                }
-              />
-            </label>
-            <label className="field">
-              {second.replaceAll("_", " ")}
-              <textarea
-                disabled={disabled}
-                rows={3}
-                value={String(item[second] || "")}
-                onChange={(event) =>
-                  onChange(
-                    values.map((value, i) =>
-                      i === index
-                        ? ({ ...value, [second]: event.target.value } as T)
-                        : value,
-                    ),
-                  )
-                }
-              />
-            </label>
-            <p className="context-tag">{refsLabel(item.source_refs)}</p>
-          </article>
-        ))}
-      </div>
+      {content}
     </div>
   );
 }
