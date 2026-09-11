@@ -23,6 +23,40 @@ def backend(*args: str) -> None:
     run([str(PYTHON), "-m", *args], BACKEND)
 
 
+def run_dev_servers() -> None:
+    processes: list[subprocess.Popen[bytes]] = []
+    try:
+        processes.append(
+            subprocess.Popen(
+                [str(PYTHON), "-m", "uvicorn", "app.main:app", "--reload"],
+                cwd=BACKEND,
+            )
+        )
+        processes.append(subprocess.Popen([NPM, "run", "dev"], cwd=FRONTEND))
+        while all(process.poll() is None for process in processes):
+            time.sleep(0.5)
+        raise RuntimeError("A development server exited; stopping both servers.")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                if os.name == "nt":
+                    subprocess.run(
+                        ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                        check=False,
+                        stdout=subprocess.DEVNULL,
+                    )
+                else:
+                    process.terminate()
+        for process in processes:
+            try:
+                process.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -30,6 +64,7 @@ def main() -> None:
         choices=[
             "setup",
             "dev",
+            "dev-fast",
             "test",
             "lint",
             "build",
@@ -71,38 +106,9 @@ def main() -> None:
     elif command == "dev":
         run(["docker", "compose", "up", "-d", "--wait"])
         backend("alembic", "upgrade", "head")
-        processes: list[subprocess.Popen[bytes]] = []
-        try:
-            processes.append(
-                subprocess.Popen(
-                    [str(PYTHON), "-m", "uvicorn", "app.main:app", "--reload"],
-                    cwd=BACKEND,
-                )
-            )
-            processes.append(subprocess.Popen([NPM, "run", "dev"], cwd=FRONTEND))
-            while all(process.poll() is None for process in processes):
-                time.sleep(0.5)
-            raise RuntimeError("A development server exited; stopping both servers.")
-        except KeyboardInterrupt:
-            pass
-        finally:
-            for process in processes:
-                if process.poll() is None:
-                    if os.name == "nt":
-                        subprocess.run(
-                            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-                            check=False,
-                            stdout=subprocess.DEVNULL,
-                        )
-                    else:
-                        process.terminate()
-            for process in processes:
-                try:
-                    process.wait(timeout=10)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-                    process.wait()
-
+        run_dev_servers()
+    elif command == "dev-fast":
+        run_dev_servers()
 
 if __name__ == "__main__":
     try:
@@ -110,3 +116,4 @@ if __name__ == "__main__":
     except (subprocess.CalledProcessError, FileNotFoundError, RuntimeError) as error:
         print(f"Command failed: {error}", file=sys.stderr)
         sys.exit(1)
+

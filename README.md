@@ -106,7 +106,7 @@ python scripts/dev.py setup
 python scripts/dev.py dev
 ```
 
-Setup creates `backend/.venv`, installs pinned dependencies, and copies `.env.example` / `frontend/.env.example` without overwriting existing local values. Dev starts PostgreSQL, applies migrations, and runs the backend and frontend.
+Setup creates `backend/.venv`, installs pinned dependencies, and copies `.env.example` / `frontend/.env.example` without overwriting existing local values. Dev starts PostgreSQL, applies migrations, and runs the backend and frontend. When PostgreSQL is already running and the schema is current, `python scripts/dev.py dev-fast` skips Docker and migrations for faster UI/backend testing.
 
 Useful URLs:
 
@@ -121,6 +121,7 @@ No OAuth keys are required for mock/local flows. To use real integrations locall
 | -------------- | ------------------------------- | --------------------------------------------- |
 | `make setup`   | `python scripts/dev.py setup`   | Install dependencies and initialize env files |
 | `make dev`     | `python scripts/dev.py dev`     | Start DB, migrate, run apps                   |
+| `make dev-fast` | `python scripts/dev.py dev-fast` | Run apps only; skip DB startup and migrations |
 | `make test`    | `python scripts/dev.py test`    | Backend tests and browser flows               |
 | `make lint`    | `python scripts/dev.py lint`    | Ruff, mypy, ESLint, Prettier, TypeScript      |
 | `make build`   | `python scripts/dev.py build`   | Production frontend build                     |
@@ -159,3 +160,4 @@ Normal CI does not require OpenAI, Notion, Google, GitHub, or a live Agent Runti
 ## License
 
 MIT. See [LICENSE](LICENSE).
+
