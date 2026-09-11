@@ -176,9 +176,35 @@ export function LearnRun({ id }: { id: string }) {
     queryKey: ["connections"],
     queryFn: connections.list,
   });
+  const notionDestinations = useQuery({
+    queryKey: ["connections", "notion-destinations"],
+    queryFn: connections.notionDestinations,
+    enabled: Boolean(
+      notionConnections.data?.some(
+        (item) => item.provider === "NOTION" && item.status === "CONNECTED",
+      ),
+    ),
+  });
   const refreshDestinations = useMutation({
     mutationFn: connections.refreshNotionDestinations,
-    onSuccess: invalidate,
+    onSuccess: async () => {
+      await cache.invalidateQueries({
+        queryKey: ["connections", "notion-destinations"],
+      });
+      await invalidate();
+    },
+  });
+  const selectDestination = useMutation({
+    mutationFn: async (destinationId: string) => {
+      await connections.selectNotionDestination(destinationId);
+      return learn.destination(id);
+    },
+    onSuccess: async () => {
+      await cache.invalidateQueries({
+        queryKey: ["connections", "notion-destinations"],
+      });
+      await invalidate();
+    },
   });
   const syncDestination = useMutation({
     mutationFn: () => learn.destination(id),
@@ -240,6 +266,7 @@ export function LearnRun({ id }: { id: string }) {
     upload.isPending ||
     execute.isPending ||
     refreshDestinations.isPending ||
+    selectDestination.isPending ||
     syncDestination.isPending;
   const notionConnection = notionConnections.data?.find(
     (item) => item.provider === "NOTION" && item.status === "CONNECTED",
@@ -269,6 +296,8 @@ export function LearnRun({ id }: { id: string }) {
     (pending && realPublish && !hasDestination
       ? refreshDestinations.error ||
         syncDestination.error ||
+        selectDestination.error ||
+        notionDestinations.error ||
         notionConnections.error
       : null);
 
@@ -318,6 +347,12 @@ export function LearnRun({ id }: { id: string }) {
           hasDestination={hasDestination}
           connectionName={notionConnection?.display_name}
           refreshDestinations={() => refreshDestinations.mutate()}
+          destinations={
+            refreshDestinations.data || notionDestinations.data || []
+          }
+          selectDestination={(destinationId) =>
+            selectDestination.mutate(destinationId)
+          }
           syncDestination={() => syncDestination.mutate()}
           reject={() => resolve.mutate({ approve: false })}
           execute={() => execute.mutate()}
@@ -650,6 +685,8 @@ function ApprovalPanel({
   hasDestination,
   connectionName,
   refreshDestinations,
+  destinations,
+  selectDestination,
   syncDestination,
   reject,
   execute,
@@ -660,6 +697,8 @@ function ApprovalPanel({
   hasDestination: boolean;
   connectionName?: string;
   refreshDestinations: () => void;
+  destinations: { id: string; title: string }[];
+  selectDestination: (destinationId: string) => void;
   syncDestination: () => void;
   reject: () => void;
   execute: () => void;
@@ -700,24 +739,45 @@ function ApprovalPanel({
         </div>
       )}
       {pending && (
-        <div className="mt-5 flex flex-wrap gap-3">
-          <Link className="button secondary" href="/connections">
-            Connections
-          </Link>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={refreshDestinations}
-          >
-            Refresh pages
-          </button>
-          <button
-            className="button secondary"
-            disabled={busy}
-            onClick={syncDestination}
-          >
-            Use default page
-          </button>
+        <div className="mt-5 grid gap-3">
+          <div className="flex flex-wrap gap-3">
+            <Link className="button secondary" href="/connections">
+              Connections
+            </Link>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={refreshDestinations}
+            >
+              Refresh pages
+            </button>
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={syncDestination}
+            >
+              Use default page
+            </button>
+          </div>
+          {destinations.length > 0 && (
+            <label className="field max-w-md">
+              Choose destination for this study page
+              <select
+                disabled={busy}
+                value={String(payload?.parent_destination_id || "")}
+                onChange={(event) =>
+                  event.target.value && selectDestination(event.target.value)
+                }
+              >
+                <option value="">Select a Notion page</option>
+                {destinations.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.title}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
       )}
       <h2 className="section-title mt-8">Approval</h2>
