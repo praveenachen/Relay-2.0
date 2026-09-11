@@ -350,6 +350,101 @@ export function CollaborateRun({ id }: { id: string }) {
   );
 }
 
+function transcriptNextStep(
+  data: CollaborateDetail,
+  busy: boolean,
+  hasDraftTranscript: boolean,
+) {
+  if (busy) {
+    return {
+      title: "Relay is working on this step.",
+      description: "Wait for the current action to finish before moving on.",
+    };
+  }
+  if (!data.source) {
+    return {
+      title: "Next: save a transcript.",
+      description: hasDraftTranscript
+        ? "Save the selected file or pasted transcript to continue."
+        : "Choose a transcript file or paste meeting notes below.",
+    };
+  }
+  if (data.stage !== "transcript_ready" && data.stage !== "plan_ready") {
+    return {
+      title: "Next: extract transcript segments.",
+      description:
+        "Relay will split the transcript into structured segments before analysis.",
+    };
+  }
+  return {
+    title: "Next: analyze the meeting.",
+    description:
+      "Relay will identify decisions, owners, deadlines, and proposed Notion or GitHub work.",
+  };
+}
+
+function collaborateReviewNextStep(
+  data: CollaborateDetail,
+  busy: boolean,
+  actionCount: number,
+  hasUnsavedEdits: boolean,
+) {
+  if (busy) {
+    return {
+      title: "Relay is working on this step.",
+      description: "Wait for the current action to finish before moving on.",
+    };
+  }
+  if (data.run.status === "PLAN_READY") {
+    return {
+      title: hasUnsavedEdits
+        ? "Next: save your action-item edits."
+        : "Next: request approval for project actions.",
+      description: hasUnsavedEdits
+        ? "Save the edited owners, deadlines, or destinations before asking for approval."
+        : actionCount
+          ? "Review the extracted action items, then request approval when they look right."
+          : "Relay did not find action items to approve in this transcript.",
+    };
+  }
+  if (data.approvals.some((approval) => approval.status === "PENDING")) {
+    return {
+      title: "Next: approve or reject each action.",
+      description:
+        "Approval is the final checkpoint before Relay writes to Notion or GitHub.",
+    };
+  }
+  if (data.run.status === "APPROVED") {
+    return {
+      title: "Next: create approved project work.",
+      description:
+        "Send the approved action items to their selected destinations.",
+    };
+  }
+  return {
+    title: "Workflow status updated.",
+    description:
+      "Relay will show the next available action as the collaboration workflow progresses.",
+  };
+}
+
+function NextStepNotice({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="notice next-step my-6">
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="mt-1">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 function TranscriptStage({
   id,
   data,
@@ -375,10 +470,16 @@ function TranscriptStage({
     onSuccess: invalidate,
   });
   const busy = upload.isPending || parse.isPending || analyze.isPending;
+  const nextStep = transcriptNextStep(
+    data,
+    busy,
+    Boolean(file || pasted.trim()),
+  );
 
   if (!data.source) {
     return (
       <section className="panel my-8">
+        <NextStepNotice {...nextStep} />
         <h2 className="section-title">Meeting transcript</h2>
         <label className="learn-drop">
           <Upload aria-hidden="true" />
@@ -424,6 +525,7 @@ function TranscriptStage({
 
   return (
     <section className="panel my-8">
+      <NextStepNotice {...nextStep} />
       <h2 className="section-title">Transcript saved</h2>
       <p className="text-sm text-muted">
         {data.source.filename} ({(data.source.size_bytes / 1024).toFixed(1)} KB)
@@ -432,7 +534,7 @@ function TranscriptStage({
       <div className="mt-5 flex flex-wrap gap-3">
         {data.stage !== "transcript_ready" && data.stage !== "plan_ready" && (
           <button
-            className="button secondary"
+            className="button"
             disabled={busy}
             onClick={() => parse.mutate()}
           >
@@ -525,6 +627,14 @@ function ReviewAndApprove({
 
   return (
     <section className="my-8 space-y-8">
+      <NextStepNotice
+        {...collaborateReviewNextStep(
+          data,
+          busy,
+          actionItems.length,
+          Boolean(items),
+        )}
+      />
       <ErrorMessage
         error={
           save.error ||
@@ -592,7 +702,7 @@ function ReviewAndApprove({
           <div className="mt-5 flex flex-wrap gap-3">
             {items && (
               <button
-                className="button secondary"
+                className="button"
                 disabled={busy}
                 onClick={() => save.mutate(actionItems)}
               >
@@ -600,7 +710,11 @@ function ReviewAndApprove({
               </button>
             )}
             <button
-              className="button"
+              className={
+                !items && actionItems.length > 0 && !busy
+                  ? "button"
+                  : "button secondary"
+              }
               disabled={busy || actionItems.length === 0}
               onClick={() => requestApproval.mutate()}
             >
@@ -633,7 +747,7 @@ function ReviewAndApprove({
                 {approval.status === "PENDING" && (
                   <div className="flex gap-2">
                     <button
-                      className="button secondary"
+                      className="button"
                       disabled={busy}
                       onClick={() => resolve.mutate(approval)}
                     >

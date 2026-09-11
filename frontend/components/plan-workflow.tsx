@@ -163,6 +163,106 @@ export function PlanRun({ id }: { id: string }) {
   );
 }
 
+function planSetupNextStep(
+  stage: string | undefined,
+  busy: boolean,
+  databaseId: string,
+  taskCount: number,
+) {
+  if (busy) {
+    return {
+      title: "Relay is working on this step.",
+      description: "Wait for the current action to finish before moving on.",
+    };
+  }
+  if (!stage || stage === "setup") {
+    return {
+      title: "Next: save your planning setup.",
+      description: databaseId
+        ? "Relay will use the selected Notion database after you save this setup."
+        : taskCount
+          ? "Save the manually entered tasks and planning window to continue."
+          : "Add at least one task, or choose a Notion task database, then save the setup.",
+    };
+  }
+  if (stage === "tasks_imported") {
+    return {
+      title: "Next: review tasks and load availability.",
+      description:
+        "Check deadlines and estimates, save edits if needed, then continue to calendar availability.",
+    };
+  }
+  if (stage === "availability_loaded") {
+    return {
+      title: "Next: generate the study plan.",
+      description:
+        "Relay will run the scheduler against tasks, deadlines, preferences, and calendar availability.",
+    };
+  }
+  return {
+    title: "Next: continue the plan setup.",
+    description: "Complete the active setup section below.",
+  };
+}
+
+function planReviewNextStep(
+  data: PlanDetail,
+  busy: boolean,
+  canRequestApproval: boolean,
+) {
+  if (busy) {
+    return {
+      title: "Relay is working on this step.",
+      description: "Wait for the current action to finish before moving on.",
+    };
+  }
+  if (data.run.status === "PLAN_READY") {
+    return {
+      title: canRequestApproval
+        ? "Next: request approval for this schedule."
+        : "Next: adjust this schedule before approval.",
+      description: canRequestApproval
+        ? "Review the sessions below, then request approval when the calendar blocks look right."
+        : "This schedule cannot be approved yet. Adjust the task load, planning window, or preferences.",
+    };
+  }
+  if (data.approval?.status === "PENDING") {
+    return {
+      title: "Next: approve or reject the plan.",
+      description:
+        "Approval is the final checkpoint before Relay writes to Google Calendar.",
+    };
+  }
+  if (data.run.status === "APPROVED") {
+    return {
+      title: "Next: publish the approved schedule.",
+      description: "Create the approved study blocks on Google Calendar.",
+    };
+  }
+  return {
+    title: "Workflow status updated.",
+    description:
+      "Relay will show the next available action as the plan progresses.",
+  };
+}
+
+function NextStepNotice({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="notice next-step my-6">
+      <div>
+        <p className="font-medium">{title}</p>
+        <p className="mt-1">{description}</p>
+      </div>
+    </div>
+  );
+}
+
 function SetupWizard({
   id,
   data,
@@ -266,6 +366,9 @@ function SetupWizard({
 
   return (
     <section className="my-8 space-y-8">
+      <NextStepNotice
+        {...planSetupNextStep(stage, busy, databaseId, tasks.length)}
+      />
       <ErrorMessage
         error={
           saveSetup.error ||
@@ -684,6 +787,7 @@ function ReviewAndApprove({
 
   return (
     <section className="my-8 space-y-8">
+      <NextStepNotice {...planReviewNextStep(data, busy, canRequestApproval)} />
       <ErrorMessage
         error={
           solve.error ||
@@ -720,7 +824,9 @@ function ReviewAndApprove({
               Regenerate remaining sessions
             </button>
             <button
-              className="button"
+              className={
+                canRequestApproval && !busy ? "button" : "button secondary"
+              }
               disabled={busy || !canRequestApproval}
               onClick={() => requestApproval.mutate()}
             >
