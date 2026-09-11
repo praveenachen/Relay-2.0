@@ -56,10 +56,11 @@ Generic run detail and approval pages link LEARN runs into the richer review rou
 
 ## Provider modes
 
-`LANGUAGE_MODEL_PROVIDER=fake` is the default and is deterministic for tests and local demos. `LANGUAGE_MODEL_PROVIDER=openai` uses the OpenAI Responses API with schema parsing, no retries, configured timeout, and `store=false`. `NOTION_PUBLISH_MODE=mock` keeps publishing isolated; `NOTION_PUBLISH_MODE=real` uses an encrypted Notion connection and selected destination.
+`LANGUAGE_MODEL_PROVIDER=fake` is the default and is deterministic for tests and local demos. `LANGUAGE_MODEL_PROVIDER=openai` uses the OpenAI Responses API with schema parsing, no retries, configured timeout, and `store=false`. `NOTION_PUBLISH_MODE=real` is the default for local product testing and uses an encrypted Notion connection plus selected destination. `NOTION_PUBLISH_MODE=mock` keeps publishing isolated for tests or demos that should not write to Notion.
 
 OpenAI integration is a provider adapter behind `LanguageModel`; the LEARN workflow service receives only typed `LectureSummary` values or safe domain errors.
 
 ## Out of scope
 
 LEARN does not retrieve content from Notion, perform OCR, or implement retrieval-augmented generation.
+

@@ -115,7 +115,7 @@ Useful URLs:
 - API liveness: <http://localhost:8000/health>
 - API docs: <http://localhost:8000/docs>
 
-No OAuth keys are required for mock/local flows. To use real integrations locally, set `TOKEN_ENCRYPTION_KEY` and the relevant Notion, Google, or GitHub OAuth values in `.env`. To call a real model, set `LANGUAGE_MODEL_PROVIDER=openai` and `OPENAI_API_KEY`. To use a separate Agent Runtime service, set `RUNTIME_BACKEND=agent_runtime`, `AGENT_RUNTIME_BASE_URL`, and `AGENT_RUNTIME_API_KEY`. Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
+LEARN publishes to real Notion by default for local product testing. Set `TOKEN_ENCRYPTION_KEY`, configure Notion OAuth values in `.env`, connect Notion in the app, and choose a default Notion page before approving a LEARN run. Mock/local flows are still available by setting `NOTION_PUBLISH_MODE=mock`. To call a real model, set `LANGUAGE_MODEL_PROVIDER=openai` and `OPENAI_API_KEY`. To use a separate Agent Runtime service, set `RUNTIME_BACKEND=agent_runtime`, `AGENT_RUNTIME_BASE_URL`, and `AGENT_RUNTIME_API_KEY`. Never commit real credentials or expose them as `NEXT_PUBLIC_*` settings.
 
 | Make command   | Portable equivalent             | Purpose                                       |
 | -------------- | ------------------------------- | --------------------------------------------- |

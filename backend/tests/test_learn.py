@@ -18,6 +18,7 @@ from app.workflows.lecture_notes.errors import MalformedModelOutput
 def private_files(tmp_path, monkeypatch):
     monkeypatch.setattr(get_settings(), "document_storage_path", tmp_path / "sources")
     monkeypatch.setattr(get_settings(), "language_model_provider", "fake")
+    monkeypatch.setattr(get_settings(), "notion_publish_mode", "mock")
 
 
 async def ready(client):
