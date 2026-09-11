@@ -71,7 +71,7 @@ const sourceSchema = z
       z.object({
         id: z.string(),
         heading: z.string().nullable(),
-        level: z.number(),
+        level: z.number().nullable(),
         order: z.number(),
         source_page_start: z.number().nullable(),
         source_page_end: z.number().nullable(),

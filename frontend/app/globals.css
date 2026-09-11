@@ -377,7 +377,7 @@ p {
 .relay-track::before {
   content: "";
   position: absolute;
-  top: 66px;
+  top: 60px;
   left: 0;
   right: 0;
   height: 1px;
@@ -418,7 +418,7 @@ p {
   grid-template-columns: repeat(var(--stage-count, 4), minmax(0, 1fr));
   position: relative;
   padding-inline: 18px;
-  padding-top: 52px;
+  padding-top: 47px;
 }
 .relay-stage {
   position: relative;
