@@ -6,7 +6,11 @@ from app.documents.models import DocumentMetadata, DocumentSection, ParsedDocume
 from app.workflows.lecture_notes.errors import MalformedModelOutput
 from app.workflows.lecture_notes.schemas import LectureSummary
 from app.workflows.lecture_notes.segmentation import segment
-from app.workflows.lecture_notes.summarization import SummaryService, validate_references
+from app.workflows.lecture_notes.summarization import (
+    SummaryService,
+    chunk_sections,
+    validate_references,
+)
 
 
 def source(text="A vector has a magnitude."):
@@ -43,6 +47,19 @@ def test_segmentation():
     assert pieces[-1].id == "s2"
     assert all(len(p.text.encode()) <= 100 for p in pieces)
     assert sum(p.text.count("First paragraph.") for p in pieces) == 100
+
+
+def test_chunk_sections_groups_small_sections_without_exceeding_budget():
+    document = ParsedDocument(
+        title="Many sections",
+        metadata=DocumentMetadata(filename="lecture.md", character_count=120, parser="test"),
+        sections=[
+            DocumentSection(id=f"s{i}", heading=f"S{i}", text="x" * 30, order=i) for i in range(6)
+        ],
+    )
+    chunks = chunk_sections(document, 100)
+    assert [len(chunk) for chunk in chunks] == [3, 3]
+    assert all(sum(len(section.text.encode()) for section in chunk) <= 100 for chunk in chunks)
 
 
 def test_schema():

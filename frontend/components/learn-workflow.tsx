@@ -592,8 +592,11 @@ function ProcessingPanel({
   summarize: () => void;
 }) {
   const canParse = detail.run.status === "DRAFT" && detail.source;
+  const summarizing = detail.stage === "summarizing";
   const canSummarize =
-    detail.run.status === "ANALYZING" && detail.source?.status === "PARSED";
+    detail.run.status === "ANALYZING" &&
+    detail.source?.status === "PARSED" &&
+    !summarizing;
   return (
     <article className="panel">
       <h2 className="section-title">Processing</h2>

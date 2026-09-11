@@ -17,6 +17,23 @@ from app.workflows.lecture_notes.schemas import (
 from app.workflows.lecture_notes.segmentation import estimated_tokens, segment
 
 
+def chunk_sections(document: ParsedDocument, budget: int) -> list[list]:
+    chunks: list[list] = []
+    current: list = []
+    current_size = 0
+    for section in segment(document, budget):
+        size = estimated_tokens(section.text)
+        if current and current_size + size > budget:
+            chunks.append(current)
+            current = []
+            current_size = 0
+        current.append(section)
+        current_size += size
+    if current:
+        chunks.append(current)
+    return chunks
+
+
 def validate_references(summary: LectureSummary, document: ParsedDocument) -> None:
     sources = {section.id: section for section in document.sections}
     items: list[KeyConcept | SummarySection | Definition | Formula | ExampleSummary] = [
@@ -55,8 +72,8 @@ class SummaryService:
                 # Bounded section calls; deterministic ordered aggregation avoids an unbounded
                 # final prompt and retains every typed field and section-level reference.
                 summaries = []
-                for section in segment(document, self.section_budget):
-                    part = document.model_copy(update={"sections": [section]})
+                for sections in chunk_sections(document, self.section_budget):
+                    part = document.model_copy(update={"sections": sections})
                     summaries.append(await self._call(part))
                 result = LectureSummary(
                     title=document.title or summaries[0].title,

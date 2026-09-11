@@ -32,6 +32,10 @@ export async function request<T>(
       REGISTER_USER_ALREADY_EXISTS:
         "An account with this email already exists. Try signing in.",
       LOGIN_BAD_CREDENTIALS: "Email or password is incorrect.",
+      LEARN_WORKFLOW_INVALID_STATE:
+        "This step is already running or is not available yet. Wait for the current step to finish, then refresh if needed.",
+      INVALID_WORKFLOW_TRANSITION:
+        "This workflow is already moving to another step. Wait for the current step to finish, then refresh if needed.",
     };
     const message =
       parsed.success && parsed.data.message
