@@ -1,4 +1,4 @@
-from openai import APIError, APITimeoutError, AsyncOpenAI, RateLimitError
+from openai import APIError, APIStatusError, APITimeoutError, AsyncOpenAI, AuthenticationError, OpenAIError, RateLimitError
 from pydantic import ValidationError
 
 from app.ai.base import Message, T
@@ -38,5 +38,15 @@ class OpenAIProvider:
             raise ModelRateLimited() from error
         except ValidationError as error:
             raise MalformedModelOutput() from error
+        except AuthenticationError as error:
+            raise ModelUnavailable() from error
+        except APIStatusError as error:
+            if error.status_code == 429:
+                raise ModelRateLimited() from error
+            if error.status_code == 408 or error.status_code >= 500:
+                raise ModelUnavailable() from error
+            raise MalformedModelOutput() from error
         except APIError as error:
+            raise ModelUnavailable() from error
+        except OpenAIError as error:
             raise ModelUnavailable() from error

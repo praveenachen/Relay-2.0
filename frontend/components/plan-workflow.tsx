@@ -253,8 +253,9 @@ function NextStepNotice({
   title: string;
   description: string;
 }) {
+  const working = title.startsWith("Relay is working");
   return (
-    <div className="notice next-step my-6">
+    <div className={`notice next-step my-6 ${working ? "working" : ""}`}>
       <div>
         <p className="font-medium">{title}</p>
         <p className="mt-1">{description}</p>
