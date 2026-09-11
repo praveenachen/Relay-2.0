@@ -388,6 +388,7 @@ p {
 }
 .relay-endpoints ul {
   position: relative;
+  padding-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 9px;
