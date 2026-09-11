@@ -258,6 +258,19 @@ export function LearnRun({ id }: { id: string }) {
     !tooLarge &&
     !busy;
   const nextStep = learnNextStep(data, busy || backendWorking, canUpload);
+  const actionError =
+    (!data.source ? upload.error : null) ||
+    (data.run.status === "DRAFT" ? parse.error : null) ||
+    (data.run.status === "ANALYZING" && !data.summary && !backendWorking
+      ? summarize.error
+      : null) ||
+    (pending ? save.error || resolve.error : null) ||
+    (data.run.status === "APPROVED" ? execute.error : null) ||
+    (pending && realPublish && !hasDestination
+      ? refreshDestinations.error ||
+        syncDestination.error ||
+        notionConnections.error
+      : null);
 
   return (
     <>
@@ -273,19 +286,7 @@ export function LearnRun({ id }: { id: string }) {
         status={data.run.status}
       />
       <NextStepNotice {...nextStep} />
-      <ErrorMessage
-        error={
-          (backendWorking ? null : parse.error) ||
-          (backendWorking ? null : summarize.error) ||
-          save.error ||
-          resolve.error ||
-          upload.error ||
-          execute.error ||
-          refreshDestinations.error ||
-          syncDestination.error ||
-          notionConnections.error
-        }
-      />
+      <ErrorMessage error={actionError} />
       {data.run.error_message && (
         <div className="notice error my-6">
           <X aria-hidden="true" />
