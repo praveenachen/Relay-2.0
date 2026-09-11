@@ -391,10 +391,13 @@ function learnNextStep(
   busy: boolean,
   canUpload: boolean,
 ) {
-  if (busy) {
+  if (busy || detail.stage === "summarizing") {
     return {
       title: "Relay is working on this step.",
-      description: "Wait for the current action to finish before moving on.",
+      description:
+        detail.stage === "summarizing"
+          ? "OpenAI is generating your study-page draft. This can take a minute for longer PDFs."
+          : "Wait for the current action to finish before moving on.",
     };
   }
   if (canUpload || (detail.run.status === "DRAFT" && !detail.source)) {

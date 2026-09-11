@@ -23,10 +23,12 @@ export async function request<T>(
     const error: unknown = await response.json().catch(() => null);
     const parsed = z
       .object({
+        code: z.string().optional(),
         message: z.string().optional(),
         detail: z.unknown().optional(),
       })
       .safeParse(error);
+    const code = parsed.success ? parsed.data.code : undefined;
     const detail = parsed.success ? parsed.data.detail : undefined;
     const messages: Record<string, string> = {
       REGISTER_USER_ALREADY_EXISTS:
@@ -38,13 +40,15 @@ export async function request<T>(
         "This workflow is already moving to another step. Wait for the current step to finish, then refresh if needed.",
     };
     const message =
-      parsed.success && parsed.data.message
-        ? parsed.data.message
+      code && messages[code]
+        ? messages[code]
         : typeof detail === "string" && messages[detail]
           ? messages[detail]
-          : response.status === 401
-            ? "Your session has ended. Please sign in again."
-            : "The request could not be completed. Check your details and try again.";
+          : parsed.success && parsed.data.message
+            ? parsed.data.message
+            : response.status === 401
+              ? "Your session has ended. Please sign in again."
+              : "The request could not be completed. Check your details and try again.";
     throw new ApiError(response.status, message);
   }
   const parsed = schema.safeParse(
