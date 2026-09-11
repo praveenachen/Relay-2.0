@@ -347,6 +347,7 @@ export function LearnRun({ id }: { id: string }) {
           hasDestination={hasDestination}
           connectionName={notionConnection?.display_name}
           refreshDestinations={() => refreshDestinations.mutate()}
+          showDestinationControls={pending || (realPublish && !hasDestination)}
           destinations={
             refreshDestinations.data || notionDestinations.data || []
           }
@@ -685,6 +686,7 @@ function ApprovalPanel({
   hasDestination,
   connectionName,
   refreshDestinations,
+  showDestinationControls,
   destinations,
   selectDestination,
   syncDestination,
@@ -697,6 +699,7 @@ function ApprovalPanel({
   hasDestination: boolean;
   connectionName?: string;
   refreshDestinations: () => void;
+  showDestinationControls: boolean;
   destinations: { id: string; title: string }[];
   selectDestination: (destinationId: string) => void;
   syncDestination: () => void;
@@ -738,7 +741,7 @@ function ApprovalPanel({
           </p>
         </div>
       )}
-      {pending && (
+      {showDestinationControls && (
         <div className="mt-5 grid gap-3">
           <div className="flex flex-wrap gap-3">
             <Link className="button secondary" href="/connections">
@@ -786,7 +789,11 @@ function ApprovalPanel({
           {detail.approval ? <Status value={detail.approval.status} /> : null}
         </div>
         {detail.run.status === "APPROVED" && (
-          <button className="button" disabled={busy} onClick={execute}>
+          <button
+            className="button"
+            disabled={busy || (realPublish && !hasDestination)}
+            onClick={execute}
+          >
             <Send aria-hidden="true" />
             Publish to Notion
           </button>
