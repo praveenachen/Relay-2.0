@@ -220,6 +220,83 @@ async def test_duplicate_and_empty_source(client, account):
     assert (await client.get(path)).json()["run"]["status"] == "FAILED"
 
 
+async def test_real_notion_destination_can_change_after_approval(
+    client, account, session_factory, monkeypatch
+):
+    key = Fernet.generate_key().decode()
+    monkeypatch.setattr(
+        get_settings(),
+        "token_encryption_key",
+        type("Secret", (), {"get_secret_value": lambda self: key})(),
+    )
+    monkeypatch.setattr(get_settings(), "notion_publish_mode", "real")
+    store = FernetCredentialStore([key])
+    async with session_factory() as session:
+        connection = ConnectedAccount(
+            user_id=account["id"],
+            provider=Provider.NOTION,
+            external_account_id="workspace-1",
+            display_name="Student Workspace",
+            access_token_encrypted=store.encrypt("notion-token"),
+            scopes=["read_content", "insert_content"],
+            provider_metadata={
+                "workspace_id": "workspace-1",
+                "workspace_name": "Student Workspace",
+                "default_destination_id": "page-original",
+                "default_destination_title": "Original Notes",
+            },
+            status="CONNECTED",
+        )
+        session.add(connection)
+        await session.flush()
+        from app.models.entities import NotionDestinationRecord
+
+        session.add_all(
+            [
+                NotionDestinationRecord(
+                    user_id=account["id"],
+                    connection_id=connection.id,
+                    provider_page_id="page-original",
+                    title="Original Notes",
+                    selected=True,
+                ),
+                NotionDestinationRecord(
+                    user_id=account["id"],
+                    connection_id=connection.id,
+                    provider_page_id="page-selected",
+                    title="Selected Notes",
+                    selected=False,
+                ),
+            ]
+        )
+        await session.commit()
+
+    calls = []
+
+    async def create_page(self, parent_page_id, title, blocks):
+        calls.append(parent_page_id)
+        return {"id": "notion-page-1", "url": "https://notion.so/notion-page-1"}
+
+    monkeypatch.setattr(NotionApiClient, "create_page", create_page)
+    path, detail = await ready(client)
+    await approve(client, detail)
+
+    selected = await client.put(
+        "/connections/NOTION/destinations/default",
+        json={"destination_id": "page-selected"},
+    )
+    assert selected.status_code == 200, selected.text
+    updated = await client.put(path + "/destination")
+    assert updated.status_code == 200, updated.text
+    assert (
+        updated.json()["approval"]["original_payload"]["parent_destination_id"] == "page-selected"
+    )
+
+    done = await client.post(path + "/execute")
+    assert done.status_code == 200, done.text
+    assert calls == ["page-selected"]
+
+
 async def test_real_notion_publish_uses_approved_payload_once(
     client, account, session_factory, monkeypatch
 ):

@@ -273,7 +273,7 @@ class LectureNotesWorkflowService:
 
     async def update_destination(self, run_id: UUID, owner: UUID) -> dict[str, Any]:
         run = await self.owned_run(run_id, owner, lock=True)
-        if run.status != S.AWAITING_APPROVAL:
+        if run.status not in {S.AWAITING_APPROVAL, S.APPROVED}:
             raise LearnWorkflowInvalidState()
         summary_data = (run.plan_payload or {}).get("summary")
         if summary_data is None:
@@ -283,10 +283,13 @@ class LectureNotesWorkflowService:
         if len(approvals) != 1 or len(actions) != 1:
             raise LearnWorkflowInvalidState()
         approval, action = approvals[0], actions[0]
-        if approval.status != ApprovalStatus.PENDING:
+        if approval.status not in {ApprovalStatus.PENDING, ApprovalStatus.APPROVED}:
             raise LearnWorkflowInvalidState()
         payload = await self.destination_payload(LectureSummary.model_validate(summary_data), owner)
-        action.payload, approval.original_payload = payload, payload
+        action.payload = payload
+        if approval.status == ApprovalStatus.PENDING:
+            approval.original_payload = payload
+            action.status = ActionStatus.EDITED
         record(self.session, owner, "NOTION_DESTINATION_SELECTED", run.id)
         await self.session.commit()
         return await self.detail(run_id, owner)
@@ -323,6 +326,17 @@ class LectureNotesWorkflowService:
             )
         )
         approvals = await self.repo.run_approvals(run_id)
+        actions = await self.repo.actions(run_id)
+        effective_approval = None
+        if approvals:
+            effective_approval = ApprovalRead.model_validate(approvals[0]).model_dump(mode="json")
+            if actions and approvals[0].status == ApprovalStatus.APPROVED:
+                effective_approval["original_payload"] = actions[0].payload
+        destination_payload = None
+        if actions and approvals and approvals[0].status == ApprovalStatus.APPROVED:
+            destination_payload = actions[0].payload
+        elif approvals:
+            destination_payload = approvals[0].original_payload
         return {
             "run": RunRead.model_validate(run).model_dump(mode="json"),
             "source": None
@@ -345,12 +359,6 @@ class LectureNotesWorkflowService:
             "summary": (run.plan_payload or {}).get("summary"),
             "provider": (run.plan_payload or {}).get("provider", self.provider_name),
             "stage": (run.plan_payload or {}).get("stage"),
-            "approval": ApprovalRead.model_validate(approvals[0]).model_dump(mode="json")
-            if approvals
-            else None,
-            "destination": (approvals[0].original_payload if approvals else {}).get(
-                "parent_destination_title"
-            )
-            if approvals
-            else None,
+            "approval": effective_approval,
+            "destination": (destination_payload or {}).get("parent_destination_title"),
         }

@@ -76,13 +76,24 @@ class ExecutionService:
         # Inline local side effects and their records commit together. Runtime never reads a
         # mutable proposal: only the approved snapshot crosses this boundary.
         correlation_id = f"learn:{run.id}:{action.id}"
+        approved_payload = dict(approval.approved_payload)
+        for field in (
+            "connection_id",
+            "parent_destination_id",
+            "parent_destination_title",
+            "workspace_id",
+            "workspace_name",
+        ):
+            value = action.payload.get(field)
+            if value:
+                approved_payload[field] = value
         try:
             snapshot = await self.runtime.submit_execution(
                 ExecutionRequest(
                     workflow_run_id=run.id,
                     proposed_action_id=action.id,
                     action_type=action.action_type,
-                    approved_payload=approval.approved_payload,
+                    approved_payload=approved_payload,
                     idempotency_key=key,
                     correlation_id=correlation_id,
                 )
@@ -138,7 +149,7 @@ class ExecutionService:
             return RunRead.model_validate(run)
         if snapshot.status == ExecutionStatus.SUCCEEDED and snapshot.result is not None:
             result = ExternalArtifactResult.model_validate(snapshot.result)
-            connection_id = approval.approved_payload.get("connection_id")
+            connection_id = approved_payload.get("connection_id")
             artifact = ExternalArtifact(
                 workflow_run_id=run.id,
                 proposed_action_id=action.id,
