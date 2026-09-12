@@ -626,9 +626,20 @@ p {
 .learn-disclosure[open] .learn-disclosure-icon {
   transform: rotate(180deg);
 }
-.destination-summary {
-  border-left: 2px solid var(--line);
-  padding-left: 14px;
+.destination-card-header {
+  align-items: flex-start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+.destination-picker,
+.destination-selected {
+  display: grid;
+  gap: 12px;
+  margin-top: 22px;
+}
+.compact-action {
+  justify-self: start;
 }
 .approval-action-row {
   align-items: center;

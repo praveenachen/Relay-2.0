@@ -354,7 +354,6 @@ export function LearnRun({ id }: { id: string }) {
           selectDestination={(destinationId) =>
             selectDestination.mutate(destinationId)
           }
-          syncDestination={() => syncDestination.mutate()}
           reject={() => resolve.mutate({ approve: false })}
           execute={() => execute.mutate()}
         />
@@ -689,7 +688,6 @@ function ApprovalPanel({
   showDestinationControls,
   destinations,
   selectDestination,
-  syncDestination,
   reject,
   execute,
 }: {
@@ -702,7 +700,6 @@ function ApprovalPanel({
   showDestinationControls: boolean;
   destinations: { id: string; title: string }[];
   selectDestination: (destinationId: string) => void;
-  syncDestination: () => void;
   reject: () => void;
   execute: () => void;
 }) {
@@ -714,72 +711,64 @@ function ApprovalPanel({
   const destination = payload?.parent_destination_title
     ? String(payload.parent_destination_title)
     : realPublish
-      ? "Choose a Notion page before approval"
+      ? "No page selected"
       : "Mock Notion destination";
   return (
     <article className="panel destination-panel">
-      <h2 className="section-title">Destination</h2>
-      <div className="destination-summary">
-        <p className="text-sm text-muted">Workspace</p>
-        <p className="font-medium">{workspace}</p>
-      </div>
-      <div className="destination-summary mt-4">
-        <p className="text-sm text-muted">Publish location</p>
-        <p className="font-medium">{destination}</p>
-        {!realPublish && !hasDestination && (
-          <p className="mt-2 text-sm text-muted">
-            Local mock mode records a simulated Notion artifact, so no real page
-            is required.
-          </p>
-        )}
-      </div>
-      {realPublish && !hasDestination && (
-        <div className="notice mt-4">
-          <p>
-            Choose a default Notion page on Connections, then use it here before
-            approving.
-          </p>
+      <div className="destination-card-header">
+        <div>
+          <h2 className="section-title">Destination</h2>
+          <p className="text-sm text-muted">{workspace}</p>
         </div>
-      )}
-      {showDestinationControls && (
-        <div className="mt-5 grid gap-3">
-          <div className="flex flex-wrap gap-3">
-            <Link className="button secondary" href="/connections">
-              Connections
-            </Link>
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={refreshDestinations}
+        <Link className="text-sm font-medium underline" href="/connections">
+          Manage connection
+        </Link>
+      </div>
+      {showDestinationControls ? (
+        <div className="destination-picker">
+          <label className="field">
+            Notion page for this study page
+            <select
+              disabled={busy || destinations.length === 0}
+              value={String(payload?.parent_destination_id || "")}
+              onChange={(event) =>
+                event.target.value && selectDestination(event.target.value)
+              }
             >
-              Refresh pages
-            </button>
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={syncDestination}
-            >
-              Use default page
-            </button>
-          </div>
-          {destinations.length > 0 && (
-            <label className="field max-w-md">
-              Choose destination for this study page
-              <select
-                disabled={busy}
-                value={String(payload?.parent_destination_id || "")}
-                onChange={(event) =>
-                  event.target.value && selectDestination(event.target.value)
-                }
-              >
-                <option value="">Select a Notion page</option>
-                {destinations.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+              <option value="">
+                {destinations.length > 0
+                  ? "Select a Notion page"
+                  : "Refresh pages to load options"}
+              </option>
+              {destinations.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            className="button secondary compact-action"
+            disabled={busy}
+            onClick={refreshDestinations}
+          >
+            Refresh pages
+          </button>
+          {realPublish && !hasDestination && (
+            <p className="text-sm text-muted">
+              Select a page before publishing so Relay knows where to create the
+              Notion study page.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="destination-selected">
+          <p className="text-sm text-muted">Publishing to</p>
+          <p className="font-medium">{destination}</p>
+          {!realPublish && !hasDestination && (
+            <p className="mt-2 text-sm text-muted">
+              Local mock mode records a simulated Notion artifact.
+            </p>
           )}
         </div>
       )}
