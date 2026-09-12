@@ -720,40 +720,39 @@ function ApprovalPanel({
           <h2 className="section-title">Destination</h2>
           <p className="text-sm text-muted">{workspace}</p>
         </div>
-        <Link className="text-sm font-medium underline" href="/connections">
-          Manage connection
-        </Link>
       </div>
       {showDestinationControls ? (
         <div className="destination-picker">
-          <label className="field">
-            Notion page for this study page
-            <select
-              disabled={busy || destinations.length === 0}
-              value={String(payload?.parent_destination_id || "")}
-              onChange={(event) =>
-                event.target.value && selectDestination(event.target.value)
-              }
+          <div className="destination-picker-heading">
+            <span className="field-label">Notion page for this study page</span>
+            <button
+              className="icon-button"
+              disabled={busy}
+              onClick={refreshDestinations}
+              aria-label="Refresh Notion pages"
+              title="Refresh Notion pages"
             >
-              <option value="">
-                {destinations.length > 0
-                  ? "Select a Notion page"
-                  : "Refresh pages to load options"}
-              </option>
-              {destinations.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button
-            className="button secondary compact-action"
-            disabled={busy}
-            onClick={refreshDestinations}
+              <RotateCcw aria-hidden="true" />
+            </button>
+          </div>
+          <select
+            disabled={busy || destinations.length === 0}
+            value={String(payload?.parent_destination_id || "")}
+            onChange={(event) =>
+              event.target.value && selectDestination(event.target.value)
+            }
           >
-            Refresh pages
-          </button>
+            <option value="">
+              {destinations.length > 0
+                ? "Select a Notion page"
+                : "Refresh pages to load options"}
+            </option>
+            {destinations.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+              </option>
+            ))}
+          </select>
           {realPublish && !hasDestination && (
             <p className="text-sm text-muted">
               Select a page before publishing so Relay knows where to create the
