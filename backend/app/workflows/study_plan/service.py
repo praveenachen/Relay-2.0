@@ -336,9 +336,10 @@ class StudyPlanWorkflowService:
     async def detail(self, run_id: UUID, owner: UUID) -> dict[str, Any]:
         run = await self.owned_run(run_id, owner)
         approvals = await self.repo.run_approvals(run_id)
+        setup_payload = run.input_payload or None
         return {
             "run": RunRead.model_validate(run).model_dump(mode="json"),
-            "setup": run.input_payload,
+            "setup": setup_payload,
             "result": run.plan_payload,
             "approval": ApprovalRead.model_validate(approvals[0]).model_dump(mode="json")
             if approvals

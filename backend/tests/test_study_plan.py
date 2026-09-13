@@ -130,6 +130,18 @@ def fake_create_event(succeed_ids: set[str] | None = None, fail_ids: set[str] | 
     return create_event
 
 
+async def test_new_plan_detail_has_null_setup(client, account):
+    created = await client.post("/workflows/plan")
+    assert created.status_code == 201, created.text
+
+    detail = await client.get("/workflows/plan/" + created.json()["id"])
+
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["setup"] is None
+    assert detail.json()["result"] is None
+    assert detail.json()["approval"] is None
+
+
 async def test_solve_schedules_task_within_window(
     client, account, session_factory, encryption_key, monkeypatch
 ):
