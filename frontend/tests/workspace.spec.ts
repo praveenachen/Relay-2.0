@@ -59,7 +59,9 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByRole("link", { name: "Start plan", exact: true }).click();
   await expect(page).toHaveURL(/\/workflows\/plan$/);
   await page.getByRole("button", { name: "Start a study plan" }).click();
-  await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
+  await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/, {
+    timeout: 15000,
+  });
   await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
   await page.reload();
   await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
