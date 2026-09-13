@@ -393,9 +393,7 @@ class ProjectMeetingWorkflowService:
         ]
         return str(connections[0].id) if connections else None
 
-    async def _notion_database_schema(
-        self, owner: UUID, database_id: str
-    ) -> dict[str, Any] | None:
+    async def _notion_database_schema(self, owner: UUID, database_id: str) -> dict[str, Any] | None:
         """Best-effort live lookup of the destination database's real
         property schema, so build_notion_task_action can write only
         properties that actually exist with their real type instead of
