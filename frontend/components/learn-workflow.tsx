@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   Check,
   ChevronDown,
   FileText,
@@ -303,6 +304,10 @@ export function LearnRun({ id }: { id: string }) {
 
   return (
     <>
+      <Link className="back-link" href="/workflows/learn">
+        <ArrowLeft aria-hidden="true" />
+        Back to Learn runs
+      </Link>
       <PageTitle
         eyebrow="LEARN run"
         title={data.summary?.title || data.source?.filename || "Lecture notes"}
@@ -314,7 +319,11 @@ export function LearnRun({ id }: { id: string }) {
         destinations={[{ label: "Notion" }]}
         status={data.run.status}
       />
-      <NextStepNotice {...nextStep} />
+      {data.run.status === "COMPLETED" ? (
+        <PublishedNotice artifact={artifact.data} loading={artifact.isPending} />
+      ) : (
+        <NextStepNotice {...nextStep} />
+      )}
       <ErrorMessage error={actionError} />
       {data.run.error_message && (
         <div className="notice error my-6">
@@ -481,6 +490,43 @@ function learnNextStep(
     description:
       "Relay will show the next available action as the run progresses.",
   };
+}
+
+function PublishedNotice({
+  artifact,
+  loading,
+}: {
+  artifact: Awaited<ReturnType<typeof learn.artifact>> | undefined;
+  loading: boolean;
+}) {
+  const isMock = artifact?.external_url.startsWith("mock://");
+  return (
+    <div className="notice published-notice my-6">
+      <Check aria-hidden="true" />
+      <div>
+        <p className="font-medium">
+          {isMock ? "Workflow complete." : "Published to Notion."}
+        </p>
+        <p className="mt-1">
+          {loading
+            ? "Relay is loading the published page details."
+            : isMock
+              ? "Relay recorded a mock Notion artifact for this completed run."
+              : "Your approved study page has been created in the selected Notion destination."}
+        </p>
+        {artifact?.external_url.startsWith("https://") && (
+          <a
+            className="button mt-4"
+            href={artifact.external_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open published page
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function NextStepNotice({

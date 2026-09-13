@@ -127,6 +127,22 @@ p {
 .page-action {
   flex-shrink: 0;
 }
+.back-link {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.back-link:hover {
+  color: var(--foreground);
+}
+.back-link svg {
+  height: 16px;
+  width: 16px;
+}
 .eyebrow,
 .system-label {
   font-size: 10px;
@@ -237,6 +253,18 @@ p {
     border-color: #b9c8bc;
     background: #f2f7f1;
     color: var(--foreground);
+  }
+  .notice.published-notice {
+    align-items: flex-start;
+    border-color: #9fb8a7;
+    background: #eef7f0;
+    color: var(--foreground);
+  }
+  .notice.published-notice > svg {
+    color: var(--accent);
+    flex: 0 0 auto;
+    height: 22px;
+    width: 22px;
   }
   .notice.next-step.working::before {
     content: "";
