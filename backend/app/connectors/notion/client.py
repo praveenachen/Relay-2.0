@@ -154,9 +154,11 @@ class NotionApiClient:
             for item in data.get("results", []):
                 if item.get("object") == "database" and isinstance(item.get("id"), str):
                     title_parts = item.get("title", [])
-                    title = "Untitled database"
-                    if title_parts and isinstance(title_parts[0], dict):
-                        title = title_parts[0].get("plain_text") or title
+                    title = "".join(
+                        part.get("plain_text", "") for part in title_parts if isinstance(part, dict)
+                    ).strip()
+                    if not title:
+                        title = "Untitled database"
                     results.append(NotionTaskDatabase(id=item["id"], title=title))
             cursor = data.get("next_cursor") if data.get("has_more") else None
             if not cursor:

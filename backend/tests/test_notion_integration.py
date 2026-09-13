@@ -269,6 +269,46 @@ async def test_destination_discovery_paginates_and_selects(account, session_fact
         ) == 2
 
 
+async def test_notion_http_database_search_uses_readable_titles():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == "/v1/search"
+        return httpx.Response(
+            200,
+            json={
+                "results": [
+                    {
+                        "object": "database",
+                        "id": "db-1",
+                        "title": [
+                            {"plain_text": ""},
+                            {"plain_text": "Assignments"},
+                            {"plain_text": " & Projects"},
+                        ],
+                    },
+                    {"object": "database", "id": "db-2", "title": []},
+                ],
+                "has_more": False,
+            },
+        )
+
+    transport = httpx.MockTransport(handler)
+
+    class TestClient(NotionApiClient):
+        async def request(self, method, path, json):
+            async with httpx.AsyncClient(
+                transport=transport, base_url="https://api.notion.com"
+            ) as client:
+                response = await client.request(method, path, json=json)
+            return response.json()
+
+    databases = await TestClient("token").search_databases()
+
+    assert [(item.id, item.title) for item in databases] == [
+        ("db-1", "Assignments & Projects"),
+        ("db-2", "Untitled database"),
+    ]
+
+
 async def test_notion_http_search_paginates():
     calls = []
 
