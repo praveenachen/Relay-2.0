@@ -67,6 +67,10 @@ def create_app() -> FastAPI:
 
     @application.exception_handler(SQLAlchemyError)
     async def database_error(request: Request, error: SQLAlchemyError) -> JSONResponse:
+        import traceback
+
+        print(f"DIAG SQLAlchemyError on {request.url.path}: {error!r}")
+        traceback.print_exception(error)
         return JSONResponse(
             status_code=503,
             content={
