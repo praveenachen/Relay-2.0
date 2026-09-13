@@ -34,7 +34,11 @@ from app.schemas.domain import ApprovalRead, RunInput, RunRead
 from app.services.audit import record
 from app.services.workflows import WorkflowService
 from app.workflows.study_plan.actions import OPERATION, CreateCalendarStudyPlanAction
-from app.workflows.study_plan.errors import PlanWorkflowInvalidState, SchedulingInputInvalid
+from app.workflows.study_plan.errors import (
+    NotionTaskImportEmpty,
+    PlanWorkflowInvalidState,
+    SchedulingInputInvalid,
+)
 from app.workflows.study_plan.schemas import PlanSetupInput
 
 
@@ -111,7 +115,9 @@ class StudyPlanWorkflowService:
                 mapping_data = mapping.model_dump(mode="json")
                 payload["notion_database_id"] = database_id
                 payload["notion_mapping"] = mapping_data
+        imported_from_notion = False
         if database_id and mapping_data:
+            imported_from_notion = True
             connection = await self.notion.connection(owner)
             client = await self.notion.client(connection)
             pages = await client.query_database(database_id)
@@ -131,6 +137,8 @@ class StudyPlanWorkflowService:
             {"task_count": len(tasks), "issue_count": len(payload.get("task_issues", []))},
         )
         await self.session.commit()
+        if imported_from_notion and not tasks:
+            raise NotionTaskImportEmpty()
         return await self.detail(run_id, owner)
 
     async def generate(self, run_id: UUID, owner: UUID, data: PlanSetupInput) -> dict[str, Any]:

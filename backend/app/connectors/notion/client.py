@@ -20,6 +20,7 @@ from app.connectors.notion.schemas import (
     NotionBlock,
     NotionDestination,
     NotionTaskDatabase,
+    NotionTaskDatabaseProperty,
     NotionTaskResult,
 )
 
@@ -159,7 +160,22 @@ class NotionApiClient:
                     ).strip()
                     if not title:
                         title = "Untitled database"
-                    results.append(NotionTaskDatabase(id=item["id"], title=title))
+                    raw_properties = item.get("properties")
+                    properties = (
+                        [
+                            NotionTaskDatabaseProperty(
+                                name=name,
+                                type=property_data.get("type") or "unknown",
+                            )
+                            for name, property_data in raw_properties.items()
+                            if isinstance(name, str) and isinstance(property_data, dict)
+                        ]
+                        if isinstance(raw_properties, dict)
+                        else []
+                    )
+                    results.append(
+                        NotionTaskDatabase(id=item["id"], title=title, properties=properties)
+                    )
             cursor = data.get("next_cursor") if data.get("has_more") else None
             if not cursor:
                 return results

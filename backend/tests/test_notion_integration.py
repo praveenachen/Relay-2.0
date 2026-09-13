@@ -307,6 +307,7 @@ async def test_notion_http_database_search_uses_readable_titles():
         ("db-1", "Assignments & Projects"),
         ("db-2", "Untitled database"),
     ]
+    assert databases[0].properties == []
 
 
 async def test_notion_http_search_paginates():

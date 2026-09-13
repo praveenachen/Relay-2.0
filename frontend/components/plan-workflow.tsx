@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -61,6 +61,93 @@ function defaultWindow(): { startDate: string; endDate: string } {
     startDate: localDateValue(start.toISOString()),
     endDate: localDateValue(end.toISOString()),
   };
+}
+
+function normalizePropertyName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function pickProperty(
+  properties: { name: string; type: string }[],
+  allowedTypes: string[],
+  preferredNames: string[],
+  fallback = "",
+): string {
+  const allowed = properties.filter((property) =>
+    allowedTypes.includes(property.type),
+  );
+  for (const preferred of preferredNames) {
+    const normalized = normalizePropertyName(preferred);
+    const exact = allowed.find(
+      (property) => normalizePropertyName(property.name) === normalized,
+    );
+    if (exact) return exact.name;
+  }
+  for (const preferred of preferredNames) {
+    const normalized = normalizePropertyName(preferred);
+    const partial = allowed.find((property) =>
+      normalizePropertyName(property.name).includes(normalized),
+    );
+    if (partial) return partial.name;
+  }
+  return allowed[0]?.name || fallback;
+}
+
+function compatiblePropertyValue(
+  value: string,
+  properties: { name: string; type: string }[],
+  allowedTypes: string[],
+  fallback: string,
+): string {
+  if (
+    value &&
+    properties.some(
+      (property) =>
+        property.name === value && allowedTypes.includes(property.type),
+    )
+  ) {
+    return value;
+  }
+  return fallback;
+}
+
+function PropertySelect({
+  label,
+  value,
+  onChange,
+  properties,
+  allowedTypes,
+  optional = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  properties: { name: string; type: string }[];
+  allowedTypes: string[];
+  optional?: boolean;
+}) {
+  const options = properties.filter((property) =>
+    allowedTypes.includes(property.type),
+  );
+  return (
+    <label className="field">
+      {label}
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {optional && <option value="">Do not import</option>}
+        {!optional && <option value="">Choose a property</option>}
+        {options.map((property) => (
+          <option key={property.name} value={property.name}>
+            {property.name}
+          </option>
+        ))}
+      </select>
+      {options.length === 0 && (
+        <span className="text-xs text-muted">
+          No compatible {label.toLowerCase()} column found in this database.
+        </span>
+      )}
+    </label>
+  );
 }
 
 function prioritizeTasks(tasks: AcademicTask[]): AcademicTask[] {
@@ -376,18 +463,70 @@ function SetupWizard({
     enabled: hasNotion && taskSource === "notion",
   });
   const usingNotion = taskSource === "notion";
+  const selectedDatabase = useMemo(
+    () =>
+      (notionDatabases.data || []).find(
+        (database) => database.id === databaseId,
+      ),
+    [databaseId, notionDatabases.data],
+  );
+  const databaseProperties = useMemo(
+    () => selectedDatabase?.properties || [],
+    [selectedDatabase],
+  );
+  const hasDatabaseSchema = databaseProperties.length > 0;
+  const effectiveMappingTitle = compatiblePropertyValue(
+    mappingTitle,
+    databaseProperties,
+    ["title"],
+    pickProperty(databaseProperties, ["title"], ["Name", "Task", "Title"]),
+  );
+  const effectiveMappingCourse = compatiblePropertyValue(
+    mappingCourse,
+    databaseProperties,
+    ["rich_text", "select", "status"],
+    "",
+  );
+  const effectiveMappingDeadline = compatiblePropertyValue(
+    mappingDeadline,
+    databaseProperties,
+    ["date"],
+    pickProperty(databaseProperties, ["date"], ["Due", "Due Date", "Deadline"]),
+  );
+  const effectiveMappingEstimate = compatiblePropertyValue(
+    mappingEstimate,
+    databaseProperties,
+    ["number", "rich_text"],
+    pickProperty(
+      databaseProperties,
+      ["number", "rich_text"],
+      ["Estimate", "Estimated Hours", "Estimated Minutes", "Hours"],
+    ),
+  );
+  const effectiveMappingPriority = compatiblePropertyValue(
+    mappingPriority,
+    databaseProperties,
+    ["number", "select"],
+    "",
+  );
+  const effectiveMappingStatus = compatiblePropertyValue(
+    mappingStatus,
+    databaseProperties,
+    ["status", "select"],
+    "",
+  );
 
   const selectedCalendarId =
     calendarId ||
     (googleCalendars.data?.length === 1 ? googleCalendars.data[0].id : "");
 
   const buildMapping = () => ({
-    title: mappingTitle,
-    course: mappingCourse || null,
-    deadline: mappingDeadline,
-    priority: mappingPriority || null,
-    estimated_minutes: mappingEstimate,
-    status: mappingStatus || null,
+    title: effectiveMappingTitle,
+    course: effectiveMappingCourse || null,
+    deadline: effectiveMappingDeadline,
+    priority: effectiveMappingPriority || null,
+    estimated_minutes: effectiveMappingEstimate,
+    status: effectiveMappingStatus || null,
     estimate_unit: mappingUnit,
   });
 
@@ -419,6 +558,7 @@ function SetupWizard({
       await invalidate();
       await cache.invalidateQueries({ queryKey: ["preferences"] });
     },
+    onError: invalidate,
   });
   const importTasks = useMutation({
     mutationFn: () => plan.importTasks(id),
@@ -468,7 +608,15 @@ function SetupWizard({
   const notionSourceError = usingNotion
     ? refreshDatabases.error || notionDatabases.error
     : null;
-  const needsTaskSource = usingNotion ? !databaseId : tasks.length === 0;
+  const requiredNotionMappingMissing =
+    usingNotion && databaseId
+      ? !effectiveMappingTitle ||
+        !effectiveMappingDeadline ||
+        !effectiveMappingEstimate
+      : false;
+  const needsTaskSource = usingNotion
+    ? !databaseId || requiredNotionMappingMissing
+    : tasks.length === 0;
   const needsCalendar = !selectedCalendarId;
 
   const chooseManualTasks = () => {
@@ -680,52 +828,92 @@ function SetupWizard({
             <div className="mt-6 border-t border-line pt-5">
               <h3 className="section-title">Notion property mapping</h3>
               <p className="text-sm text-muted">
-                Match Relay&apos;s task fields to this database&apos;s property
-                names. Relay never guesses a missing estimate or deadline.
+                Relay auto-selects the most likely columns from this database.
+                Review the dropdowns before generating the plan.
               </p>
+              {!hasDatabaseSchema && (
+                <p className="mt-2 text-sm text-muted">
+                  Refresh databases to load this database&apos;s column names.
+                </p>
+              )}
+              {requiredNotionMappingMissing && hasDatabaseSchema && (
+                <p className="mt-2 text-sm text-danger">
+                  Choose a title, deadline, and estimate property before
+                  generating a plan.
+                </p>
+              )}
+              {setup?.task_issues && setup.task_issues.length > 0 && (
+                <div className="notice error mt-4">
+                  <X aria-hidden="true" />
+                  <div>
+                    <p className="font-medium">
+                      Some Notion rows could not be imported.
+                    </p>
+                    <ul className="mt-2 list-disc pl-5 text-sm">
+                      {setup.task_issues.slice(0, 5).map((issue, index) => (
+                        <li
+                          key={`${issue.code}-${issue.notion_page_id || index}`}
+                        >
+                          {issue.message}
+                          {issue.field ? ` Check ${issue.field}.` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                    {setup.task_issues.length > 5 && (
+                      <p className="mt-2 text-sm">
+                        {setup.task_issues.length - 5} more row(s) had import
+                        issues.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <label className="field">
-                  Title property
-                  <input
-                    value={mappingTitle}
-                    onChange={(e) => setMappingTitle(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Category property (optional)
-                  <input
-                    value={mappingCourse}
-                    onChange={(e) => setMappingCourse(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Status property
-                  <input
-                    value={mappingStatus}
-                    onChange={(e) => setMappingStatus(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Deadline property
-                  <input
-                    value={mappingDeadline}
-                    onChange={(e) => setMappingDeadline(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Priority property (optional)
-                  <input
-                    value={mappingPriority}
-                    onChange={(e) => setMappingPriority(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  Estimate property
-                  <input
-                    value={mappingEstimate}
-                    onChange={(e) => setMappingEstimate(e.target.value)}
-                  />
-                </label>
+                <PropertySelect
+                  label="Title property"
+                  value={effectiveMappingTitle}
+                  onChange={setMappingTitle}
+                  properties={databaseProperties}
+                  allowedTypes={["title"]}
+                />
+                <PropertySelect
+                  label="Category property (optional)"
+                  value={effectiveMappingCourse}
+                  onChange={setMappingCourse}
+                  properties={databaseProperties}
+                  allowedTypes={["rich_text", "select", "status"]}
+                  optional
+                />
+                <PropertySelect
+                  label="Status property"
+                  value={effectiveMappingStatus}
+                  onChange={setMappingStatus}
+                  properties={databaseProperties}
+                  allowedTypes={["status", "select"]}
+                  optional
+                />
+                <PropertySelect
+                  label="Deadline property"
+                  value={effectiveMappingDeadline}
+                  onChange={setMappingDeadline}
+                  properties={databaseProperties}
+                  allowedTypes={["date"]}
+                />
+                <PropertySelect
+                  label="Priority property (optional)"
+                  value={effectiveMappingPriority}
+                  onChange={setMappingPriority}
+                  properties={databaseProperties}
+                  allowedTypes={["number", "select"]}
+                  optional
+                />
+                <PropertySelect
+                  label="Estimate property"
+                  value={effectiveMappingEstimate}
+                  onChange={setMappingEstimate}
+                  properties={databaseProperties}
+                  allowedTypes={["number", "rich_text"]}
+                />
                 <label className="field">
                   Estimate unit
                   <select

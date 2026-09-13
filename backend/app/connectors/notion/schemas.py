@@ -94,6 +94,12 @@ class NotionConnector(Protocol):
     ) -> NotionTaskResult: ...
 
 
+class NotionTaskDatabaseProperty(StrictModel):
+    name: str
+    type: str
+
+
 class NotionTaskDatabase(StrictModel):
     id: str
     title: str
+    properties: list[NotionTaskDatabaseProperty] = Field(default_factory=list)

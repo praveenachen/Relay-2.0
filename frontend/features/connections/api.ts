@@ -18,9 +18,15 @@ export const calendarListItemSchema = z.object({
 });
 export type CalendarListItem = z.infer<typeof calendarListItemSchema>;
 
+export const notionTaskDatabasePropertySchema = z.object({
+  name: z.string(),
+  type: z.string(),
+});
+
 export const notionTaskDatabaseSchema = z.object({
   id: z.string(),
   title: z.string(),
+  properties: z.array(notionTaskDatabasePropertySchema).default([]),
 });
 export type NotionTaskDatabase = z.infer<typeof notionTaskDatabaseSchema>;
 

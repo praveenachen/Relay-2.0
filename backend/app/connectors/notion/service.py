@@ -16,6 +16,8 @@ from app.models.entities import ConnectedAccount, NotionDestinationRecord, Notio
 from app.repositories.relay import RelayRepository
 from app.services.audit import record
 
+SCHEMA_KEY = "__schema"
+
 
 class NotionDestinationService:
     def __init__(
@@ -183,11 +185,18 @@ class NotionTaskSourceService:
                         connection_id=connection.id,
                         provider_database_id=database.id,
                         title=database.title,
-                        property_mapping={},
+                        property_mapping={
+                            SCHEMA_KEY: [
+                                item.model_dump(mode="json") for item in database.properties
+                            ]
+                        },
                     )
                 )
             else:
                 record_item.title = database.title
+                mapping = dict(record_item.property_mapping or {})
+                mapping[SCHEMA_KEY] = [item.model_dump(mode="json") for item in database.properties]
+                record_item.property_mapping = mapping
         await self.session.commit()
         return await self.list(owner)
 
@@ -204,7 +213,12 @@ class NotionTaskSourceService:
             )
         ).all()
         return [
-            NotionTaskDatabase(id=item.provider_database_id, title=item.title) for item in records
+            NotionTaskDatabase(
+                id=item.provider_database_id,
+                title=item.title,
+                properties=(item.property_mapping or {}).get(SCHEMA_KEY, []),
+            )
+            for item in records
         ]
 
     async def select(
@@ -223,7 +237,11 @@ class NotionTaskSourceService:
         for item in records:
             item.selected = item.provider_database_id == database_id
             if item.selected:
-                item.property_mapping = mapping.model_dump(mode="json")
+                stored = dict(item.property_mapping or {})
+                schema = stored.get(SCHEMA_KEY, [])
+                stored = mapping.model_dump(mode="json")
+                stored[SCHEMA_KEY] = schema
+                item.property_mapping = stored
                 selected = item
         if selected is None:
             raise NotionTaskDatabaseNotFound()
@@ -241,7 +259,11 @@ class NotionTaskSourceService:
             },
         )
         await self.session.commit()
-        return NotionTaskDatabase(id=selected.provider_database_id, title=selected.title)
+        return NotionTaskDatabase(
+            id=selected.provider_database_id,
+            title=selected.title,
+            properties=(selected.property_mapping or {}).get(SCHEMA_KEY, []),
+        )
 
     async def default(self, owner: UUID) -> tuple[str, NotionTaskPropertyMapping] | None:
         """The database + mapping PLAN should use when a run's setup does
@@ -256,6 +278,9 @@ class NotionTaskSourceService:
         )
         if record_item is None or not record_item.property_mapping:
             return None
-        return record_item.provider_database_id, NotionTaskPropertyMapping.model_validate(
-            record_item.property_mapping
-        )
+        mapping = {
+            key: value for key, value in record_item.property_mapping.items() if key != SCHEMA_KEY
+        }
+        if not mapping:
+            return None
+        return record_item.provider_database_id, NotionTaskPropertyMapping.model_validate(mapping)
