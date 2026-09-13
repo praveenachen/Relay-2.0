@@ -23,7 +23,10 @@ from app.connectors.notion.schemas import (
     NotionTaskResult,
 )
 
-NOTION_VERSION = "2026-03-11"
+# Relay still uses Notion database endpoints for task imports. Newer Notion API
+# versions split databases into data sources, so keep this version until the
+# connector migrates to /v1/data_sources endpoints.
+NOTION_VERSION = "2022-06-28"
 NOTION_MAX_PAGE_CHILDREN = 100
 
 

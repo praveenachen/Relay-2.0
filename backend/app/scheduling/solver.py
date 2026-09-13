@@ -134,12 +134,20 @@ def _slot_score(
     duration_minutes: int,
     preferences: SchedulingPreference,
     weights: SchedulingWeights,
+    urgency_anchor: datetime,
 ) -> int:
     zone = ZoneInfo(preferences.timezone)
     local = start.astimezone(zone)
-    hours_until_deadline = max(1, int((task.deadline - start).total_seconds() // 3600))
-    urgency = max(0, 168 - hours_until_deadline) * weights.deadline_urgency
-    priority = (6 - task.priority) * weights.priority
+    hours_until_deadline = max(
+        1,
+        int((task.deadline - urgency_anchor).total_seconds() // 3600),
+    )
+    urgency_rank = max(0, 168 - hours_until_deadline)
+    urgency = urgency_rank * weights.deadline_urgency
+    priority_rank = 6 - task.priority
+    priority = priority_rank * weights.priority
+    minutes_after_now = max(0, int((start - urgency_anchor).total_seconds() // 60))
+    earliness = -(minutes_after_now // SLOT_MINUTES) * max(1, urgency_rank + priority_rank)
     preferred = 0
     if preferences.preferred_period == "morning" and 7 <= local.hour < 12:
         preferred = weights.preferred_period
@@ -153,7 +161,7 @@ def _slot_score(
     fragmentation = (
         weights.fragmentation if duration_minutes >= preferences.preferred_session_minutes else 0
     )
-    return urgency + priority + preferred + fragmentation
+    return urgency + priority + earliness + preferred + fragmentation
 
 
 def _local_day(moment: datetime, zone: ZoneInfo) -> date:
@@ -316,7 +324,12 @@ class CPSATStudyScheduler:
                                 fragment_id=fragment_id,
                                 duration_minutes=minutes,
                                 score=_slot_score(
-                                    task, start, minutes, problem.preferences, self.weights
+                                    task,
+                                    start,
+                                    minutes,
+                                    problem.preferences,
+                                    self.weights,
+                                    problem.now,
                                 ),
                             )
                         )

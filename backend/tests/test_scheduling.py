@@ -296,5 +296,5 @@ def test_daily_balance_weight_spreads_large_task_across_days() -> None:
     def days_used(result) -> set:
         return {session.start.date() for session in result.sessions}
 
-    assert len(days_used(unbalanced)) == 1
+    assert len(days_used(unbalanced)) < len(days_used(balanced))
     assert len(days_used(balanced)) == 4
