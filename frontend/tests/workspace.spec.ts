@@ -56,24 +56,10 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
     fullPage: true,
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  page.on("console", (msg) => console.log(`DIAG console: ${msg.text()}`));
-  page.on("pageerror", (err) => console.log(`DIAG pageerror: ${err}`));
-  page.on("requestfailed", (req) =>
-    console.log(`DIAG requestfailed: ${req.url()} ${req.failure()?.errorText}`),
-  );
-  page.on("response", (res) => {
-    if (res.url().includes("workflows/plan")) {
-      console.log(`DIAG response: ${res.status()} ${res.url()}`);
-    }
-  });
   await page.getByRole("link", { name: "Start plan", exact: true }).click();
   await expect(page).toHaveURL(/\/workflows\/plan$/);
-  console.log("DIAG about to click Start a study plan");
   await page.getByRole("button", { name: "Start a study plan" }).click();
-  console.log("DIAG clicked Start a study plan");
-  await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/, {
-    timeout: 15000,
-  });
+  await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
   await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
   await page.reload();
   await expect(page.getByText("Next: save your planning setup.")).toBeVisible();

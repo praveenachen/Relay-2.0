@@ -5,8 +5,11 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from cryptography.fernet import Fernet
+
 os.environ["COOKIE_SECURE"] = "false"
 os.environ["NOTION_PUBLISH_MODE"] = "mock"
+os.environ.setdefault("TOKEN_ENCRYPTION_KEY", Fernet.generate_key().decode())
 frontend_port = os.environ.get("RELAY_BROWSER_FRONTEND_PORT", "3010")
 os.environ["FRONTEND_ORIGIN"] = f"http://localhost:{frontend_port}"
 
