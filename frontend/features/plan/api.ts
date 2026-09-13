@@ -105,6 +105,12 @@ export const plan = {
   detail: (id: string) => request(`/workflows/plan/${id}`, planDetailSchema),
   setup: (id: string, data: PlanSetupInput) =>
     request(`/workflows/plan/${id}/setup`, planDetailSchema, json(data, "PUT")),
+  generate: (id: string, data: PlanSetupInput) =>
+    request(
+      `/workflows/plan/${id}/generate`,
+      planDetailSchema,
+      json(data, "PUT"),
+    ),
   importTasks: (id: string) =>
     request(`/workflows/plan/${id}/tasks/import`, planDetailSchema, {
       method: "POST",

@@ -8,7 +8,7 @@ class SchedulingWeights:
     priority: int = 30
     preferred_period: int = 12
     fragmentation: int = 8
-    daily_balance: int = 4
+    daily_balance: int = 100
 
 
 DEFAULT_WEIGHTS = SchedulingWeights()

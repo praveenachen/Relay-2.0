@@ -106,15 +106,17 @@ export function PlanEntry() {
       <section className="panel my-8">
         <h2 className="section-title">What Relay will do</h2>
         <ol className="learn-steps">
-          <li>Import tasks from a Notion database, or enter them directly.</li>
           <li>
-            Read your Google Calendar availability for the planning window.
+            Collect your tasks from manual entry or a selected Notion database.
+          </li>
+          <li>Read the selected Google Calendar and avoid existing events.</li>
+          <li>
+            Generate a balanced schedule across available days, weighted by
+            deadlines, priority, study hours, and breaks.
           </li>
           <li>
-            Run a CP-SAT solver to place study sessions around real deadlines,
-            study hours, and breaks.
+            Let you lock, remove, or regenerate sessions before approving.
           </li>
-          <li>Let you lock, move, or remove sessions before approving.</li>
           <li>Create only the approved study blocks on your calendar.</li>
         </ol>
         <button
@@ -258,10 +260,10 @@ function planReviewNextStep(
     return {
       title: canRequestApproval
         ? "Next: request approval for this schedule."
-        : "Next: adjust this schedule before approval.",
+        : "Next: choose where Relay should publish this schedule.",
       description: canRequestApproval
         ? "Review the sessions below, then request approval when the calendar blocks look right."
-        : "This schedule cannot be approved yet. Adjust the task load, planning window, or preferences.",
+        : "This schedule is locked in, but it needs a Google Calendar destination before approval.",
     };
   }
   if (data.approval?.status === "PENDING") {
@@ -375,6 +377,10 @@ function SetupWizard({
   });
   const usingNotion = taskSource === "notion";
 
+  const selectedCalendarId =
+    calendarId ||
+    (googleCalendars.data?.length === 1 ? googleCalendars.data[0].id : "");
+
   const buildMapping = () => ({
     title: mappingTitle,
     course: mappingCourse || null,
@@ -385,8 +391,20 @@ function SetupWizard({
     estimate_unit: mappingUnit,
   });
 
-  const saveSetup = useMutation({
-    mutationFn: async (overrides: { detachNotion?: boolean } = {}) => {
+  const planSetupPayload = () => {
+    const selectedDatabaseId = usingNotion ? databaseId || null : null;
+    return {
+      start: combineLocalDateTime(startDate, studyStartTime),
+      end: combineLocalDateTime(endDate, studyEndTime),
+      calendar_id: selectedCalendarId || null,
+      notion_database_id: selectedDatabaseId,
+      notion_mapping: selectedDatabaseId ? buildMapping() : null,
+      tasks: prioritizeTasks(tasks),
+    };
+  };
+
+  const generatePlan = useMutation({
+    mutationFn: async () => {
       if (preferencesQuery.data) {
         await preferences.save({
           ...preferencesQuery.data,
@@ -394,16 +412,7 @@ function SetupWizard({
           latest_study_time: studyEndTime,
         });
       }
-      const selectedDatabaseId =
-        !overrides.detachNotion && usingNotion ? databaseId || null : null;
-      return plan.setup(id, {
-        start: combineLocalDateTime(startDate, studyStartTime),
-        end: combineLocalDateTime(endDate, studyEndTime),
-        calendar_id: calendarId || null,
-        notion_database_id: selectedDatabaseId,
-        notion_mapping: selectedDatabaseId ? buildMapping() : null,
-        tasks: prioritizeTasks(tasks),
-      });
+      return plan.generate(id, planSetupPayload());
     },
     onSuccess: async () => {
       setEditingSetup(false);
@@ -423,6 +432,14 @@ function SetupWizard({
     mutationFn: () => plan.solve(id),
     onSuccess: invalidate,
   });
+  const refreshCalendars = useMutation({
+    mutationFn: connections.refreshGoogleCalendars,
+    onSuccess: async () => {
+      await cache.invalidateQueries({
+        queryKey: ["connections", "google-calendars"],
+      });
+    },
+  });
   const refreshDatabases = useMutation({
     mutationFn: connections.refreshNotionTaskDatabases,
     onSuccess: async () => {
@@ -433,20 +450,26 @@ function SetupWizard({
   });
 
   const busy =
-    saveSetup.isPending ||
+    generatePlan.isPending ||
     importTasks.isPending ||
     loadAvailability.isPending ||
     solve.isPending ||
+    refreshCalendars.isPending ||
     refreshDatabases.isPending;
   const stage = setup?.stage;
   const setupError =
-    saveSetup.error ||
+    generatePlan.error ||
     importTasks.error ||
     loadAvailability.error ||
-    solve.error ||
-    (usingNotion ? refreshDatabases.error || notionDatabases.error : null);
+    solve.error;
+  const calendarError = hasGoogle
+    ? refreshCalendars.error || googleCalendars.error
+    : null;
+  const notionSourceError = usingNotion
+    ? refreshDatabases.error || notionDatabases.error
+    : null;
   const needsTaskSource = usingNotion ? !databaseId : tasks.length === 0;
-  const needsCalendar = !calendarId;
+  const needsCalendar = !selectedCalendarId;
 
   const chooseManualTasks = () => {
     setTaskSource("manual");
@@ -475,7 +498,7 @@ function SetupWizard({
           databaseId,
           tasks.length,
           hasGoogle,
-          calendarId,
+          selectedCalendarId,
         )}
       />
       <ErrorMessage error={setupError} />
@@ -526,22 +549,48 @@ function SetupWizard({
             </label>
           </div>
           <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <label className="field">
-              Calendar Relay schedules into
+            <div className="field">
+              <div className="destination-picker-heading">
+                <span className="field-label">
+                  Calendar Relay schedules into
+                </span>
+                {hasGoogle && (
+                  <button
+                    className="icon-button"
+                    disabled={busy}
+                    onClick={() => refreshCalendars.mutate()}
+                    aria-label="Refresh Google calendars"
+                    title="Refresh Google calendars"
+                    type="button"
+                  >
+                    <RotateCcw aria-hidden="true" />
+                  </button>
+                )}
+              </div>
               {hasGoogle ? (
-                <select
-                  value={calendarId}
-                  onChange={(event) => setCalendarId(event.target.value)}
-                >
-                  <option value="" disabled>
-                    Select a calendar
-                  </option>
-                  {(googleCalendars.data || []).map((calendar) => (
-                    <option key={calendar.id} value={calendar.id}>
-                      {calendar.summary}
+                <>
+                  <select
+                    value={selectedCalendarId}
+                    onChange={(event) => setCalendarId(event.target.value)}
+                  >
+                    <option value="" disabled>
+                      Select a calendar
                     </option>
-                  ))}
-                </select>
+                    {(googleCalendars.data || []).map((calendar) => (
+                      <option key={calendar.id} value={calendar.id}>
+                        {calendar.summary}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-muted">
+                    {googleCalendars.isFetching || refreshCalendars.isPending
+                      ? "Loading calendars from your connected Google account..."
+                      : (googleCalendars.data || []).length === 0
+                        ? "Your Google account is connected, but Relay has no calendar list yet. Refresh calendars, then choose where study blocks should go."
+                        : "Your Google account is connected. Choose the specific calendar for this plan."}
+                  </p>
+                  <ErrorMessage error={calendarError} />
+                </>
               ) : (
                 <span className="text-sm text-muted">
                   <Link className="text-link" href="/connections">
@@ -551,7 +600,7 @@ function SetupWizard({
                   blocks.
                 </span>
               )}
-            </label>
+            </div>
             <div className="field">
               <span className="field-label">Task source</span>
               <div className="task-source-options" role="radiogroup">
@@ -619,9 +668,10 @@ function SetupWizard({
                     {notionDatabases.isFetching || refreshDatabases.isPending
                       ? "Loading Notion databases..."
                       : (notionDatabases.data || []).length === 0
-                        ? "No databases found. Refresh after sharing a database with the Relay Notion integration."
+                        ? "No databases found. If you do not want to import tasks from Notion, choose Enter tasks manually."
                         : "Select the database that contains the tasks Relay should schedule."}
                   </p>
+                  <ErrorMessage error={notionSourceError} />
                 </div>
               )}
             </div>
@@ -699,11 +749,9 @@ function SetupWizard({
           <button
             className="button mt-6"
             disabled={busy || needsTaskSource || needsCalendar}
-            onClick={() => saveSetup.mutate({})}
+            onClick={() => generatePlan.mutate()}
           >
-            {saveSetup.isPending
-              ? "Saving..."
-              : "Next: import or confirm tasks"}
+            {generatePlan.isPending ? "Generating..." : "Generate study plan"}
           </button>
         </div>
       ) : null}
@@ -711,82 +759,25 @@ function SetupWizard({
       {!editingSetup && stage === "setup" && (
         <div className="panel">
           <div className="section-heading">
-            <h2 className="section-title">Import tasks</h2>
+            <h2 className="section-title">Plan setup saved</h2>
             <button
               type="button"
               className="text-link text-sm"
               onClick={() => setEditingSetup(true)}
             >
-              Edit planning window &amp; sources
+              Edit setup
             </button>
           </div>
           <p className="text-sm text-muted">
-            {setup?.notion_database_id
-              ? "Relay will read tasks from the selected Notion database."
-              : "Relay will use the tasks you entered."}
+            Generate the study plan when the planning window, calendar, and task
+            source look right.
           </p>
           <button
             className="button mt-5"
             disabled={busy}
-            onClick={() => importTasks.mutate()}
+            onClick={() => generatePlan.mutate()}
           >
-            Next: import tasks
-          </button>
-        </div>
-      )}
-
-      {stage === "tasks_imported" && setup && (
-        <div className="panel">
-          <h2 className="section-title">Review imported tasks</h2>
-          {setup.task_issues.length > 0 && (
-            <div className="notice mb-5">
-              <p className="font-medium">
-                {setup.task_issues.length} Notion page
-                {setup.task_issues.length === 1 ? "" : "s"} could not be
-                imported.
-              </p>
-              <ul className="mt-2 list-disc pl-5 text-sm">
-                {setup.task_issues.map((issue, index) => (
-                  <li key={index}>{issue.message}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <TaskTable tasks={tasks} onChange={setTasks} editable />
-          <div className="mt-5 flex flex-wrap gap-3">
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => saveSetup.mutate({ detachNotion: true })}
-            >
-              Save edits
-            </button>
-            <button
-              className="button"
-              disabled={busy || tasks.length === 0}
-              onClick={() => loadAvailability.mutate()}
-            >
-              Next: load calendar availability
-            </button>
-          </div>
-        </div>
-      )}
-
-      {stage === "availability_loaded" && setup && (
-        <div className="panel">
-          <h2 className="section-title">Calendar availability</h2>
-          <p className="text-sm text-muted">
-            {setup.calendar_id
-              ? `Relay found ${setup.busy_intervals.length} existing event${setup.busy_intervals.length === 1 ? "" : "s"} in the planning window.`
-              : "No calendar is selected -- Relay will treat the whole window as free."}
-          </p>
-          <button
-            className="button mt-5"
-            disabled={busy}
-            onClick={() => solve.mutate()}
-          >
-            <Play aria-hidden="true" />
-            Next: generate study plan
+            {generatePlan.isPending ? "Generating..." : "Generate study plan"}
           </button>
         </div>
       )}
@@ -1056,43 +1047,59 @@ function ReviewAndApprove({
         </Empty>
       )}
       {canRegenerate && (
-        <div className="panel">
-          <div className="flex flex-wrap gap-3">
-            <button
-              className="button secondary"
-              disabled={busy}
-              onClick={() => solve.mutate()}
-            >
-              <RotateCcw aria-hidden="true" />
-              Regenerate remaining sessions
-            </button>
-            <button
-              className={
-                canRequestApproval && !busy ? "button" : "button secondary"
-              }
-              disabled={busy || !canRequestApproval}
-              onClick={() => requestApproval.mutate()}
-            >
-              <Send aria-hidden="true" />
-              Request approval
-            </button>
-          </div>
-          {!canRequestApproval && result?.status === "INFEASIBLE" && (
-            <p className="mt-3 text-sm text-muted">
-              This plan is not feasible yet -- adjust the window, preferences,
-              or task load before requesting approval.
-            </p>
+        <div className="panel plan-action-panel">
+          {missingCalendar ? (
+            <div className="blocked-action-card">
+              <div>
+                <p className="font-medium">
+                  Choose a Google Calendar to continue.
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  This schedule is generated, but Relay cannot request approval
+                  until the plan has a calendar destination. Connect Google
+                  Calendar, then start a new plan and select that calendar in
+                  setup.
+                </p>
+              </div>
+              <div className="blocked-action-buttons">
+                <Link className="button" href="/connections">
+                  Connect Google Calendar
+                </Link>
+                <Link className="button secondary" href="/workflows/plan">
+                  Start new plan
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-3">
+              <button
+                className="button secondary"
+                disabled={busy}
+                onClick={() => solve.mutate()}
+              >
+                <RotateCcw aria-hidden="true" />
+                Regenerate remaining sessions
+              </button>
+              <button
+                className={
+                  canRequestApproval && !busy ? "button" : "button secondary"
+                }
+                disabled={busy || !canRequestApproval}
+                onClick={() => requestApproval.mutate()}
+              >
+                <Send aria-hidden="true" />
+                Request approval
+              </button>
+            </div>
           )}
-          {!canRequestApproval && missingCalendar && (
-            <p className="mt-3 text-sm text-muted">
-              This plan has no calendar selected, so Relay cannot request
-              approval for it.{" "}
-              <Link className="text-link" href="/connections">
-                Connect Google Calendar
-              </Link>
-              , then start a new study plan to choose it during setup.
-            </p>
-          )}
+          {!missingCalendar &&
+            !canRequestApproval &&
+            result?.status === "INFEASIBLE" && (
+              <p className="mt-3 text-sm text-muted">
+                This plan is not feasible yet -- adjust the window, preferences,
+                or task load before requesting approval.
+              </p>
+            )}
         </div>
       )}
       {data.approval && (
@@ -1120,14 +1127,17 @@ function ReviewAndApprove({
             </div>
           )}
           {data.run.status === "APPROVED" && (
-            <button
-              className="button mt-5"
-              disabled={busy}
-              onClick={() => execute.mutate()}
-            >
-              <Send aria-hidden="true" />
-              Create approved calendar blocks
-            </button>
+            <div className="approval-action-row mt-5">
+              <Status value={data.approval.status} />
+              <button
+                className="button"
+                disabled={busy}
+                onClick={() => execute.mutate()}
+              >
+                <Send aria-hidden="true" />
+                Create approved calendar blocks
+              </button>
+            </div>
           )}
         </div>
       )}

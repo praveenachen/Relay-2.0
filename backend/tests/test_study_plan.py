@@ -142,6 +142,37 @@ async def test_new_plan_detail_has_null_setup(client, account):
     assert detail.json()["approval"] is None
 
 
+async def test_generate_plan_condenses_setup_import_availability_and_solve(
+    client, account, session_factory, encryption_key, monkeypatch
+):
+    monkeypatch.setattr(GoogleCalendarApiClient, "busy_intervals", no_busy_intervals)
+    await connect_google(session_factory, account, encryption_key)
+    created = await client.post("/workflows/plan")
+    assert created.status_code == 201, created.text
+    path = "/workflows/plan/" + created.json()["id"]
+
+    generated = await client.put(
+        path + "/generate",
+        json={
+            "start": "2026-01-05T00:00:00+00:00",
+            "end": "2026-01-12T00:00:00+00:00",
+            "calendar_id": "primary",
+            "notion_database_id": None,
+            "notion_mapping": None,
+            "tasks": [task_payload("essay")],
+        },
+    )
+
+    assert generated.status_code == 200, generated.text
+    detail = generated.json()
+    assert detail["run"]["status"] == "PLAN_READY"
+    assert detail["setup"]["stage"] == "schedule_ready"
+    assert detail["setup"]["calendar_id"] == "primary"
+    assert detail["setup"]["tasks"][0]["title"] == "Essay"
+    assert detail["result"]["metrics"]["tasks_fully_scheduled"] == 1
+    assert detail["result"]["sessions"]
+
+
 async def test_solve_schedules_task_within_window(
     client, account, session_factory, encryption_key, monkeypatch
 ):

@@ -87,6 +87,13 @@ async def setup(
     return await plan.setup(run_id, user.id, data)
 
 
+@router.put("/{run_id}/generate")
+async def generate(
+    run_id: UUID, data: PlanSetupInput, user: CurrentUser, plan: Plan
+) -> dict[str, object]:
+    return await plan.generate(run_id, user.id, data)
+
+
 @router.post("/{run_id}/tasks/import")
 async def import_tasks(run_id: UUID, user: CurrentUser, plan: Plan) -> dict[str, object]:
     return await plan.import_tasks(run_id, user.id)

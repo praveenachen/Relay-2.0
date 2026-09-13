@@ -291,9 +291,7 @@ def test_daily_balance_weight_spreads_large_task_across_days() -> None:
     unbalanced = CPSATStudyScheduler(SchedulingWeights(daily_balance=0)).solve(
         problem(big_task, windows, preference=preference)
     )
-    balanced = CPSATStudyScheduler(SchedulingWeights(daily_balance=100)).solve(
-        problem(big_task, windows, preference=preference)
-    )
+    balanced = solve(problem(big_task, windows, preference=preference))
 
     def days_used(result) -> set:
         return {session.start.date() for session in result.sessions}

@@ -101,7 +101,7 @@ class StudyPlanWorkflowService:
         tasks = [AcademicTask.model_validate(item) for item in payload.get("tasks", [])]
         mapping_data = payload.get("notion_mapping")
         database_id = payload.get("notion_database_id")
-        if not (database_id and mapping_data):
+        if not tasks and not (database_id and mapping_data):
             try:
                 default = await self.notion.default(owner)
             except NotionNotConnected:
@@ -132,6 +132,12 @@ class StudyPlanWorkflowService:
         )
         await self.session.commit()
         return await self.detail(run_id, owner)
+
+    async def generate(self, run_id: UUID, owner: UUID, data: PlanSetupInput) -> dict[str, Any]:
+        await self.setup(run_id, owner, data)
+        await self.import_tasks(run_id, owner)
+        await self.load_availability(run_id, owner)
+        return await self.solve(run_id, owner)
 
     async def load_availability(self, run_id: UUID, owner: UUID) -> dict[str, Any]:
         run = await self.owned_run(run_id, owner, lock=True)
