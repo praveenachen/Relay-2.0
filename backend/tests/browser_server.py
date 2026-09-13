@@ -6,7 +6,9 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 os.environ["COOKIE_SECURE"] = "false"
-os.environ["FRONTEND_ORIGIN"] = "http://localhost:3010"
+os.environ["NOTION_PUBLISH_MODE"] = "mock"
+frontend_port = os.environ.get("RELAY_BROWSER_FRONTEND_PORT", "3010")
+os.environ["FRONTEND_ORIGIN"] = f"http://localhost:{frontend_port}"
 
 import uvicorn  # noqa: E402
 from alembic.config import Config  # noqa: E402
@@ -49,4 +51,4 @@ async def lifespan(application):
 
 app.router.lifespan_context = lifespan
 if __name__ == "__main__":
-    uvicorn.run(app, host="127.0.0.1", port=8010)
+    uvicorn.run(app, host="127.0.0.1", port=int(os.environ.get("RELAY_BROWSER_API_PORT", "8010")))

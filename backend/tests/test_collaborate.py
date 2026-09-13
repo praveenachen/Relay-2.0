@@ -55,6 +55,10 @@ async def connect_github(session_factory, account, encryption_key):
 
 
 async def connect_notion(session_factory, account, encryption_key):
+    # Collaborate lifecycle tests validate proposal/approval/retry behavior with
+    # deterministic connector results. Product/dev defaults can still use real
+    # Notion publishing.
+    get_settings().notion_publish_mode = "mock"
     store = FernetCredentialStore([encryption_key])
     async with session_factory() as session:
         session.add(

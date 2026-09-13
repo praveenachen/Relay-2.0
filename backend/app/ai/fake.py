@@ -2,8 +2,13 @@ import json
 import re
 
 from app.ai.base import Message, T
-from app.workflows.lecture_notes.schemas import LectureSummary, SummarySection
-from app.workflows.project_meeting.models import MeetingAnalysis
+from app.workflows.lecture_notes.schemas import LectureSummary, SourceReference, SummarySection
+from app.workflows.project_meeting.models import (
+    MeetingActionItem,
+    MeetingAnalysis,
+    MeetingDecision,
+    MeetingSourceReference,
+)
 
 _PR_REFERENCE = re.compile(r"#\d+")
 _DEADLINE_PHRASE = re.compile(
@@ -33,11 +38,11 @@ class FakeLanguageModel:
             lower = text.lower()
             if any(marker in lower for marker in decision_markers):
                 decisions.append(
-                    {
-                        "title": text[:80],
-                        "description": text[:300],
-                        "source_refs": [{"segment_id": segment["id"]}],
-                    }
+                    MeetingDecision(
+                        title=text[:80],
+                        description=text[:300],
+                        source_refs=[MeetingSourceReference(segment_id=segment["id"])],
+                    )
                 )
             elif any(marker in lower for marker in action_markers):
                 is_review = any(m in lower for m in review_markers)
@@ -53,18 +58,18 @@ class FakeLanguageModel:
                 pr_match = _PR_REFERENCE.search(text)
                 deadline_match = _DEADLINE_PHRASE.search(lower)
                 action_items.append(
-                    {
-                        "title": text[:80],
-                        "description": text[:300],
-                        "owner_name": segment.get("speaker"),
-                        "deadline_text": deadline_match.group(0) if deadline_match else None,
-                        "category": category,
-                        "source_refs": [{"segment_id": segment["id"]}],
-                        "confidence": "medium",
-                        "pull_request_reference": (
+                    MeetingActionItem(
+                        title=text[:80],
+                        description=text[:300],
+                        owner_name=segment.get("speaker"),
+                        deadline_text=deadline_match.group(0) if deadline_match else None,
+                        category=category,
+                        source_refs=[MeetingSourceReference(segment_id=segment["id"])],
+                        confidence="medium",
+                        pull_request_reference=(
                             f"PR {pr_match.group(0)}" if (is_review and pr_match) else None
                         ),
-                    }
+                    )
                 )
         result = MeetingAnalysis(
             summary=f"Discussed {len(segments)} transcript segment(s)." if segments else "",
@@ -80,7 +85,9 @@ class FakeLanguageModel:
             SummarySection(
                 heading=item.get("heading") or "Lecture material",
                 text=item["text"][:600],
-                source_refs=[{"section_id": item["id"], "page": item.get("source_page_start")}],
+                source_refs=[
+                    SourceReference(section_id=item["id"], page=item.get("source_page_start"))
+                ],
             )
             for item in source["sections"]
             if item["text"].strip()

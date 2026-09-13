@@ -44,7 +44,10 @@ class NotionRateLimited(DomainError):
 class NotionValidationFailed(DomainError):
     code = "NOTION_VALIDATION_FAILED"
     status_code = 422
-    message = "Notion rejected the request format. Check the selected Notion page or database and try again."
+    message = (
+        "Notion rejected the request format. Check the selected Notion page or database "
+        "and try again."
+    )
 
 
 class NotionUnavailable(DomainError):

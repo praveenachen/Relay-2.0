@@ -10,23 +10,28 @@ from app.connectors.github.schemas import (
 )
 
 
+def _string_value(data: dict[str, Any], key: str, default: str = "") -> str:
+    value = data.get(key)
+    return value if isinstance(value, str) else default
+
+
 def repository_from_response(data: dict[str, Any]) -> GitHubRepository:
     owner = data.get("owner")
     return GitHubRepository(
         owner=owner.get("login", "") if isinstance(owner, dict) else "",
-        name=data.get("name", ""),
-        full_name=data.get("full_name", ""),
+        name=_string_value(data, "name"),
+        full_name=_string_value(data, "full_name"),
         private=bool(data.get("private", False)),
-        html_url=data.get("html_url") if isinstance(data.get("html_url"), str) else "",
+        html_url=_string_value(data, "html_url"),
     )
 
 
 def pull_request_from_response(data: dict[str, Any]) -> GitHubPullRequest:
     return GitHubPullRequest(
         number=data["number"],
-        title=data.get("title") or "",
-        html_url=data.get("html_url") or "",
-        state=data.get("state") or "open",
+        title=_string_value(data, "title"),
+        html_url=_string_value(data, "html_url"),
+        state=_string_value(data, "state", "open"),
     )
 
 
@@ -39,9 +44,9 @@ def issue_result_from_response(
         # composes the repository the same way GitHub's own UI addresses an
         # issue ("owner/name#number"), keeping it unique per connected account.
         external_id=f"{action.repository_owner}/{action.repository_name}#{number}",
-        external_url=data.get("html_url") or "",
+        external_url=_string_value(data, "html_url"),
         number=number,
-        title=data.get("title") or action.title,
+        title=_string_value(data, "title", action.title),
     )
 
 
@@ -53,7 +58,7 @@ def review_request_result_from_response(
             f"{action.repository_owner}/{action.repository_name}"
             f"#{action.pull_number}:{action.reviewer}"
         ),
-        external_url=data.get("html_url") if isinstance(data.get("html_url"), str) else "",
+        external_url=_string_value(data, "html_url"),
         pull_number=action.pull_number,
         reviewer=action.reviewer,
     )

@@ -110,10 +110,10 @@ def main() -> None:
     elif command == "dev-fast":
         run_dev_servers()
 
+
 if __name__ == "__main__":
     try:
         main()
     except (subprocess.CalledProcessError, FileNotFoundError, RuntimeError) as error:
         print(f"Command failed: {error}", file=sys.stderr)
         sys.exit(1)
-

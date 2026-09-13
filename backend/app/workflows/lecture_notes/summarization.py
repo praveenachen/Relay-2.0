@@ -3,7 +3,7 @@ import json
 from pydantic import ValidationError
 
 from app.ai.base import LanguageModel, Message
-from app.documents.models import ParsedDocument
+from app.documents.models import DocumentSection, ParsedDocument
 from app.workflows.lecture_notes.errors import MalformedModelOutput
 from app.workflows.lecture_notes.prompts import SYSTEM
 from app.workflows.lecture_notes.schemas import (
@@ -17,9 +17,9 @@ from app.workflows.lecture_notes.schemas import (
 from app.workflows.lecture_notes.segmentation import estimated_tokens, segment
 
 
-def chunk_sections(document: ParsedDocument, budget: int) -> list[list]:
-    chunks: list[list] = []
-    current: list = []
+def chunk_sections(document: ParsedDocument, budget: int) -> list[list[DocumentSection]]:
+    chunks: list[list[DocumentSection]] = []
+    current: list[DocumentSection] = []
     current_size = 0
     for section in segment(document, budget):
         size = estimated_tokens(section.text)
@@ -71,7 +71,7 @@ class SummaryService:
             else:
                 # Bounded section calls; deterministic ordered aggregation avoids an unbounded
                 # final prompt and retains every typed field and section-level reference.
-                summaries = []
+                summaries: list[LectureSummary] = []
                 for sections in chunk_sections(document, self.section_budget):
                     part = document.model_copy(update={"sections": sections})
                     summaries.append(await self._call(part))

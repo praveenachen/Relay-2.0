@@ -56,16 +56,13 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
     fullPage: true,
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page
-    .getByRole("button", { name: "Create draft", exact: true })
-    .first()
-    .click();
-  await expect(page).toHaveURL(/\/runs\/[a-f0-9-]+$/);
-  await expect(page.getByText("Your draft is saved.")).toBeVisible();
+  await page.getByRole("link", { name: "Start plan", exact: true }).click();
+  await expect(page).toHaveURL(/\/workflows\/plan$/);
+  await page.getByRole("button", { name: "Start a study plan" }).click();
+  await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
+  await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
   await page.reload();
-  await expect(
-    page.getByText("workflow created", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Preferred session (minutes)")).toHaveValue(
     "45",
@@ -133,9 +130,12 @@ test("LEARN upload review approval and mock publish", async ({
   ).toBeVisible({
     timeout: 15000,
   });
+  await page.getByRole("button", { name: "Edit notes" }).click();
   await page.getByLabel("Title").fill("Week 7 - Eigenvalues");
   await page.getByRole("button", { name: "Save notes" }).click();
-  await expect(page.getByRole("button", { name: "Approve" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Approve" })).toBeEnabled({
+    timeout: 15000,
+  });
   await page.getByRole("button", { name: "Approve" }).click();
   await expect(
     page.getByRole("button", { name: "Publish to Notion" }),
@@ -144,7 +144,11 @@ test("LEARN upload review approval and mock publish", async ({
   await expect(page.getByText("mock://notion/page/")).toBeVisible({
     timeout: 15000,
   });
-  await expect(page.getByText("Week 7 - Eigenvalues")).toBeVisible();
+  await expect(
+    page
+      .getByRole("heading", { name: "Week 7 - Eigenvalues", level: 1 })
+      .first(),
+  ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("learn-desktop.png"),
     fullPage: true,

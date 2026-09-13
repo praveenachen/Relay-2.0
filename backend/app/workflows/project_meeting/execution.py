@@ -1,6 +1,7 @@
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
+from pydantic import JsonValue
 from sqlalchemy import select
 
 from app.core.config import get_settings
@@ -99,7 +100,7 @@ class CollaborateExecutionService:
                         workflow_run_id=run.id,
                         proposed_action_id=action.id,
                         action_type=action.action_type,
-                        approved_payload=approval.approved_payload,
+                        approved_payload=cast(dict[str, JsonValue], approval.approved_payload),
                         idempotency_key=idempotency_key,
                         correlation_id=correlation_id,
                     )
