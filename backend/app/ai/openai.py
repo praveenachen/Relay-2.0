@@ -1,4 +1,12 @@
-from openai import APIError, APIStatusError, APITimeoutError, AsyncOpenAI, AuthenticationError, OpenAIError, RateLimitError
+from openai import (
+    APIError,
+    APIStatusError,
+    APITimeoutError,
+    AsyncOpenAI,
+    AuthenticationError,
+    OpenAIError,
+    RateLimitError,
+)
 from pydantic import ValidationError
 
 from app.ai.base import Message, T

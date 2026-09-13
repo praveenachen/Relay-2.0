@@ -24,6 +24,7 @@ from app.connectors.notion.schemas import (
 )
 
 NOTION_VERSION = "2026-03-11"
+NOTION_MAX_PAGE_CHILDREN = 100
 
 
 def retry_after(headers: httpx.Headers) -> int | None:
@@ -217,10 +218,11 @@ class RealNotionConnector:
             raise NotionDestinationNotFound()
         blocks = NotionStudyPageMapper().map(action.content.summary)
         marker = NotionBlock(kind="paragraph", text=f"Relay action: {idempotency_key}")
+        page_blocks = blocks[: NOTION_MAX_PAGE_CHILDREN - 1]
         result = await self.client.create_page(
             action.parent_destination_id,
             action.title,
-            [marker, *blocks],
+            [marker, *page_blocks],
         )
         page_id = result.get("id")
         page_url = result.get("url")

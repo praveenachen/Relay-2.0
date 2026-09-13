@@ -26,8 +26,8 @@ from app.workflows.lecture_notes.schemas import (
     Formula,
     KeyConcept,
     LectureSummary,
-    SummarySection,
     QuizQuestion,
+    SummarySection,
 )
 
 
@@ -137,6 +137,36 @@ async def test_mock_and_real_connector_contracts():
     )
     assert real_result.external_id == "page-created"
     assert "Relay action: relay:1" in captured["payload"]
+
+
+async def test_real_connector_keeps_initial_page_children_within_notion_limit():
+    from app.connectors.notion import RealNotionConnector
+
+    captured = {}
+    large_summary = summary().model_copy(
+        update={
+            "key_concepts": [
+                KeyConcept(name=f"Concept {index}", explanation="Explanation")
+                for index in range(120)
+            ],
+        }
+    )
+    large_action = CreateNotionStudyPageAction.model_validate(
+        {**action().model_dump(), "content": {"summary": large_summary.model_dump()}}
+    )
+
+    class CapturingClient(NotionApiClient):
+        async def create_page(self, parent_page_id, title, blocks):
+            captured["block_count"] = len(blocks)
+            captured["first_block"] = blocks[0].text
+            return {"id": "page-created", "url": "https://notion.so/page-created"}
+
+    result = await RealNotionConnector(CapturingClient("token")).create_study_page(
+        large_action, "relay:large"
+    )
+
+    assert result.external_id == "page-created"
+    assert captured == {"block_count": 100, "first_block": "Relay action: relay:large"}
 
 
 async def test_real_connector_maps_provider_errors():
