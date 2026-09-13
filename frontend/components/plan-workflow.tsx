@@ -188,6 +188,8 @@ function planSetupNextStep(
   usingNotion: boolean,
   databaseId: string,
   taskCount: number,
+  hasGoogle: boolean,
+  calendarId: string,
 ) {
   if (busy) {
     return {
@@ -196,6 +198,20 @@ function planSetupNextStep(
     };
   }
   if (!stage || stage === "setup") {
+    if (!hasGoogle) {
+      return {
+        title: "Next: connect Google Calendar.",
+        description:
+          "Relay needs a calendar to schedule into before it can build a plan.",
+      };
+    }
+    if (!calendarId) {
+      return {
+        title: "Next: choose a calendar.",
+        description:
+          "Select the calendar Relay should schedule study blocks into.",
+      };
+    }
     return {
       title: "Next: save your planning setup.",
       description: usingNotion
@@ -317,7 +333,7 @@ function SetupWizard({
     setup?.notion_database_id ? "notion" : "manual",
   );
   const [databaseId, setDatabaseId] = useState(setup?.notion_database_id || "");
-  const [databaseQuery, setDatabaseQuery] = useState("");
+  const [editingSetup, setEditingSetup] = useState(!setup);
   const [mappingTitle, setMappingTitle] = useState(
     setup?.notion_mapping?.title || "Task Name",
   );
@@ -390,6 +406,7 @@ function SetupWizard({
       });
     },
     onSuccess: async () => {
+      setEditingSetup(false);
       await invalidate();
       await cache.invalidateQueries({ queryKey: ["preferences"] });
     },
@@ -428,15 +445,12 @@ function SetupWizard({
     loadAvailability.error ||
     solve.error ||
     (usingNotion ? refreshDatabases.error || notionDatabases.error : null);
-  const filteredDatabases = (notionDatabases.data || []).filter((database) =>
-    database.title.toLowerCase().includes(databaseQuery.trim().toLowerCase()),
-  );
   const needsTaskSource = usingNotion ? !databaseId : tasks.length === 0;
+  const needsCalendar = !calendarId;
 
   const chooseManualTasks = () => {
     setTaskSource("manual");
     setDatabaseId("");
-    setDatabaseQuery("");
     refreshDatabases.reset();
   };
 
@@ -460,10 +474,12 @@ function SetupWizard({
           usingNotion,
           databaseId,
           tasks.length,
+          hasGoogle,
+          calendarId,
         )}
       />
       <ErrorMessage error={setupError} />
-      {!stage || stage === "setup" ? (
+      {editingSetup ? (
         <div className="panel">
           <div className="section-heading">
             <h2 className="section-title">Planning window &amp; sources</h2>
@@ -517,7 +533,9 @@ function SetupWizard({
                   value={calendarId}
                   onChange={(event) => setCalendarId(event.target.value)}
                 >
-                  <option value="">Use default calendar</option>
+                  <option value="" disabled>
+                    Select a calendar
+                  </option>
                   {(googleCalendars.data || []).map((calendar) => (
                     <option key={calendar.id} value={calendar.id}>
                       {calendar.summary}
@@ -529,7 +547,8 @@ function SetupWizard({
                   <Link className="text-link" href="/connections">
                     Connect Google Calendar
                   </Link>{" "}
-                  to choose a calendar.
+                  to choose a calendar. Relay needs one to schedule study
+                  blocks.
                 </span>
               )}
             </label>
@@ -585,17 +604,12 @@ function SetupWizard({
                       <RotateCcw aria-hidden="true" />
                     </button>
                   </div>
-                  <input
-                    value={databaseQuery}
-                    onChange={(event) => setDatabaseQuery(event.target.value)}
-                    placeholder="Search databases Relay can access"
-                  />
                   <select
                     value={databaseId}
                     onChange={(event) => setDatabaseId(event.target.value)}
                   >
                     <option value="">Select a Notion database</option>
-                    {filteredDatabases.map((database) => (
+                    {(notionDatabases.data || []).map((database) => (
                       <option key={database.id} value={database.id}>
                         {database.title}
                       </option>
@@ -604,8 +618,8 @@ function SetupWizard({
                   <p className="text-sm text-muted">
                     {notionDatabases.isFetching || refreshDatabases.isPending
                       ? "Loading Notion databases..."
-                      : filteredDatabases.length === 0
-                        ? "No matching databases found. Refresh after sharing a database with the Relay Notion integration."
+                      : (notionDatabases.data || []).length === 0
+                        ? "No databases found. Refresh after sharing a database with the Relay Notion integration."
                         : "Select the database that contains the tasks Relay should schedule."}
                   </p>
                 </div>
@@ -628,7 +642,7 @@ function SetupWizard({
                   />
                 </label>
                 <label className="field">
-                  Course property (optional)
+                  Category property (optional)
                   <input
                     value={mappingCourse}
                     onChange={(e) => setMappingCourse(e.target.value)}
@@ -684,17 +698,28 @@ function SetupWizard({
           )}
           <button
             className="button mt-6"
-            disabled={busy || needsTaskSource}
+            disabled={busy || needsTaskSource || needsCalendar}
             onClick={() => saveSetup.mutate({})}
           >
-            {saveSetup.isPending ? "Saving..." : "Save and continue"}
+            {saveSetup.isPending
+              ? "Saving..."
+              : "Next: import or confirm tasks"}
           </button>
         </div>
       ) : null}
 
-      {stage === "setup" && (
+      {!editingSetup && stage === "setup" && (
         <div className="panel">
-          <h2 className="section-title">Import tasks</h2>
+          <div className="section-heading">
+            <h2 className="section-title">Import tasks</h2>
+            <button
+              type="button"
+              className="text-link text-sm"
+              onClick={() => setEditingSetup(true)}
+            >
+              Edit planning window &amp; sources
+            </button>
+          </div>
           <p className="text-sm text-muted">
             {setup?.notion_database_id
               ? "Relay will read tasks from the selected Notion database."
@@ -705,7 +730,7 @@ function SetupWizard({
             disabled={busy}
             onClick={() => importTasks.mutate()}
           >
-            Import tasks
+            Next: import tasks
           </button>
         </div>
       )}
@@ -741,7 +766,7 @@ function SetupWizard({
               disabled={busy || tasks.length === 0}
               onClick={() => loadAvailability.mutate()}
             >
-              Continue to availability
+              Next: load calendar availability
             </button>
           </div>
         </div>
@@ -761,7 +786,7 @@ function SetupWizard({
             onClick={() => solve.mutate()}
           >
             <Play aria-hidden="true" />
-            Generate study plan
+            Next: generate study plan
           </button>
         </div>
       )}
@@ -842,15 +867,22 @@ function TaskTable({
                   />
                 </label>
                 <label className="field">
-                  Course (optional)
+                  Category (optional)
                   <input
                     disabled={!editable}
                     value={task.course || ""}
-                    placeholder="Optional"
+                    placeholder="Work, Personal, School..."
+                    list={`category-options-${task.id}`}
                     onChange={(e) =>
                       update(index, { course: e.target.value || null })
                     }
                   />
+                  <datalist id={`category-options-${task.id}`}>
+                    <option value="Work" />
+                    <option value="Personal" />
+                    <option value="School" />
+                    <option value="Other" />
+                  </datalist>
                 </label>
                 <label className="field">
                   Deadline
@@ -871,10 +903,15 @@ function TaskTable({
                     type="number"
                     min={5}
                     disabled={!editable}
-                    value={task.estimated_minutes}
+                    value={
+                      task.estimated_minutes === 0 ? "" : task.estimated_minutes
+                    }
                     onChange={(e) =>
                       update(index, {
-                        estimated_minutes: Number(e.target.value) || 0,
+                        estimated_minutes:
+                          e.target.value === ""
+                            ? 0
+                            : Number(e.target.value) || 0,
                       })
                     }
                   />
@@ -982,11 +1019,13 @@ function ReviewAndApprove({
     execute.isPending;
 
   const canRegenerate = data.run.status === "PLAN_READY";
+  const missingCalendar = !setup?.calendar_id;
   const canRequestApproval =
     data.run.status === "PLAN_READY" &&
     !!result &&
     result.status !== "INFEASIBLE" &&
-    result.sessions.length > 0;
+    result.sessions.length > 0 &&
+    !missingCalendar;
   const pendingApproval = data.approval?.status === "PENDING";
 
   return (
@@ -1042,6 +1081,16 @@ function ReviewAndApprove({
             <p className="mt-3 text-sm text-muted">
               This plan is not feasible yet -- adjust the window, preferences,
               or task load before requesting approval.
+            </p>
+          )}
+          {!canRequestApproval && missingCalendar && (
+            <p className="mt-3 text-sm text-muted">
+              This plan has no calendar selected, so Relay cannot request
+              approval for it.{" "}
+              <Link className="text-link" href="/connections">
+                Connect Google Calendar
+              </Link>
+              , then start a new study plan to choose it during setup.
             </p>
           )}
         </div>

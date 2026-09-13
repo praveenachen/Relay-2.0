@@ -1,6 +1,6 @@
 import re
 from datetime import date
-from typing import Literal
+from typing import Any, Literal
 
 from app.connectors.github.schemas import CreateGitHubIssueAction, RequestPullRequestReviewAction
 from app.connectors.notion.action_items import (
@@ -114,6 +114,7 @@ def build_notion_task_action(
     mapping: NotionActionItemPropertyMapping,
     connection_id: str | None,
     owner_display_name: str | None,
+    schema: dict[str, Any] | None = None,
 ) -> CreateNotionTaskAction:
     deadline_date_value = date.fromisoformat(draft.deadline_date) if draft.deadline_date else None
     properties = build_task_properties(
@@ -122,6 +123,7 @@ def build_notion_task_action(
         description=draft.description,
         owner_name=owner_display_name or draft.owner_name,
         deadline_date=deadline_date_value,
+        schema=schema,
     )
     body = [NotionBlock(kind="paragraph", text=draft.description)] if draft.description else []
     return CreateNotionTaskAction(

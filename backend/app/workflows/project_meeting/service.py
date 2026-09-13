@@ -10,6 +10,8 @@ from app.connectors.github.schemas import CreateGitHubIssueAction, RequestPullRe
 from app.connectors.github.service import GitHubService
 from app.connectors.notion.action_items import NotionActionItemPropertyMapping
 from app.connectors.notion.schemas import CreateNotionTaskAction
+from app.connectors.notion.service import NotionTaskSourceService
+from app.core.config import get_settings
 from app.documents.base import FileStore
 from app.documents.errors import DocumentParseFailed
 from app.documents.models import UploadedDocument
@@ -57,11 +59,13 @@ class ProjectMeetingWorkflowService:
         analysis: MeetingAnalysisService,
         github: GitHubService,
         provider_name: str,
+        notion: NotionTaskSourceService,
     ):
         self.repo, self.session = repo, repo.session
         self.documents, self.store, self.analysis = documents, store, analysis
         self.github = github
         self.provider_name = provider_name
+        self.notion = notion
         self.workflow = WorkflowService(repo)
 
     async def owned_run(self, run_id: UUID, owner: UUID, *, lock: bool = False) -> WorkflowRun:
@@ -255,6 +259,11 @@ class ProjectMeetingWorkflowService:
         notion_connection_id = await self._connected_id(owner, Provider.NOTION)
         github_connection_id = await self._connected_id(owner, Provider.GITHUB)
         valid_assignees, valid_labels = await self._github_repository_facts(owner, project)
+        notion_schema = (
+            await self._notion_database_schema(owner, project.notion_database_id)
+            if project.notion_database_id
+            else None
+        )
 
         actions: list[ProposedAction] = []
         skipped: list[dict[str, Any]] = []
@@ -272,6 +281,7 @@ class ProjectMeetingWorkflowService:
                         mapping=mapping,
                         connection_id=notion_connection_id,
                         owner_display_name=owner_display,
+                        schema=notion_schema,
                     )
                     actions.append(
                         self._proposed_action(
@@ -382,6 +392,29 @@ class ProjectMeetingWorkflowService:
             if item.status == ConnectionStatus.CONNECTED
         ]
         return str(connections[0].id) if connections else None
+
+    async def _notion_database_schema(
+        self, owner: UUID, database_id: str
+    ) -> dict[str, Any] | None:
+        """Best-effort live lookup of the destination database's real
+        property schema, so build_notion_task_action can write only
+        properties that actually exist with their real type instead of
+        trusting a possibly stale configured mapping. A failed lookup
+        (Notion down, token revoked, database no longer shared) just means
+        no validation happens here -- the write still gets attempted with
+        the configured mapping, matching prior behavior. Skipped entirely
+        in mock publish mode, since execution never calls the real Notion
+        API there either."""
+        if get_settings().notion_publish_mode != "real":
+            return None
+        try:
+            connection = await self.notion.connection(owner)
+            client = await self.notion.client(connection)
+            database = await client.get_database(database_id)
+        except DomainError:
+            return None
+        properties = database.get("properties")
+        return properties if isinstance(properties, dict) else None
 
     async def _github_repository_facts(
         self, owner: UUID, project: ProjectWorkspace

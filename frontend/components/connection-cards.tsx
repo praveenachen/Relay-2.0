@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConnections } from "@/hooks/queries";
 import { connections } from "@/features/connections/api";
 import { Provider } from "@/lib/schemas";
@@ -37,18 +37,6 @@ export function ConnectionCards() {
   const cache = useQueryClient();
   const [confirm, setConfirm] = useState<Provider | null>(null);
   const connect = useMutation({ mutationFn: connections.authorize });
-  const destinations = useMutation({
-    mutationFn: connections.refreshNotionDestinations,
-    onSuccess: async () => {
-      await cache.invalidateQueries({ queryKey: ["connections"] });
-    },
-  });
-  const selectDestination = useMutation({
-    mutationFn: connections.selectNotionDestination,
-    onSuccess: async () => {
-      await cache.invalidateQueries({ queryKey: ["connections"] });
-    },
-  });
   const disconnect = useMutation({
     mutationFn: connections.disconnect,
     onSuccess: async () => {
@@ -145,157 +133,14 @@ export function ConnectionCards() {
                     {connecting ? "Connecting..." : "Connect"}
                   </button>
                 )}
-                {tool.provider === "NOTION" && accounts.length > 0 && (
-                  <NotionDestinationPicker
-                    account={accounts[0]}
-                    loading={
-                      destinations.isPending || selectDestination.isPending
-                    }
-                    refresh={() => destinations.mutate()}
-                    destinations={destinations.data || []}
-                    select={(id) => selectDestination.mutate(id)}
-                  />
-                )}
-                {tool.provider === "GOOGLE" && accounts.length > 0 && (
-                  <GoogleCalendarPicker account={accounts[0]} />
-                )}
               </div>
             </article>
           );
         })}
       </div>
       <div className="mt-5">
-        <ErrorMessage
-          error={
-            connect.error ||
-            disconnect.error ||
-            destinations.error ||
-            selectDestination.error
-          }
-        />
+        <ErrorMessage error={connect.error || disconnect.error} />
       </div>
     </>
-  );
-}
-
-function NotionDestinationPicker({
-  account,
-  loading,
-  destinations,
-  refresh,
-  select,
-}: {
-  account: {
-    provider_metadata: Record<string, unknown>;
-  };
-  loading: boolean;
-  destinations: { id: string; title: string }[];
-  refresh: () => void;
-  select: (id: string) => void;
-}) {
-  const selected =
-    typeof account.provider_metadata.default_destination_title === "string"
-      ? account.provider_metadata.default_destination_title
-      : undefined;
-  return (
-    <div className="mt-5 border-t border-line pt-5">
-      <p className="text-sm font-medium">Default lecture notes destination</p>
-      <p className="mt-2 text-sm text-muted">
-        {selected || "No default destination selected"}
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          className="button secondary"
-          disabled={loading}
-          onClick={refresh}
-        >
-          Refresh pages
-        </button>
-        {destinations.length > 0 && (
-          <select
-            className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
-            disabled={loading}
-            defaultValue=""
-            onChange={(event) =>
-              event.target.value && select(event.target.value)
-            }
-          >
-            <option value="">Choose destination</option>
-            {destinations.map((destination) => (
-              <option key={destination.id} value={destination.id}>
-                {destination.title}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function GoogleCalendarPicker({
-  account,
-}: {
-  account: { provider_metadata: Record<string, unknown> };
-}) {
-  const cache = useQueryClient();
-  const calendars = useQuery({
-    queryKey: ["connections", "google-calendars"],
-    queryFn: connections.googleCalendars,
-  });
-  const invalidate = () =>
-    cache.invalidateQueries({ queryKey: ["connections"] });
-  const refresh = useMutation({
-    mutationFn: connections.refreshGoogleCalendars,
-    onSuccess: async (data) => {
-      cache.setQueryData(["connections", "google-calendars"], data);
-      await invalidate();
-    },
-  });
-  const select = useMutation({
-    mutationFn: connections.selectGoogleCalendar,
-    onSuccess: invalidate,
-  });
-  const selected =
-    typeof account.provider_metadata.default_calendar_summary === "string"
-      ? account.provider_metadata.default_calendar_summary
-      : undefined;
-  const loading = refresh.isPending || select.isPending;
-  const items = calendars.data || [];
-  return (
-    <div className="mt-5 border-t border-line pt-5">
-      <p className="text-sm font-medium">Calendar Relay schedules into</p>
-      <p className="mt-2 text-sm text-muted">
-        {selected || "No calendar selected"}
-      </p>
-      <ErrorMessage error={calendars.error || refresh.error || select.error} />
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          className="button secondary"
-          disabled={loading}
-          onClick={() => refresh.mutate()}
-        >
-          Refresh calendars
-        </button>
-        {items.length > 0 && (
-          <select
-            className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
-            disabled={loading}
-            defaultValue=""
-            onChange={(event) =>
-              event.target.value && select.mutate(event.target.value)
-            }
-          >
-            <option value="">Choose calendar</option>
-            {items.map((calendar) => (
-              <option key={calendar.id} value={calendar.id}>
-                {calendar.summary}
-                {calendar.primary ? " (primary)" : ""}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
-    </div>
   );
 }

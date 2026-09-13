@@ -60,9 +60,11 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await expect(page).toHaveURL(/\/workflows\/plan$/);
   await page.getByRole("button", { name: "Start a study plan" }).click();
   await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
-  await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
+  // Google Calendar was never connected during onboarding (skipped above),
+  // and Plan now requires an explicit calendar before setup can be saved.
+  await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
   await page.reload();
-  await expect(page.getByText("Next: save your planning setup.")).toBeVisible();
+  await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Preferred session (minutes)")).toHaveValue(
     "45",

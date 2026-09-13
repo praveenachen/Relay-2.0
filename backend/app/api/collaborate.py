@@ -9,6 +9,7 @@ from app.api.dependencies import Repository
 from app.api.learn import language_model
 from app.auth.users import CurrentUser
 from app.connectors.github.service import GitHubService
+from app.connectors.notion.service import NotionTaskSourceService
 from app.core.config import get_settings
 from app.documents.errors import DocumentTooLarge
 from app.documents.service import DocumentService
@@ -36,10 +37,21 @@ def github_service(repo: Repository) -> GitHubService:
     )
 
 
+def notion_service(repo: Repository) -> NotionTaskSourceService:
+    settings = get_settings()
+    return NotionTaskSourceService(
+        repo,
+        credential_store(),
+        api_base_url=settings.notion_api_base_url,
+        timeout=settings.notion_timeout_seconds,
+    )
+
+
 def service(
     repo: Repository,
     model: Annotated[LanguageModel, Depends(language_model)],
     github: Annotated[GitHubService, Depends(github_service)],
+    notion: Annotated[NotionTaskSourceService, Depends(notion_service)],
 ) -> ProjectMeetingWorkflowService:
     settings = get_settings()
     return ProjectMeetingWorkflowService(
@@ -51,6 +63,7 @@ def service(
         MeetingAnalysisService(model),
         github,
         settings.language_model_provider,
+        notion,
     )
 
 
