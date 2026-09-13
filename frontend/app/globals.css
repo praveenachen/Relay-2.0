@@ -709,6 +709,60 @@ p {
   height: 16px;
   width: 16px;
 }
+
+.task-source-options {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.task-source-option {
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--foreground);
+  display: flex;
+  gap: 12px;
+  min-height: 86px;
+  padding: 14px;
+  text-align: left;
+}
+.task-source-option:hover {
+  border-color: #b3bcaf;
+  background: var(--surface-soft);
+}
+.task-source-option.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(37, 88, 72, 0.12);
+}
+.task-source-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+.task-source-option svg {
+  color: var(--accent);
+  height: 20px;
+  margin-top: 2px;
+  width: 20px;
+}
+.task-source-option small {
+  color: var(--muted);
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  margin-top: 4px;
+}
+.task-source-picker {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+@media (max-width: 760px) {
+  .task-source-options {
+    grid-template-columns: 1fr;
+  }
+}
+
 .approval-action-row {
   align-items: center;
   display: flex;

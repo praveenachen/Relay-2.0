@@ -7,6 +7,8 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  Database,
+  Keyboard,
   Lock,
   Play,
   Plus,
@@ -183,6 +185,7 @@ export function PlanRun({ id }: { id: string }) {
 function planSetupNextStep(
   stage: string | undefined,
   busy: boolean,
+  usingNotion: boolean,
   databaseId: string,
   taskCount: number,
 ) {
@@ -195,11 +198,13 @@ function planSetupNextStep(
   if (!stage || stage === "setup") {
     return {
       title: "Next: save your planning setup.",
-      description: databaseId
-        ? "Relay will use the selected Notion database after you save this setup."
+      description: usingNotion
+        ? databaseId
+          ? "Relay will use the selected Notion database after you save this setup."
+          : "Choose a Notion task database, then save the setup."
         : taskCount
           ? "Save the manually entered tasks and planning window to continue."
-          : "Add at least one task, or choose a Notion task database, then save the setup.",
+          : "Add at least one manual task, or import tasks from Notion, then save the setup.",
     };
   }
   if (stage === "tasks_imported") {
@@ -294,14 +299,6 @@ function SetupWizard({
   const cache = useQueryClient();
   const connectionsQuery = useConnections();
   const preferencesQuery = usePreferences();
-  const googleCalendars = useQuery({
-    queryKey: ["connections", "google-calendars"],
-    queryFn: connections.googleCalendars,
-  });
-  const notionDatabases = useQuery({
-    queryKey: ["connections", "notion-task-databases"],
-    queryFn: connections.notionTaskDatabases,
-  });
   const initialWindow = defaultWindow();
   const [startDate, setStartDate] = useState(
     setup ? localDateValue(setup.window.start) : initialWindow.startDate,
@@ -316,6 +313,9 @@ function SetupWizard({
     preferencesQuery.data?.latest_study_time.slice(0, 5) || "22:00",
   );
   const [calendarId, setCalendarId] = useState(setup?.calendar_id || "");
+  const [taskSource, setTaskSource] = useState<"manual" | "notion">(
+    setup?.notion_database_id ? "notion" : "manual",
+  );
   const [databaseId, setDatabaseId] = useState(setup?.notion_database_id || "");
   const [databaseQuery, setDatabaseQuery] = useState("");
   const [mappingTitle, setMappingTitle] = useState(
@@ -347,6 +347,17 @@ function SetupWizard({
   const hasNotion = (connectionsQuery.data || []).some(
     (item) => item.provider === "NOTION" && item.status === "CONNECTED",
   );
+  const googleCalendars = useQuery({
+    queryKey: ["connections", "google-calendars"],
+    queryFn: connections.googleCalendars,
+    enabled: hasGoogle,
+  });
+  const notionDatabases = useQuery({
+    queryKey: ["connections", "notion-task-databases"],
+    queryFn: connections.notionTaskDatabases,
+    enabled: hasNotion && taskSource === "notion",
+  });
+  const usingNotion = taskSource === "notion";
 
   const buildMapping = () => ({
     title: mappingTitle,
@@ -367,13 +378,14 @@ function SetupWizard({
           latest_study_time: studyEndTime,
         });
       }
+      const selectedDatabaseId =
+        !overrides.detachNotion && usingNotion ? databaseId || null : null;
       return plan.setup(id, {
         start: combineLocalDateTime(startDate, studyStartTime),
         end: combineLocalDateTime(endDate, studyEndTime),
         calendar_id: calendarId || null,
-        notion_database_id: overrides.detachNotion ? null : databaseId || null,
-        notion_mapping:
-          overrides.detachNotion || !databaseId ? null : buildMapping(),
+        notion_database_id: selectedDatabaseId,
+        notion_mapping: selectedDatabaseId ? buildMapping() : null,
         tasks: prioritizeTasks(tasks),
       });
     },
@@ -410,24 +422,47 @@ function SetupWizard({
     solve.isPending ||
     refreshDatabases.isPending;
   const stage = setup?.stage;
+  const setupError =
+    saveSetup.error ||
+    importTasks.error ||
+    loadAvailability.error ||
+    solve.error ||
+    (usingNotion ? refreshDatabases.error || notionDatabases.error : null);
   const filteredDatabases = (notionDatabases.data || []).filter((database) =>
     database.title.toLowerCase().includes(databaseQuery.trim().toLowerCase()),
   );
+  const needsTaskSource = usingNotion ? !databaseId : tasks.length === 0;
+
+  const chooseManualTasks = () => {
+    setTaskSource("manual");
+    setDatabaseId("");
+    setDatabaseQuery("");
+    refreshDatabases.reset();
+  };
+
+  const chooseNotionTasks = () => {
+    setTaskSource("notion");
+    if (
+      hasNotion &&
+      !notionDatabases.data?.length &&
+      !notionDatabases.isFetching
+    ) {
+      refreshDatabases.mutate();
+    }
+  };
 
   return (
     <section className="my-8 space-y-8">
       <NextStepNotice
-        {...planSetupNextStep(stage, busy, databaseId, tasks.length)}
+        {...planSetupNextStep(
+          stage,
+          busy,
+          usingNotion,
+          databaseId,
+          tasks.length,
+        )}
       />
-      <ErrorMessage
-        error={
-          saveSetup.error ||
-          importTasks.error ||
-          loadAvailability.error ||
-          solve.error ||
-          refreshDatabases.error
-        }
-      />
+      <ErrorMessage error={setupError} />
       {!stage || stage === "setup" ? (
         <div className="panel">
           <div className="section-heading">
@@ -499,32 +534,67 @@ function SetupWizard({
               )}
             </label>
             <div className="field">
-              <div className="destination-picker-heading">
-                <span className="field-label">Task source</span>
-                {hasNotion && (
-                  <button
-                    className="icon-button"
-                    disabled={busy}
-                    onClick={() => refreshDatabases.mutate()}
-                    aria-label="Refresh Notion databases"
-                    title="Refresh Notion databases"
-                  >
-                    <RotateCcw aria-hidden="true" />
-                  </button>
-                )}
+              <span className="field-label">Task source</span>
+              <div className="task-source-options" role="radiogroup">
+                <button
+                  type="button"
+                  className={`task-source-option ${!usingNotion ? "selected" : ""}`}
+                  aria-pressed={!usingNotion}
+                  onClick={chooseManualTasks}
+                >
+                  <Keyboard aria-hidden="true" />
+                  <span>
+                    <strong>Enter tasks manually</strong>
+                    <small>Add and reorder tasks in Relay.</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className={`task-source-option ${usingNotion ? "selected" : ""}`}
+                  aria-pressed={usingNotion}
+                  disabled={!hasNotion}
+                  onClick={chooseNotionTasks}
+                >
+                  <Database aria-hidden="true" />
+                  <span>
+                    <strong>Import from Notion</strong>
+                    <small>Choose a task database to pull from.</small>
+                  </span>
+                </button>
               </div>
-              {hasNotion ? (
-                <>
+              {!hasNotion && (
+                <span className="text-sm text-muted">
+                  <Link className="text-link" href="/connections">
+                    Connect Notion
+                  </Link>{" "}
+                  to import tasks from a database.
+                </span>
+              )}
+              {usingNotion && hasNotion && (
+                <div className="task-source-picker">
+                  <div className="destination-picker-heading">
+                    <span className="field-label">Choose Notion database</span>
+                    <button
+                      className="icon-button"
+                      disabled={busy}
+                      onClick={() => refreshDatabases.mutate()}
+                      aria-label="Refresh Notion databases"
+                      title="Refresh Notion databases"
+                      type="button"
+                    >
+                      <RotateCcw aria-hidden="true" />
+                    </button>
+                  </div>
                   <input
                     value={databaseQuery}
                     onChange={(event) => setDatabaseQuery(event.target.value)}
-                    placeholder="Search Notion databases"
+                    placeholder="Search databases Relay can access"
                   />
                   <select
                     value={databaseId}
                     onChange={(event) => setDatabaseId(event.target.value)}
                   >
-                    <option value="">Enter tasks manually</option>
+                    <option value="">Select a Notion database</option>
                     {filteredDatabases.map((database) => (
                       <option key={database.id} value={database.id}>
                         {database.title}
@@ -532,21 +602,17 @@ function SetupWizard({
                     ))}
                   </select>
                   <p className="text-sm text-muted">
-                    Pick a Notion database to import tasks, or leave this on
-                    manual entry.
+                    {notionDatabases.isFetching || refreshDatabases.isPending
+                      ? "Loading Notion databases..."
+                      : filteredDatabases.length === 0
+                        ? "No matching databases found. Refresh after sharing a database with the Relay Notion integration."
+                        : "Select the database that contains the tasks Relay should schedule."}
                   </p>
-                </>
-              ) : (
-                <span className="text-sm text-muted">
-                  <Link className="text-link" href="/connections">
-                    Connect Notion
-                  </Link>{" "}
-                  to import tasks, or enter them manually below.
-                </span>
+                </div>
               )}
             </div>
           </div>
-          {databaseId && (
+          {usingNotion && databaseId && (
             <div className="mt-6 border-t border-line pt-5">
               <h3 className="section-title">Notion property mapping</h3>
               <p className="text-sm text-muted">
@@ -611,14 +677,14 @@ function SetupWizard({
               </div>
             </div>
           )}
-          {!databaseId && (
+          {!usingNotion && (
             <div className="mt-6 border-t border-line pt-5">
               <TaskTable tasks={tasks} onChange={setTasks} editable />
             </div>
           )}
           <button
             className="button mt-6"
-            disabled={busy || (!databaseId && tasks.length === 0)}
+            disabled={busy || needsTaskSource}
             onClick={() => saveSetup.mutate({})}
           >
             {saveSetup.isPending ? "Saving..." : "Save and continue"}
