@@ -320,7 +320,10 @@ export function LearnRun({ id }: { id: string }) {
         status={data.run.status}
       />
       {data.run.status === "COMPLETED" ? (
-        <PublishedNotice artifact={artifact.data} loading={artifact.isPending} />
+        <PublishedNotice
+          artifact={artifact.data}
+          loading={artifact.isPending}
+        />
       ) : (
         <NextStepNotice {...nextStep} />
       )}

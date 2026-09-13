@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   Lock,
   Play,
@@ -16,7 +18,8 @@ import {
 } from "lucide-react";
 import { approvals } from "@/features/approvals/api";
 import { connections } from "@/features/connections/api";
-import { useConnections } from "@/hooks/queries";
+import { preferences } from "@/features/preferences/api";
+import { useConnections, usePreferences } from "@/hooks/queries";
 import {
   AcademicTask,
   PlanDetail,
@@ -40,15 +43,29 @@ function localInputValue(iso: string): string {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function defaultWindow(): { start: string; end: string } {
+function localDateValue(iso: string): string {
+  return localInputValue(iso).slice(0, 10);
+}
+
+function combineLocalDateTime(date: string, time: string): string {
+  return new Date(`${date}T${time}`).toISOString();
+}
+
+function defaultWindow(): { startDate: string; endDate: string } {
   const start = new Date();
-  start.setMinutes(0, 0, 0);
   const end = new Date(start);
   end.setDate(end.getDate() + 7);
   return {
-    start: localInputValue(start.toISOString()),
-    end: localInputValue(end.toISOString()),
+    startDate: localDateValue(start.toISOString()),
+    endDate: localDateValue(end.toISOString()),
   };
+}
+
+function prioritizeTasks(tasks: AcademicTask[]): AcademicTask[] {
+  return tasks.map((task, index) => ({
+    ...task,
+    priority: Math.min(index + 1, 5),
+  }));
 }
 
 function emptyTask(): AcademicTask {
@@ -274,7 +291,9 @@ function SetupWizard({
   invalidate: () => Promise<void>;
 }) {
   const setup = data.setup;
+  const cache = useQueryClient();
   const connectionsQuery = useConnections();
+  const preferencesQuery = usePreferences();
   const googleCalendars = useQuery({
     queryKey: ["connections", "google-calendars"],
     queryFn: connections.googleCalendars,
@@ -284,14 +303,21 @@ function SetupWizard({
     queryFn: connections.notionTaskDatabases,
   });
   const initialWindow = defaultWindow();
-  const [start, setStart] = useState(
-    setup ? localInputValue(setup.window.start) : initialWindow.start,
+  const [startDate, setStartDate] = useState(
+    setup ? localDateValue(setup.window.start) : initialWindow.startDate,
   );
-  const [end, setEnd] = useState(
-    setup ? localInputValue(setup.window.end) : initialWindow.end,
+  const [endDate, setEndDate] = useState(
+    setup ? localDateValue(setup.window.end) : initialWindow.endDate,
+  );
+  const [studyStartTime, setStudyStartTime] = useState(
+    preferencesQuery.data?.earliest_study_time.slice(0, 5) || "08:00",
+  );
+  const [studyEndTime, setStudyEndTime] = useState(
+    preferencesQuery.data?.latest_study_time.slice(0, 5) || "22:00",
   );
   const [calendarId, setCalendarId] = useState(setup?.calendar_id || "");
   const [databaseId, setDatabaseId] = useState(setup?.notion_database_id || "");
+  const [databaseQuery, setDatabaseQuery] = useState("");
   const [mappingTitle, setMappingTitle] = useState(
     setup?.notion_mapping?.title || "Task Name",
   );
@@ -333,17 +359,28 @@ function SetupWizard({
   });
 
   const saveSetup = useMutation({
-    mutationFn: (overrides: { detachNotion?: boolean } = {}) =>
-      plan.setup(id, {
-        start: new Date(start).toISOString(),
-        end: new Date(end).toISOString(),
+    mutationFn: async (overrides: { detachNotion?: boolean } = {}) => {
+      if (preferencesQuery.data) {
+        await preferences.save({
+          ...preferencesQuery.data,
+          earliest_study_time: studyStartTime,
+          latest_study_time: studyEndTime,
+        });
+      }
+      return plan.setup(id, {
+        start: combineLocalDateTime(startDate, studyStartTime),
+        end: combineLocalDateTime(endDate, studyEndTime),
         calendar_id: calendarId || null,
         notion_database_id: overrides.detachNotion ? null : databaseId || null,
         notion_mapping:
           overrides.detachNotion || !databaseId ? null : buildMapping(),
-        tasks,
-      }),
-    onSuccess: invalidate,
+        tasks: prioritizeTasks(tasks),
+      });
+    },
+    onSuccess: async () => {
+      await invalidate();
+      await cache.invalidateQueries({ queryKey: ["preferences"] });
+    },
   });
   const importTasks = useMutation({
     mutationFn: () => plan.importTasks(id),
@@ -357,13 +394,25 @@ function SetupWizard({
     mutationFn: () => plan.solve(id),
     onSuccess: invalidate,
   });
+  const refreshDatabases = useMutation({
+    mutationFn: connections.refreshNotionTaskDatabases,
+    onSuccess: async () => {
+      await cache.invalidateQueries({
+        queryKey: ["connections", "notion-task-databases"],
+      });
+    },
+  });
 
   const busy =
     saveSetup.isPending ||
     importTasks.isPending ||
     loadAvailability.isPending ||
-    solve.isPending;
+    solve.isPending ||
+    refreshDatabases.isPending;
   const stage = setup?.stage;
+  const filteredDatabases = (notionDatabases.data || []).filter((database) =>
+    database.title.toLowerCase().includes(databaseQuery.trim().toLowerCase()),
+  );
 
   return (
     <section className="my-8 space-y-8">
@@ -375,7 +424,8 @@ function SetupWizard({
           saveSetup.error ||
           importTasks.error ||
           loadAvailability.error ||
-          solve.error
+          solve.error ||
+          refreshDatabases.error
         }
       />
       {!stage || stage === "setup" ? (
@@ -387,24 +437,40 @@ function SetupWizard({
             </Link>
           </div>
           <p className="text-sm text-muted">
-            Relay schedules within your study hours, session lengths, and break
-            preferences from Settings.
+            Choose the date range for this plan, then set the daily study-hour
+            window Relay should use when scheduling.
           </p>
           <div className="mt-5 grid gap-5 md:grid-cols-2">
             <label className="field">
-              Start
+              Start date
               <input
-                type="datetime-local"
-                value={start}
-                onChange={(event) => setStart(event.target.value)}
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
               />
             </label>
             <label className="field">
-              End
+              End date
               <input
-                type="datetime-local"
-                value={end}
-                onChange={(event) => setEnd(event.target.value)}
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              Preferred study start time
+              <input
+                type="time"
+                value={studyStartTime}
+                onChange={(event) => setStudyStartTime(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              Preferred study end time
+              <input
+                type="time"
+                value={studyEndTime}
+                onChange={(event) => setStudyEndTime(event.target.value)}
               />
             </label>
           </div>
@@ -432,20 +498,44 @@ function SetupWizard({
                 </span>
               )}
             </label>
-            <label className="field">
-              Notion task database (optional)
+            <div className="field">
+              <div className="destination-picker-heading">
+                <span className="field-label">Task source</span>
+                {hasNotion && (
+                  <button
+                    className="icon-button"
+                    disabled={busy}
+                    onClick={() => refreshDatabases.mutate()}
+                    aria-label="Refresh Notion databases"
+                    title="Refresh Notion databases"
+                  >
+                    <RotateCcw aria-hidden="true" />
+                  </button>
+                )}
+              </div>
               {hasNotion ? (
-                <select
-                  value={databaseId}
-                  onChange={(event) => setDatabaseId(event.target.value)}
-                >
-                  <option value="">Enter tasks manually</option>
-                  {(notionDatabases.data || []).map((database) => (
-                    <option key={database.id} value={database.id}>
-                      {database.title}
-                    </option>
-                  ))}
-                </select>
+                <>
+                  <input
+                    value={databaseQuery}
+                    onChange={(event) => setDatabaseQuery(event.target.value)}
+                    placeholder="Search Notion databases"
+                  />
+                  <select
+                    value={databaseId}
+                    onChange={(event) => setDatabaseId(event.target.value)}
+                  >
+                    <option value="">Enter tasks manually</option>
+                    {filteredDatabases.map((database) => (
+                      <option key={database.id} value={database.id}>
+                        {database.title}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-sm text-muted">
+                    Pick a Notion database to import tasks, or leave this on
+                    manual entry.
+                  </p>
+                </>
               ) : (
                 <span className="text-sm text-muted">
                   <Link className="text-link" href="/connections">
@@ -454,7 +544,7 @@ function SetupWizard({
                   to import tasks, or enter them manually below.
                 </span>
               )}
-            </label>
+            </div>
           </div>
           {databaseId && (
             <div className="mt-6 border-t border-line pt-5">
@@ -472,7 +562,7 @@ function SetupWizard({
                   />
                 </label>
                 <label className="field">
-                  Course property
+                  Course property (optional)
                   <input
                     value={mappingCourse}
                     onChange={(e) => setMappingCourse(e.target.value)}
@@ -493,7 +583,7 @@ function SetupWizard({
                   />
                 </label>
                 <label className="field">
-                  Priority property
+                  Priority property (optional)
                   <input
                     value={mappingPriority}
                     onChange={(e) => setMappingPriority(e.target.value)}
@@ -622,10 +712,29 @@ function TaskTable({
   onChange: (tasks: AcademicTask[]) => void;
   editable: boolean;
 }) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
   const update = (index: number, patch: Partial<AcademicTask>) =>
     onChange(
-      tasks.map((task, i) => (i === index ? { ...task, ...patch } : task)),
+      prioritizeTasks(
+        tasks.map((task, i) => (i === index ? { ...task, ...patch } : task)),
+      ),
     );
+  const reorder = (from: number, to: number) => {
+    if (
+      from === to ||
+      from < 0 ||
+      to < 0 ||
+      from >= tasks.length ||
+      to >= tasks.length
+    )
+      return;
+    const next = [...tasks];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    onChange(prioritizeTasks(next));
+  };
+  const move = (index: number, direction: -1 | 1) =>
+    reorder(index, index + direction);
   return (
     <div>
       <div className="section-heading">
@@ -633,7 +742,7 @@ function TaskTable({
         {editable && (
           <button
             className="button secondary"
-            onClick={() => onChange([...tasks, emptyTask()])}
+            onClick={() => onChange(prioritizeTasks([...tasks, emptyTask()]))}
           >
             <Plus aria-hidden="true" />
             Add task
@@ -645,7 +754,18 @@ function TaskTable({
       ) : (
         <div className="mt-4 space-y-4">
           {tasks.map((task, index) => (
-            <article key={task.id} className="learn-card">
+            <article
+              key={task.id}
+              className="learn-card"
+              draggable={editable}
+              onDragStart={() => setDragIndex(index)}
+              onDragOver={(event) => editable && event.preventDefault()}
+              onDrop={() => {
+                if (dragIndex !== null) reorder(dragIndex, index);
+                setDragIndex(null);
+              }}
+              onDragEnd={() => setDragIndex(null)}
+            >
               <div className="grid gap-3 md:grid-cols-2">
                 <label className="field">
                   Title
@@ -656,10 +776,11 @@ function TaskTable({
                   />
                 </label>
                 <label className="field">
-                  Course
+                  Course (optional)
                   <input
                     disabled={!editable}
                     value={task.course || ""}
+                    placeholder="Optional"
                     onChange={(e) =>
                       update(index, { course: e.target.value || null })
                     }
@@ -692,29 +813,45 @@ function TaskTable({
                     }
                   />
                 </label>
-                <label className="field">
-                  Priority (1 urgent - 5 low)
-                  <input
-                    type="number"
-                    min={1}
-                    max={5}
-                    disabled={!editable}
-                    value={task.priority}
-                    onChange={(e) =>
-                      update(index, { priority: Number(e.target.value) || 3 })
-                    }
-                  />
-                </label>
               </div>
               {editable && (
-                <button
-                  aria-label={`Remove ${task.title || "task"}`}
-                  className="button secondary mt-3"
-                  onClick={() => onChange(tasks.filter((_, i) => i !== index))}
-                >
-                  <Trash2 aria-hidden="true" />
-                  Remove
-                </button>
+                <div className="task-card-actions">
+                  <div className="task-priority-controls">
+                    <span className="text-sm text-muted">
+                      Priority: drag tasks or move them higher/lower
+                    </span>
+                    <button
+                      aria-label={`Move ${task.title || "task"} up`}
+                      className="button secondary compact-action"
+                      disabled={index === 0}
+                      onClick={() => move(index, -1)}
+                    >
+                      <ArrowUp aria-hidden="true" />
+                      Higher
+                    </button>
+                    <button
+                      aria-label={`Move ${task.title || "task"} down`}
+                      className="button secondary compact-action"
+                      disabled={index === tasks.length - 1}
+                      onClick={() => move(index, 1)}
+                    >
+                      <ArrowDown aria-hidden="true" />
+                      Lower
+                    </button>
+                  </div>
+                  <button
+                    aria-label={`Remove ${task.title || "task"}`}
+                    className="button secondary compact-action"
+                    onClick={() =>
+                      onChange(
+                        prioritizeTasks(tasks.filter((_, i) => i !== index)),
+                      )
+                    }
+                  >
+                    <Trash2 aria-hidden="true" />
+                    Remove
+                  </button>
+                </div>
               )}
             </article>
           ))}

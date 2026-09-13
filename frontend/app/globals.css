@@ -898,3 +898,27 @@ p {
     transition: none !important;
   }
 }
+.task-card-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 14px;
+}
+.task-priority-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.compact-action {
+  min-height: 36px;
+  padding: 7px 12px;
+}
+.learn-card[draggable="true"] {
+  cursor: grab;
+}
+.learn-card[draggable="true"]:active {
+  cursor: grabbing;
+}
