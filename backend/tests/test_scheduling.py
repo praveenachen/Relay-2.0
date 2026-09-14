@@ -1,3 +1,4 @@
+import time as time_module
 from datetime import datetime, time
 from zoneinfo import ZoneInfo
 
@@ -298,3 +299,32 @@ def test_daily_balance_weight_spreads_large_task_across_days() -> None:
 
     assert len(days_used(unbalanced)) < len(days_used(balanced))
     assert len(days_used(balanced)) == 4
+
+
+def test_month_long_window_with_wide_study_hours_solves_quickly() -> None:
+    """Regression for a real production hang: a ~1-month planning window
+    with a wide daily study range (11am-10pm) and a handful of tasks
+    produces tens of thousands of 15-minute candidate slots. The naive
+    all-pairs overlap check compared every candidate against every other
+    candidate regardless of how many days apart they were, which is
+    O(candidates^2) and took long enough to freeze the single-threaded
+    server for every user, not just this request. Candidates can only ever
+    overlap something on the same or the very next calendar day, so this
+    should stay fast regardless of how long the window is."""
+    month_window = (AvailabilityWindow(start=dt(1, 1, 0), end=dt(1, 31, 0)),)
+    preference = prefs(earliest_study_time=time(11), latest_study_time=time(22))
+    tasks = tuple(
+        task(f"task-{index}", dt(1, 28, 20), minutes=300, priority=(index % 5) + 1)
+        for index in range(6)
+    )
+
+    started = time_module.perf_counter()
+    result = solve(problem(tasks, month_window, preference=preference, now=dt(1, 1, 11)))
+    elapsed = time_module.perf_counter() - started
+
+    # The old O(n^2) all-pairs comparison over tens of thousands of
+    # candidates took multiple minutes on this scenario; day-grouping
+    # should bring it back to roughly the CP-SAT search cap.
+    assert elapsed < 15
+    assert result.status != SchedulingStatus.INFEASIBLE
+    assert result.sessions

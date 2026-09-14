@@ -12,14 +12,7 @@ from app.connectors.github.service import GitHubService
 from app.connectors.google import GoogleOAuthClient, GoogleOAuthService
 from app.connectors.google.schemas import CalendarListItem
 from app.connectors.google.service import GoogleCalendarService
-from app.connectors.notion import (
-    NotionDestinationService,
-    NotionOAuthClient,
-    NotionOAuthService,
-    NotionTaskSourceService,
-)
-from app.connectors.notion.schemas import NotionTaskDatabase
-from app.connectors.notion.tasks import NotionTaskDatabaseSelection
+from app.connectors.notion import NotionDestinationService, NotionOAuthClient, NotionOAuthService
 from app.core.config import get_settings
 from app.domain.enums import ApprovalStatus, Provider, WorkflowStatus
 from app.infrastructure.credentials import credential_store
@@ -41,6 +34,7 @@ from app.schemas.domain import (
 from app.services.approvals import ApprovalService
 from app.services.connections import ConnectionService
 from app.services.preferences import PreferenceService
+from app.services.profile_history import ProfileHistoryService
 from app.services.workflows import WorkflowService
 
 router = APIRouter()
@@ -62,6 +56,12 @@ async def profile(data: ProfileInput, user: CurrentUser, repo: Repository) -> Us
 @router.post("/users/me/onboarding", status_code=204, tags=["account"])
 async def finish_onboarding(user: CurrentUser, repo: Repository) -> Response:
     await PreferenceService(repo).finish_onboarding(user)
+    return Response(status_code=204)
+
+
+@router.post("/users/me/history/reset", status_code=204, tags=["account"])
+async def reset_history(user: CurrentUser, repo: Repository) -> Response:
+    await ProfileHistoryService(repo).reset(user)
     return Response(status_code=204)
 
 
@@ -238,16 +238,6 @@ def notion_destinations(repo: Repository) -> NotionDestinationService:
     )
 
 
-def notion_task_sources(repo: Repository) -> NotionTaskSourceService:
-    settings = get_settings()
-    return NotionTaskSourceService(
-        repo,
-        credential_store(),
-        api_base_url=settings.notion_api_base_url,
-        timeout=settings.notion_timeout_seconds,
-    )
-
-
 @router.get(
     "/connections/{provider}/authorize", response_model=AuthorizationRead, tags=["connections"]
 )
@@ -364,35 +354,16 @@ async def google_calendar_select(
 
 @router.get(
     "/connections/NOTION/task-databases",
-    response_model=list[NotionTaskDatabase],
+    response_model=list[NotionDestinationRead],
     tags=["connections"],
 )
 async def notion_task_database_list(
     user: CurrentUser, repo: Repository
-) -> list[NotionTaskDatabase]:
-    return await notion_task_sources(repo).list(user.id)
-
-
-@router.post(
-    "/connections/NOTION/task-databases/refresh",
-    response_model=list[NotionTaskDatabase],
-    tags=["connections"],
-)
-async def notion_task_database_refresh(
-    user: CurrentUser, repo: Repository
-) -> list[NotionTaskDatabase]:
-    return await notion_task_sources(repo).refresh(user.id)
-
-
-@router.put(
-    "/connections/NOTION/task-databases/default",
-    response_model=NotionTaskDatabase,
-    tags=["connections"],
-)
-async def notion_task_database_select(
-    data: NotionTaskDatabaseSelection, user: CurrentUser, repo: Repository
-) -> NotionTaskDatabase:
-    return await notion_task_sources(repo).select(user.id, data.database_id, data.mapping)
+) -> list[NotionDestinationRead]:
+    return [
+        NotionDestinationRead.model_validate(item)
+        for item in await notion_destinations(repo).list_databases(user.id)
+    ]
 
 
 @router.get(

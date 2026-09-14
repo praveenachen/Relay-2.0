@@ -128,7 +128,22 @@ class GitHubApiClient:
         response = await self.request(
             "GET",
             "/user/repos",
-            params={"per_page": 100, "sort": "pushed", "affiliation": "owner,collaborator"},
+            params={
+                "per_page": 100,
+                "sort": "pushed",
+                "affiliation": "owner,collaborator,organization_member",
+            },
+        )
+        if response.status_code >= 400:
+            raise github_error(response)
+        data = response.json()
+        repositories = [repository_from_response(item) for item in data if isinstance(item, dict)]
+        if repositories:
+            return repositories
+        response = await self.request(
+            "GET",
+            "/user/repos",
+            params={"per_page": 100, "sort": "pushed", "type": "all"},
         )
         if response.status_code >= 400:
             raise github_error(response)

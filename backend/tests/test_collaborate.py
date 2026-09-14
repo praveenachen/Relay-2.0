@@ -37,6 +37,10 @@ def encryption_key(monkeypatch):
 
 
 async def connect_github(session_factory, account, encryption_key):
+    # Collaborate lifecycle tests validate proposal/approval/retry behavior with
+    # deterministic connector results. Product/dev defaults can still use real
+    # GitHub publishing.
+    get_settings().github_publish_mode = "mock"
     store = FernetCredentialStore([encryption_key])
     async with session_factory() as session:
         session.add(
@@ -208,7 +212,11 @@ async def test_full_lifecycle_approve_and_execute_across_notion_and_github(
 
     async with session_factory() as session:
         artifact_types = (await session.scalars(select(ExternalArtifact.artifact_type))).all()
-        assert sorted(artifact_types) == ["github_issue", "github_review_request", "notion_task"]
+        assert sorted(artifact_types) == [
+            "mock_github_issue",
+            "mock_github_review_request",
+            "mock_notion_task",
+        ]
 
     again = await client.post(path + "/execute")
     assert again.json()["result_payload"] == done.json()["result_payload"]

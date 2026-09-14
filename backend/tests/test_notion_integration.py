@@ -225,6 +225,50 @@ async def test_oauth_state_exchange_encrypts_tokens(client, account, session_fac
             await service.callback(UUID(account["id"]), state=state, code="code-1", error=None)
 
 
+async def test_database_discovery_hides_duplicate_titles(account, session_factory):
+    store = FernetCredentialStore([Fernet.generate_key().decode()])
+    async with session_factory() as session:
+        connection = ConnectedAccount(
+            user_id=UUID(account["id"]),
+            provider=Provider.NOTION,
+            external_account_id="workspace-1",
+            display_name="Student Workspace",
+            access_token_encrypted=store.encrypt("notion-token"),
+            scopes=["read_content", "insert_content"],
+            provider_metadata={"workspace_id": "workspace-1"},
+            status="CONNECTED",
+        )
+        session.add(connection)
+        await session.commit()
+
+        class DuplicateDatabaseClient(NotionApiClient):
+            async def search_databases(self):
+                from app.connectors.notion import NotionDestination
+
+                return [
+                    NotionDestination(
+                        id="db-1", title="Relay study plan (3 tasks)", object_type="database"
+                    ),
+                    NotionDestination(
+                        id="db-2", title=" Relay study plan (3 tasks) ", object_type="database"
+                    ),
+                    NotionDestination(id="db-3", title="Assignments", object_type="database"),
+                ]
+
+        class Service(NotionDestinationService):
+            async def client(self, connection):
+                return DuplicateDatabaseClient("token")
+
+        databases = await Service(RelayRepository(session), store).list_databases(
+            UUID(account["id"])
+        )
+
+        assert [(item.id, item.title) for item in databases] == [
+            ("db-1", "Relay study plan (3 tasks)"),
+            ("db-3", "Assignments"),
+        ]
+
+
 async def test_destination_discovery_paginates_and_selects(account, session_factory):
     store = FernetCredentialStore([Fernet.generate_key().decode()])
     async with session_factory() as session:
@@ -269,27 +313,13 @@ async def test_destination_discovery_paginates_and_selects(account, session_fact
         ) == 2
 
 
-async def test_notion_http_database_search_uses_readable_titles():
+async def test_notion_create_database_uses_rich_text_title_array():
+    captured = {}
+
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/v1/search"
-        return httpx.Response(
-            200,
-            json={
-                "results": [
-                    {
-                        "object": "database",
-                        "id": "db-1",
-                        "title": [
-                            {"plain_text": ""},
-                            {"plain_text": "Assignments"},
-                            {"plain_text": " & Projects"},
-                        ],
-                    },
-                    {"object": "database", "id": "db-2", "title": []},
-                ],
-                "has_more": False,
-            },
-        )
+        assert request.url.path == "/v1/databases"
+        captured["body"] = request.read().decode()
+        return httpx.Response(200, json={"id": "db-created", "url": "https://notion.so/db-created"})
 
     transport = httpx.MockTransport(handler)
 
@@ -301,13 +331,41 @@ async def test_notion_http_database_search_uses_readable_titles():
                 response = await client.request(method, path, json=json)
             return response.json()
 
-    databases = await TestClient("token").search_databases()
+    result = await TestClient("token").create_database(
+        "page-1", "Relay study plan", {"Title": {"title": {}}}
+    )
 
-    assert [(item.id, item.title) for item in databases] == [
-        ("db-1", "Assignments & Projects"),
-        ("db-2", "Untitled database"),
-    ]
-    assert databases[0].properties == []
+    assert result == {"id": "db-created", "url": "https://notion.so/db-created"}
+    assert '"title":[{"type":"text"' in captured["body"].replace(" ", "")
+    assert '"page_id":"page-1"' in captured["body"].replace(" ", "")
+
+
+async def test_real_connector_creates_database_and_one_row_per_task():
+    from app.connectors.notion import CreateNotionTaskDatabaseAction, RealNotionConnector
+
+    created_pages = []
+
+    class CapturingClient(NotionApiClient):
+        async def create_database(self, parent_page_id, title, properties):
+            return {"id": "db-created", "url": "https://notion.so/db-created"}
+
+        async def create_database_page(self, database_id, properties, blocks=None):
+            created_pages.append((database_id, properties))
+            return {"id": f"page-{len(created_pages)}", "url": "https://notion.so/page"}
+
+    action = CreateNotionTaskDatabaseAction(
+        title="Relay study plan",
+        parent_page_id="page-1",
+        properties={"Title": {"title": {}}},
+        rows=({"Title": {"title": []}}, {"Title": {"title": []}}),
+    )
+    result = await RealNotionConnector(CapturingClient("token")).create_task_database(
+        action, "relay:plan-1"
+    )
+
+    assert result.external_id == "db-created"
+    assert result.task_count == 2
+    assert [database_id for database_id, _ in created_pages] == ["db-created", "db-created"]
 
 
 async def test_notion_http_search_paginates():

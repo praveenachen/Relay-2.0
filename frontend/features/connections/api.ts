@@ -18,32 +18,6 @@ export const calendarListItemSchema = z.object({
 });
 export type CalendarListItem = z.infer<typeof calendarListItemSchema>;
 
-export const notionTaskDatabasePropertySchema = z.object({
-  name: z.string(),
-  type: z.string(),
-});
-
-export const notionTaskDatabaseSchema = z.object({
-  id: z.string(),
-  title: z.string(),
-  properties: z.array(notionTaskDatabasePropertySchema).default([]),
-});
-export type NotionTaskDatabase = z.infer<typeof notionTaskDatabaseSchema>;
-
-export const notionTaskPropertyMappingSchema = z.object({
-  title: z.string().min(1),
-  course: z.string().nullable().optional(),
-  deadline: z.string().min(1),
-  priority: z.string().nullable().optional(),
-  estimated_minutes: z.string().min(1),
-  status: z.string().nullable().optional(),
-  completed_statuses: z.array(z.string()).optional(),
-  estimate_unit: z.enum(["minutes", "hours"]).optional(),
-});
-export type NotionTaskPropertyMapping = z.infer<
-  typeof notionTaskPropertyMappingSchema
->;
-
 export const githubRepositorySchema = z.object({
   owner: z.string(),
   name: z.string(),
@@ -93,25 +67,14 @@ export const connections = {
       calendarListItemSchema,
       json({ destination_id: calendarId }, "PUT"),
     ),
+  // Existing databases the connection can see, for Collaborate's project
+  // setup to pick one to sync action items into. Unlike destinations
+  // (pages), this is never persisted/selected as a workflow default --
+  // just a live list, so there's no refresh/select pair.
   notionTaskDatabases: () =>
     request(
       "/connections/NOTION/task-databases",
-      notionTaskDatabaseSchema.array(),
-    ),
-  refreshNotionTaskDatabases: () =>
-    request(
-      "/connections/NOTION/task-databases/refresh",
-      notionTaskDatabaseSchema.array(),
-      { method: "POST" },
-    ),
-  selectNotionTaskDatabase: (
-    databaseId: string,
-    mapping: NotionTaskPropertyMapping,
-  ) =>
-    request(
-      "/connections/NOTION/task-databases/default",
-      notionTaskDatabaseSchema,
-      json({ database_id: databaseId, mapping }, "PUT"),
+      notionDestinationSchema.array(),
     ),
   githubRepositories: () =>
     request("/connections/GITHUB/repositories", githubRepositorySchema.array()),

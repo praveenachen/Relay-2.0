@@ -22,6 +22,10 @@ from app.scheduling.objectives import DEFAULT_WEIGHTS, SchedulingWeights
 
 SLOT_MINUTES = 15
 MAX_SOLVER_SECONDS = 5.0
+# Keeps overlap-constraint building (and CP-SAT's own model size) bounded
+# regardless of how long the planning window is -- see the comment in
+# CPSATStudyScheduler.solve() where this is used.
+MAX_CANDIDATES = 4000
 
 
 @dataclass(frozen=True)
@@ -185,6 +189,21 @@ class CPSATStudyScheduler:
         free = _subtract_busy(free, problem.busy_intervals)
         free = _subtract_locked(free, problem.locked_sessions)
         candidates = self._candidate_slots(problem, free, locked_minutes)
+        if len(candidates) > MAX_CANDIDATES:
+            # A long planning window with a wide daily study range (e.g. a
+            # month at 11am-10pm) can produce tens of thousands of 15-minute
+            # candidates -- and when several tasks share similar deadlines,
+            # most of those candidates genuinely conflict with each other,
+            # so no amount of smarter comparison avoids adding the resulting
+            # constraints; the model itself becomes too large. Coarsen the
+            # start-time granularity just enough to bring the candidate
+            # count back under a bound that keeps model-building well under
+            # a second, rather than leaving the server building a
+            # multi-million-constraint model on the event loop.
+            scale = -(-len(candidates) // MAX_CANDIDATES)  # ceil division
+            candidates = self._candidate_slots(
+                problem, free, locked_minutes, step_minutes=SLOT_MINUTES * scale
+            )
         if not candidates and any(
             task.estimated_minutes > locked_minutes.get(task.id, 0) for task in problem.tasks
         ):
@@ -192,19 +211,7 @@ class CPSATStudyScheduler:
 
         model = cp_model.CpModel()
         selected = [model.new_bool_var(f"slot_{index}") for index, _ in enumerate(candidates)]
-        for left_index, left in enumerate(candidates):
-            for right_index in range(left_index + 1, len(candidates)):
-                right = candidates[right_index]
-                break_until = left.end + timedelta(
-                    minutes=problem.preferences.minimum_break_minutes
-                )
-                if overlaps(left.start, break_until, right.start, right.end) or overlaps(
-                    right.start,
-                    right.end + timedelta(minutes=problem.preferences.minimum_break_minutes),
-                    left.start,
-                    left.end,
-                ):
-                    model.add(selected[left_index] + selected[right_index] <= 1)
+        self._add_overlap_constraints(model, selected, candidates, problem)
 
         for task in problem.tasks:
             requirement = max(0, task.estimated_minutes - locked_minutes.get(task.id, 0))
@@ -251,6 +258,50 @@ class CPSATStudyScheduler:
             result_status,
         )
 
+    def _add_overlap_constraints(
+        self,
+        model: cp_model.CpModel,
+        selected: list[Any],
+        candidates: list[CandidateSlot],
+        problem: SchedulingProblem,
+    ) -> None:
+        """Forbid selecting two candidates that would overlap (including the
+        break buffer after either one).
+
+        Naively comparing every candidate against every other one is
+        O(n^2). A wide daily study window over a long planning window (e.g.
+        a month) can produce tens of thousands of candidates -- even
+        grouping by calendar day isn't enough, since a single popular day
+        can still hold thousands of candidates once several tasks compete
+        for it (n^2 within that one day). Instead, sweep candidates in
+        start-time order: two candidates can only conflict if the later one
+        starts before the earlier one's end-plus-break, so once that's no
+        longer true for a given `left`, nothing further along in the sorted
+        order can conflict with it either, and the inner loop can stop.
+        This is O(n log n) for the sort plus O(n * k), where k is however
+        many candidates actually start within one session-plus-break of
+        each other -- independent of the total window length. Building the
+        full model for this used to take minutes for a real month-long
+        plan, freezing every request on the single-threaded server, not
+        just this one.
+        """
+        break_minutes = problem.preferences.minimum_break_minutes
+        order = sorted(range(len(candidates)), key=lambda index: candidates[index].start)
+        for position, left_index in enumerate(order):
+            left = candidates[left_index]
+            cutoff = left.end + timedelta(minutes=break_minutes)
+            for right_index in order[position + 1 :]:
+                right = candidates[right_index]
+                if right.start >= cutoff:
+                    break
+                if overlaps(left.start, cutoff, right.start, right.end) or overlaps(
+                    right.start,
+                    right.end + timedelta(minutes=break_minutes),
+                    left.start,
+                    left.end,
+                ):
+                    model.add(selected[left_index] + selected[right_index] <= 1)
+
     def _daily_balance_penalties(
         self,
         model: cp_model.CpModel,
@@ -296,6 +347,8 @@ class CPSATStudyScheduler:
         problem: SchedulingProblem,
         free_windows: list[FreeWindow],
         locked_minutes: dict[str, int],
+        *,
+        step_minutes: int = SLOT_MINUTES,
     ) -> list[CandidateSlot]:
         candidates: list[CandidateSlot] = []
         for task in sorted(
@@ -333,7 +386,7 @@ class CPSATStudyScheduler:
                                 ),
                             )
                         )
-                        start += timedelta(minutes=SLOT_MINUTES)
+                        start += timedelta(minutes=step_minutes)
         return candidates
 
     def _result(

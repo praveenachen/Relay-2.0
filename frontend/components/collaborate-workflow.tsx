@@ -1,9 +1,18 @@
 "use client";
-import { useState } from "react";
+import { ReactNode, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Play, Plus, Send, Trash2, Upload, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  Play,
+  Plus,
+  Send,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { approvals } from "@/features/approvals/api";
 import { connections } from "@/features/connections/api";
 import { useConnections } from "@/hooks/queries";
@@ -144,6 +153,7 @@ function ProjectSetupForm({
   const [mappingStatus, setMappingStatus] = useState("Status");
   const [statusType, setStatusType] = useState<"select" | "status">("status");
   const [repoFullName, setRepoFullName] = useState("");
+  const [manualRepoFullName, setManualRepoFullName] = useState("");
 
   const hasNotion = (connectionsQuery.data || []).some(
     (item) => item.provider === "NOTION" && item.status === "CONNECTED",
@@ -151,9 +161,16 @@ function ProjectSetupForm({
   const hasGithub = (connectionsQuery.data || []).some(
     (item) => item.provider === "GITHUB" && item.status === "CONNECTED",
   );
-  const repo = (githubRepos.data || []).find(
+  const manualRepoMatch = manualRepoFullName
+    .trim()
+    .match(/^([^/\s]+)\/([^/\s]+)$/);
+  const listedRepo = (githubRepos.data || []).find(
     (item) => item.full_name === repoFullName,
   );
+  const selectedRepo =
+    repoFullName === "__manual__" && manualRepoMatch
+      ? { owner: manualRepoMatch[1], name: manualRepoMatch[2] }
+      : listedRepo;
 
   const create = useMutation({
     mutationFn: () =>
@@ -171,8 +188,8 @@ function ProjectSetupForm({
               default_status: "To Do",
             }
           : null,
-        github_repository_owner: repo?.owner || null,
-        github_repository_name: repo?.name || null,
+        github_repository_owner: selectedRepo?.owner || null,
+        github_repository_name: selectedRepo?.name || null,
       }),
     onSuccess: async (project) => {
       await cache.invalidateQueries({ queryKey: ["projects"] });
@@ -202,17 +219,40 @@ function ProjectSetupForm({
         <label className="field">
           Notion task database
           {hasNotion ? (
-            <select
-              value={notionDatabaseId}
-              onChange={(event) => setNotionDatabaseId(event.target.value)}
-            >
-              <option value="">None</option>
-              {(notionDatabases.data || []).map((database) => (
-                <option key={database.id} value={database.id}>
-                  {database.title}
+            <>
+              <select
+                value={notionDatabaseId}
+                onChange={(event) => setNotionDatabaseId(event.target.value)}
+                disabled={notionDatabases.isPending}
+              >
+                <option value="">
+                  {notionDatabases.isPending ? "Loading databases..." : "None"}
                 </option>
-              ))}
-            </select>
+                {(notionDatabases.data || []).map((database) => (
+                  <option key={database.id} value={database.id}>
+                    {database.title}
+                  </option>
+                ))}
+              </select>
+              <span className="text-sm text-muted">
+                Choose a Notion database, not a page. Relay creates one task row
+                per approved action item.
+              </span>
+              {notionDatabases.error && (
+                <span className="text-sm text-danger">
+                  Relay could not load Notion databases. Refresh Connections
+                  after sharing a database with Relay.
+                </span>
+              )}
+              {!notionDatabases.isPending &&
+                !notionDatabases.error &&
+                (notionDatabases.data || []).length === 0 && (
+                  <span className="text-sm text-muted">
+                    No task databases found. In Notion, share the database
+                    itself with Relay, then refresh.
+                  </span>
+                )}
+            </>
           ) : (
             <span className="text-sm text-muted">
               <Link className="text-link" href="/connections">
@@ -225,17 +265,48 @@ function ProjectSetupForm({
         <label className="field">
           GitHub repository
           {hasGithub ? (
-            <select
-              value={repoFullName}
-              onChange={(event) => setRepoFullName(event.target.value)}
-            >
-              <option value="">None</option>
-              {(githubRepos.data || []).map((item) => (
-                <option key={item.full_name} value={item.full_name}>
-                  {item.full_name}
+            <>
+              <select
+                value={repoFullName}
+                onChange={(event) => setRepoFullName(event.target.value)}
+                disabled={githubRepos.isPending}
+              >
+                <option value="">
+                  {githubRepos.isPending ? "Loading repositories..." : "None"}
                 </option>
-              ))}
-            </select>
+                {(githubRepos.data || []).map((item) => (
+                  <option key={item.full_name} value={item.full_name}>
+                    {item.full_name}
+                  </option>
+                ))}
+                <option value="__manual__">Enter repository manually</option>
+              </select>
+              {repoFullName === "__manual__" && (
+                <input
+                  value={manualRepoFullName}
+                  onChange={(event) =>
+                    setManualRepoFullName(event.target.value)
+                  }
+                  placeholder="owner/repository, e.g. praveenachen/Relay-2.0"
+                  aria-label="GitHub repository full name"
+                />
+              )}
+              {githubRepos.error && (
+                <span className="text-sm text-danger">
+                  Relay could not load GitHub repositories. Reconnect GitHub if
+                  this keeps happening.
+                </span>
+              )}
+              {!githubRepos.isPending &&
+                !githubRepos.error &&
+                (githubRepos.data || []).length === 0 && (
+                  <span className="text-sm text-muted">
+                    No repositories found for this GitHub connection. You can
+                    enter owner/repository manually, or reconnect GitHub if the
+                    repository should appear here.
+                  </span>
+                )}
+            </>
           ) : (
             <span className="text-sm text-muted">
               <Link className="text-link" href="/connections">
@@ -322,6 +393,11 @@ export function CollaborateRun({ id }: { id: string }) {
   if (detail.error) return <ErrorMessage error={detail.error} />;
   const data = detail.data;
 
+  const needsTranscriptWork =
+    data.run.status === "DRAFT" ||
+    data.stage === "transcript_ready" ||
+    data.stage === "analyzing";
+
   return (
     <>
       <PageTitle
@@ -341,7 +417,7 @@ export function CollaborateRun({ id }: { id: string }) {
           <p>{data.run.error_message}</p>
         </div>
       )}
-      {data.run.status === "DRAFT" ? (
+      {needsTranscriptWork ? (
         <TranscriptStage id={id} data={data} invalidate={invalidate} />
       ) : (
         <ReviewAndApprove id={id} data={data} invalidate={invalidate} />
@@ -409,9 +485,9 @@ function collaborateReviewNextStep(
   }
   if (data.approvals.some((approval) => approval.status === "PENDING")) {
     return {
-      title: "Next: approve or reject each action.",
+      title: "Next: approve the project actions.",
       description:
-        "Approval is the final checkpoint before Relay writes to Notion or GitHub.",
+        "Approve all actions at once, or inspect individual actions before Relay writes to Notion or GitHub.",
     };
   }
   if (data.run.status === "APPROVED") {
@@ -546,13 +622,11 @@ function TranscriptStage({
           data.run.status === "ANALYZING") && (
           <button
             className="button"
-            disabled={busy || data.run.status === "ANALYZING"}
+            disabled={busy || data.stage === "analyzing"}
             onClick={() => analyze.mutate()}
           >
             <Play aria-hidden="true" />
-            {data.run.status === "ANALYZING"
-              ? "Analyzing..."
-              : "Analyze meeting"}
+            {data.stage === "analyzing" ? "Analyzing..." : "Analyze meeting"}
           </button>
         )}
       </div>
@@ -576,6 +650,9 @@ function ReviewAndApprove({
   });
   const [items, setItems] = useState<PlannedAction[] | null>(null);
   const actionItems = items ?? data.action_items;
+  const pendingApprovals = data.approvals.filter(
+    (approval) => approval.status === "PENDING",
+  );
 
   const save = useMutation({
     mutationFn: (next: PlannedAction[]) =>
@@ -600,6 +677,14 @@ function ReviewAndApprove({
       approvals.resolve(approval, false),
     onSuccess: invalidate,
   });
+  const approveAll = useMutation({
+    mutationFn: async () => {
+      for (const approval of pendingApprovals) {
+        await approvals.resolve(approval, true);
+      }
+    },
+    onSuccess: invalidate,
+  });
   const execute = useMutation({
     mutationFn: () => collaborate.execute(id),
     onSuccess: invalidate,
@@ -610,9 +695,16 @@ function ReviewAndApprove({
     requestApproval.isPending ||
     resolve.isPending ||
     reject.isPending ||
+    approveAll.isPending ||
     execute.isPending;
   const canEdit = data.run.status === "PLAN_READY";
   const members = membersQuery.data || [];
+  const isReviewPhase = data.run.status === "PLAN_READY";
+  const isApprovalPhase = pendingApprovals.length > 0;
+  const isExecutionPhase = data.run.status === "APPROVED";
+  const isCompletePhase =
+    data.run.status === "COMPLETED" ||
+    data.run.status === "PARTIALLY_COMPLETED";
 
   const updateItem = (index: number, patch: Partial<PlannedAction>) => {
     const next = actionItems.map((item, i) =>
@@ -642,93 +734,108 @@ function ReviewAndApprove({
           requestApproval.error ||
           resolve.error ||
           reject.error ||
+          approveAll.error ||
           execute.error
         }
       />
-      {data.summary && (
-        <div className="panel">
-          <h2 className="section-title">Summary</h2>
-          <p className="text-sm">{data.summary}</p>
-          {data.unresolved_questions.length > 0 && (
-            <div className="notice mt-4">
-              <p className="font-medium">Unresolved questions</p>
-              <ul className="mt-2 list-disc pl-5 text-sm">
-                {data.unresolved_questions.map((question, index) => (
-                  <li key={index}>{question}</li>
+
+      {isReviewPhase && (
+        <>
+          {data.summary && <CollaborateSummary data={data} />}
+          <DisclosurePanel
+            title={`Decisions (${data.decisions.length})`}
+            defaultOpen={data.decisions.length > 0 && actionItems.length === 0}
+          >
+            {data.decisions.length > 0 ? (
+              <div className="space-y-3">
+                {data.decisions.map((decision, index) => (
+                  <article key={index} className="learn-card">
+                    <p className="font-medium">{decision.title}</p>
+                    <p className="mt-2 text-sm text-muted">
+                      {decision.description}
+                    </p>
+                  </article>
                 ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-
-      {data.decisions.length > 0 && (
-        <div className="panel">
-          <h2 className="section-title">Decisions</h2>
-          <div className="mt-4 space-y-3">
-            {data.decisions.map((decision, index) => (
-              <article key={index} className="learn-card">
-                <p className="font-medium">{decision.title}</p>
-                <p className="mt-2 text-sm text-muted">
-                  {decision.description}
-                </p>
-              </article>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="panel">
-        <h2 className="section-title">Action items</h2>
-        {actionItems.length === 0 ? (
-          <Empty title="No action items were extracted.">
-            Relay found decisions but no clear owner commitments in this
-            transcript.
-          </Empty>
-        ) : (
-          <div className="mt-4 space-y-4">
-            {actionItems.map((item, index) => (
-              <ActionItemCard
-                key={item.id}
-                item={item}
-                members={members}
-                editable={canEdit}
-                onChange={(patch) => updateItem(index, patch)}
-                onRemove={() => removeItem(index)}
-              />
-            ))}
-          </div>
-        )}
-        {canEdit && (
-          <div className="mt-5 flex flex-wrap gap-3">
-            {items && (
-              <button
-                className="button"
-                disabled={busy}
-                onClick={() => save.mutate(actionItems)}
-              >
-                Save edits
-              </button>
+              </div>
+            ) : (
+              <Empty title="No decisions were extracted.">
+                Relay did not find explicit meeting decisions in this
+                transcript.
+              </Empty>
             )}
+          </DisclosurePanel>
+
+          <DisclosurePanel
+            title={`Action items (${actionItems.length})`}
+            defaultOpen
+          >
+            {actionItems.length === 0 ? (
+              <Empty title="No action items were extracted.">
+                Relay found decisions but no clear owner commitments in this
+                transcript.
+              </Empty>
+            ) : (
+              <div className="space-y-4">
+                {actionItems.map((item, index) => (
+                  <ActionItemCard
+                    key={item.id}
+                    item={item}
+                    members={members}
+                    editable={canEdit}
+                    onChange={(patch) => updateItem(index, patch)}
+                    onRemove={() => removeItem(index)}
+                  />
+                ))}
+              </div>
+            )}
+            {canEdit && (
+              <div className="mt-5 flex flex-wrap gap-3">
+                {items && (
+                  <button
+                    className="button"
+                    disabled={busy}
+                    onClick={() => save.mutate(actionItems)}
+                  >
+                    Save edits
+                  </button>
+                )}
+                <button
+                  className={
+                    !items && actionItems.length > 0 && !busy
+                      ? "button"
+                      : "button secondary"
+                  }
+                  disabled={busy || actionItems.length === 0}
+                  onClick={() => requestApproval.mutate()}
+                >
+                  <Send aria-hidden="true" />
+                  Request approval
+                </button>
+              </div>
+            )}
+          </DisclosurePanel>
+        </>
+      )}
+
+      {isApprovalPhase && (
+        <div className="panel">
+          <div className="section-heading">
+            <div>
+              <h2 className="section-title">Approvals</h2>
+              <p className="mt-2 text-sm text-muted">
+                Approve every pending action at once, or review and reject items
+                one by one.
+              </p>
+            </div>
             <button
-              className={
-                !items && actionItems.length > 0 && !busy
-                  ? "button"
-                  : "button secondary"
-              }
-              disabled={busy || actionItems.length === 0}
-              onClick={() => requestApproval.mutate()}
+              className="button"
+              disabled={busy || pendingApprovals.length === 0}
+              onClick={() => approveAll.mutate()}
             >
-              <Send aria-hidden="true" />
-              Request approval
+              <Check aria-hidden="true" />
+              Approve all
             </button>
           </div>
-        )}
-      </div>
-
-      {data.approvals.length > 0 && (
-        <div className="panel">
-          <h2 className="section-title">Approvals</h2>
           <div className="mt-4 space-y-3">
             {data.approvals.map((approval) => (
               <div
@@ -748,7 +855,7 @@ function ReviewAndApprove({
                 {approval.status === "PENDING" && (
                   <div className="flex gap-2">
                     <button
-                      className="button"
+                      className="button secondary"
                       disabled={busy}
                       onClick={() => resolve.mutate(approval)}
                     >
@@ -768,24 +875,68 @@ function ReviewAndApprove({
               </div>
             ))}
           </div>
-          {data.run.status === "APPROVED" && (
-            <button
-              className="button mt-5"
-              disabled={busy}
-              onClick={() => execute.mutate()}
-            >
-              <Send aria-hidden="true" />
-              Create approved Notion and GitHub work
-            </button>
-          )}
         </div>
       )}
 
-      {(data.run.status === "COMPLETED" ||
-        data.run.status === "PARTIALLY_COMPLETED") && (
-        <ExecutionSummary data={data} />
+      {isExecutionPhase && (
+        <div className="panel">
+          <h2 className="section-title">Ready to create work</h2>
+          <p className="mt-2 text-sm text-muted">
+            All project actions are approved. Relay will create the selected
+            Notion and GitHub work next.
+          </p>
+          <button
+            className="button mt-5"
+            disabled={busy}
+            onClick={() => execute.mutate()}
+          >
+            <Send aria-hidden="true" />
+            Create approved Notion and GitHub work
+          </button>
+        </div>
       )}
+
+      {isCompletePhase && <ExecutionSummary data={data} />}
     </section>
+  );
+}
+
+function CollaborateSummary({ data }: { data: CollaborateDetail }) {
+  return (
+    <div className="panel">
+      <h2 className="section-title">Summary</h2>
+      <p className="text-sm">{data.summary}</p>
+      {data.unresolved_questions.length > 0 && (
+        <div className="notice mt-4">
+          <p className="font-medium">Unresolved questions</p>
+          <ul className="mt-2 list-disc pl-5 text-sm">
+            {data.unresolved_questions.map((question, index) => (
+              <li key={index}>{question}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DisclosurePanel({
+  title,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details className="learn-disclosure" open={defaultOpen}>
+      <summary>
+        <span>{title}</span>
+        <ChevronDown className="learn-disclosure-icon" aria-hidden="true" />
+      </summary>
+      <div className="mt-4">{children}</div>
+    </details>
   );
 }
 

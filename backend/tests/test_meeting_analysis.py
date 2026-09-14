@@ -80,3 +80,46 @@ async def test_analysis_rejects_a_source_ref_outside_the_transcript():
 def test_empty_transcript_text_is_rejected_before_analysis():
     with pytest.raises(EmptyTranscript):
         parse_transcript("")
+
+
+async def test_analysis_handles_markdown_transcript_speakers_and_smart_apostrophes():
+    transcript = transcript_from(
+        "**Ethan:** I\u2019ll fix mobile responsiveness, switch the components to the "
+        "course colour from the API, and then open the PR.",
+        "**Daniel:** I\u2019ll create a GitHub issue called Standardize deadline "
+        "timestamps to UTC.",
+        "**Sarah:** I\u2019ll add the unscheduled_hours value by Thursday morning.",
+    )
+
+    analysis = await MeetingAnalysisService(FakeLanguageModel()).generate(transcript)
+
+    assert {participant.name for participant in transcript.participants} == {
+        "Ethan",
+        "Daniel",
+        "Sarah",
+    }
+    assert len(analysis.action_items) == 3
+    assert {item.owner_name for item in analysis.action_items} == {"Ethan", "Daniel", "Sarah"}
+    assert any("mobile responsiveness" in item.title for item in analysis.action_items)
+
+
+async def test_analysis_falls_back_to_commitments_when_model_misses_action_items():
+    transcript = transcript_from(
+        "**Ethan:** I???ll fix mobile responsiveness and open the PR tomorrow.",
+        "**Daniel:** I will add tests for the deadline bug by Wednesday.",
+    )
+    model_analysis = MeetingAnalysis.model_validate(
+        {
+            "summary": "The team discussed implementation tasks.",
+            "decisions": [],
+            "action_items": [],
+            "unresolved_questions": [],
+        }
+    )
+
+    analysis = await MeetingAnalysisService(StaticModel(model_analysis)).generate(transcript)
+
+    assert len(analysis.action_items) == 2
+    assert {item.owner_name for item in analysis.action_items} == {"Ethan", "Daniel"}
+    assert any("mobile responsiveness" in item.title for item in analysis.action_items)
+    assert any(item.deadline_text == "by Wednesday" for item in analysis.action_items)

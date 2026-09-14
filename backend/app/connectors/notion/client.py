@@ -16,17 +16,16 @@ from app.connectors.notion.mapper import NotionStudyPageMapper
 from app.connectors.notion.schemas import (
     CreateNotionStudyPageAction,
     CreateNotionTaskAction,
+    CreateNotionTaskDatabaseAction,
     ExternalArtifactResult,
     NotionBlock,
     NotionDestination,
-    NotionTaskDatabase,
-    NotionTaskDatabaseProperty,
+    NotionTaskDatabaseResult,
     NotionTaskResult,
 )
 
-# Relay still uses Notion database endpoints for task imports. Newer Notion API
-# versions split databases into data sources, so keep this version until the
-# connector migrates to /v1/data_sources endpoints.
+# Newer Notion API versions split databases into data sources; keep this
+# version pinned until the connector migrates to /v1/data_sources endpoints.
 NOTION_VERSION = "2022-06-28"
 NOTION_MAX_PAGE_CHILDREN = 100
 
@@ -141,8 +140,12 @@ class NotionApiClient:
             if not cursor:
                 return results
 
-    async def search_databases(self) -> list[NotionTaskDatabase]:
-        results: list[NotionTaskDatabase] = []
+    async def search_databases(self) -> list[NotionDestination]:
+        """Existing databases the connection can see -- used only by
+        Collaborate's project setup to pick a database to sync action items
+        into. A database's title is a top-level rich_text array, unlike a
+        page's title *property*, so this can't reuse title_from_result()."""
+        results: list[NotionDestination] = []
         cursor: str | None = None
         while True:
             payload: dict[str, Any] = {
@@ -158,37 +161,13 @@ class NotionApiClient:
                     title = "".join(
                         part.get("plain_text", "") for part in title_parts if isinstance(part, dict)
                     ).strip()
-                    if not title:
-                        title = "Untitled database"
-                    raw_properties = item.get("properties")
-                    properties = (
-                        [
-                            NotionTaskDatabaseProperty(
-                                name=name,
-                                type=property_data.get("type") or "unknown",
-                            )
-                            for name, property_data in raw_properties.items()
-                            if isinstance(name, str) and isinstance(property_data, dict)
-                        ]
-                        if isinstance(raw_properties, dict)
-                        else []
-                    )
                     results.append(
-                        NotionTaskDatabase(id=item["id"], title=title, properties=properties)
+                        NotionDestination(
+                            id=item["id"],
+                            title=title or "Untitled database",
+                            object_type="database",
+                        )
                     )
-            cursor = data.get("next_cursor") if data.get("has_more") else None
-            if not cursor:
-                return results
-
-    async def query_database(self, database_id: str) -> list[dict[str, Any]]:
-        results: list[dict[str, Any]] = []
-        cursor: str | None = None
-        while True:
-            payload: dict[str, Any] = {"page_size": 100}
-            if cursor:
-                payload["start_cursor"] = cursor
-            data = await self.request("POST", f"/v1/databases/{database_id}/query", payload)
-            results.extend(item for item in data.get("results", []) if isinstance(item, dict))
             cursor = data.get("next_cursor") if data.get("has_more") else None
             if not cursor:
                 return results
@@ -208,6 +187,21 @@ class NotionApiClient:
 
     async def get_database(self, database_id: str) -> dict[str, Any]:
         return await self.request("GET", f"/v1/databases/{database_id}")
+
+    async def create_database(
+        self, parent_page_id: str, title: str, properties: dict[str, Any]
+    ) -> dict[str, Any]:
+        return await self.request(
+            "POST",
+            "/v1/databases",
+            {
+                "parent": {"page_id": parent_page_id},
+                # Unlike a page's title *property* ({"title": {"title": [...]}}),
+                # a database's own title is a top-level rich_text array.
+                "title": notion_rich_text(title[:1900]),
+                "properties": properties,
+            },
+        )
 
     async def create_database_page(
         self,
@@ -276,3 +270,27 @@ class RealNotionConnector:
         if not isinstance(page_id, str) or not isinstance(page_url, str):
             raise NotionPublishFailed()
         return NotionTaskResult(external_id=page_id, external_url=page_url, title=action.title)
+
+    async def create_task_database(
+        self,
+        action: CreateNotionTaskDatabaseAction,
+        idempotency_key: str,
+    ) -> NotionTaskDatabaseResult:
+        database = await self.client.create_database(
+            action.parent_page_id, action.title, action.properties
+        )
+        database_id = database.get("id")
+        database_url = database.get("url")
+        if not isinstance(database_id, str) or not isinstance(database_url, str):
+            raise NotionPublishFailed()
+        for row in action.rows:
+            marker = NotionBlock(kind="paragraph", text=f"Relay action: {idempotency_key}")
+            page = await self.client.create_database_page(database_id, row, [marker])
+            if not isinstance(page.get("id"), str) or not isinstance(page.get("url"), str):
+                raise NotionPublishFailed()
+        return NotionTaskDatabaseResult(
+            external_id=database_id,
+            external_url=database_url,
+            title=action.title,
+            task_count=len(action.rows),
+        )

@@ -13,7 +13,6 @@ from app.connectors.notion.errors import (
     NotionPublishFailed,
     NotionRateLimited,
     NotionRequestTimeout,
-    NotionTaskDatabaseNotFound,
     NotionUnavailable,
     NotionValidationFailed,
 )
@@ -22,20 +21,22 @@ from app.connectors.notion.mock import MockNotionConnector
 from app.connectors.notion.schemas import (
     CreateNotionStudyPageAction,
     CreateNotionTaskAction,
+    CreateNotionTaskDatabaseAction,
     ExternalArtifactResult,
     NotionBlock,
     NotionConnector,
     NotionDestination,
     NotionOAuthToken,
     NotionStudyPageContent,
-    NotionTaskDatabase,
+    NotionTaskDatabaseResult,
     NotionTaskResult,
 )
-from app.connectors.notion.service import NotionDestinationService, NotionTaskSourceService
+from app.connectors.notion.service import NotionDestinationService
 
 __all__ = [
     "CreateNotionStudyPageAction",
     "CreateNotionTaskAction",
+    "CreateNotionTaskDatabaseAction",
     "ExternalArtifactResult",
     "MockNotionConnector",
     "MockNotionFailure",
@@ -45,7 +46,6 @@ __all__ = [
     "NotionBlock",
     "NotionConnector",
     "NotionDestination",
-    "NotionTaskDatabase",
     "NotionDestinationNotFound",
     "NotionDestinationService",
     "NotionNotConnected",
@@ -58,27 +58,10 @@ __all__ = [
     "NotionRequestTimeout",
     "NotionStudyPageContent",
     "NotionStudyPageMapper",
-    "NotionTaskDatabaseNotFound",
+    "NotionTaskDatabaseResult",
     "NotionTaskResult",
-    "NotionTaskSourceService",
     "NotionUnavailable",
     "NotionValidationFailed",
     "RealNotionConnector",
     "build_task_properties",
-]
-
-from app.connectors.notion.tasks import (
-    NotionTaskDatabaseSelection,
-    NotionTaskImportResult,
-    NotionTaskMapper,
-    NotionTaskPropertyMapping,
-    TaskMappingIssue,
-)
-
-__all__ += [
-    "NotionTaskDatabaseSelection",
-    "NotionTaskImportResult",
-    "NotionTaskMapper",
-    "NotionTaskPropertyMapping",
-    "TaskMappingIssue",
 ]

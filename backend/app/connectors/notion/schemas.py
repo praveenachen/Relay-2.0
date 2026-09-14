@@ -78,9 +78,31 @@ class NotionTaskResult(StrictModel):
     external_id: str
     external_url: str
     title: str
+    simulated: bool = False
+
+
+class CreateNotionTaskDatabaseAction(StrictModel):
+    title: str
+    parent_page_id: str
+    properties: dict[str, Any]
+    rows: tuple[dict[str, Any], ...] = ()
+    connection_id: str | None = None
+
+
+class NotionTaskDatabaseResult(StrictModel):
+    external_id: str
+    external_url: str
+    title: str
+    task_count: int
 
 
 class NotionConnector(Protocol):
+    """Approval-gated writes only (runtime/factory.py + RuntimeClient). PLAN's
+    Notion export is a direct, unapproved action -- see
+    study_plan_export.py -- so create_task_database intentionally isn't part
+    of this Protocol; it's a plain method on RealNotionConnector/
+    MockNotionConnector, typed as a Union where it's used."""
+
     async def create_study_page(
         self,
         action: CreateNotionStudyPageAction,
@@ -92,14 +114,3 @@ class NotionConnector(Protocol):
         action: CreateNotionTaskAction,
         idempotency_key: str,
     ) -> NotionTaskResult: ...
-
-
-class NotionTaskDatabaseProperty(StrictModel):
-    name: str
-    type: str
-
-
-class NotionTaskDatabase(StrictModel):
-    id: str
-    title: str
-    properties: list[NotionTaskDatabaseProperty] = Field(default_factory=list)

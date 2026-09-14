@@ -1,15 +1,22 @@
-from datetime import datetime, timedelta
+import asyncio
+from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import UUID
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
 from app.connectors.google.schemas import CreateCalendarStudyBlockAction
 from app.connectors.google.service import GoogleCalendarService
-from app.connectors.notion.errors import NotionNotConnected
-from app.connectors.notion.service import NotionTaskSourceService
-from app.connectors.notion.tasks import NotionTaskMapper, NotionTaskPropertyMapping
+from app.connectors.notion.client import RealNotionConnector
+from app.connectors.notion.mock import MockNotionConnector
+from app.connectors.notion.schemas import CreateNotionTaskDatabaseAction
+from app.connectors.notion.service import NotionDestinationService
+from app.connectors.notion.study_plan_export import (
+    STUDY_PLAN_DATABASE_PROPERTIES,
+    build_task_row_properties,
+)
+from app.core.config import get_settings
 from app.domain.enums import (
     ActionProvider,
     ActionStatus,
@@ -34,11 +41,7 @@ from app.schemas.domain import ApprovalRead, RunInput, RunRead
 from app.services.audit import record
 from app.services.workflows import WorkflowService
 from app.workflows.study_plan.actions import OPERATION, CreateCalendarStudyPlanAction
-from app.workflows.study_plan.errors import (
-    NotionTaskImportEmpty,
-    PlanWorkflowInvalidState,
-    SchedulingInputInvalid,
-)
+from app.workflows.study_plan.errors import PlanWorkflowInvalidState, SchedulingInputInvalid
 from app.workflows.study_plan.schemas import PlanSetupInput
 
 
@@ -48,7 +51,7 @@ class StudyPlanWorkflowService:
         repo: RelayRepository,
         scheduler: StudySchedulingService,
         google: GoogleCalendarService,
-        notion: NotionTaskSourceService,
+        notion: NotionDestinationService,
     ):
         self.repo = repo
         self.session = repo.session
@@ -84,66 +87,19 @@ class StudyPlanWorkflowService:
             "stage": "setup",
             "window": {"start": data.start.isoformat(), "end": data.end.isoformat()},
             "calendar_id": data.calendar_id,
-            "notion_database_id": data.notion_database_id,
-            "notion_mapping": data.notion_mapping,
             "tasks": [task.model_dump(mode="json") for task in data.tasks],
-            "task_issues": [],
             "busy_intervals": [],
             "sessions": [],
             "locked_sessions": [],
+            "notion_export": (run.input_payload or {}).get("notion_export"),
         }
         run.input_payload = payload
         record(self.session, owner, "PLAN_SETUP_SAVED", run.id)
         await self.session.commit()
         return await self.detail(run_id, owner)
 
-    async def import_tasks(self, run_id: UUID, owner: UUID) -> dict[str, Any]:
-        run = await self.owned_run(run_id, owner, lock=True)
-        if run.status != S.DRAFT:
-            raise PlanWorkflowInvalidState()
-        payload = dict(run.input_payload or {})
-        tasks = [AcademicTask.model_validate(item) for item in payload.get("tasks", [])]
-        mapping_data = payload.get("notion_mapping")
-        database_id = payload.get("notion_database_id")
-        if not tasks and not (database_id and mapping_data):
-            try:
-                default = await self.notion.default(owner)
-            except NotionNotConnected:
-                default = None
-            if default is not None:
-                database_id, mapping = default
-                mapping_data = mapping.model_dump(mode="json")
-                payload["notion_database_id"] = database_id
-                payload["notion_mapping"] = mapping_data
-        imported_from_notion = False
-        if database_id and mapping_data:
-            imported_from_notion = True
-            connection = await self.notion.connection(owner)
-            client = await self.notion.client(connection)
-            pages = await client.query_database(database_id)
-            imported = NotionTaskMapper(
-                NotionTaskPropertyMapping.model_validate(mapping_data)
-            ).map_pages(pages)
-            tasks = list(imported.tasks)
-            payload["task_issues"] = [issue.model_dump(mode="json") for issue in imported.issues]
-        payload["tasks"] = [task.model_dump(mode="json") for task in tasks]
-        payload["stage"] = "tasks_imported"
-        run.input_payload = payload
-        record(
-            self.session,
-            owner,
-            "NOTION_TASKS_IMPORTED",
-            run.id,
-            {"task_count": len(tasks), "issue_count": len(payload.get("task_issues", []))},
-        )
-        await self.session.commit()
-        if imported_from_notion and not tasks:
-            raise NotionTaskImportEmpty()
-        return await self.detail(run_id, owner)
-
     async def generate(self, run_id: UUID, owner: UUID, data: PlanSetupInput) -> dict[str, Any]:
         await self.setup(run_id, owner, data)
-        await self.import_tasks(run_id, owner)
         await self.load_availability(run_id, owner)
         return await self.solve(run_id, owner)
 
@@ -202,7 +158,11 @@ class StudyPlanWorkflowService:
             now=start,
         )
         record(self.session, owner, "SCHEDULING_STARTED", run.id, {"task_count": len(tasks)})
-        result = self.scheduler.solve(problem)
+        # CPU-bound and can take real wall-clock time (CP-SAT search alone is
+        # capped, but building the model for a large candidate set is not) --
+        # run off the event loop so a slow solve blocks only this request,
+        # not every concurrent user on the single-threaded server.
+        result = await asyncio.to_thread(self.scheduler.solve, problem)
         run.plan_payload = result.model_dump(mode="json")
         payload["sessions"] = [item.model_dump(mode="json") for item in result.sessions]
         payload["stage"] = "schedule_ready"
@@ -296,6 +256,54 @@ class StudyPlanWorkflowService:
         )
         await self.workflow.request_approvals(run.id, owner)
         record(self.session, owner, "PLAN_APPROVAL_REQUESTED", run.id, {"event_count": len(events)})
+        await self.session.commit()
+        return await self.detail(run_id, owner)
+
+    async def export_to_notion(
+        self, run_id: UUID, owner: UUID, destination_page_id: str
+    ) -> dict[str, Any]:
+        # Direct, unapproved action: unlike Collaborate/Learn, which write
+        # LLM-drafted content a human must review first, every field here
+        # was already typed in by the student -- clicking the button is the
+        # confirmation. No ProposedAction/approval step, no RuntimeClient.
+        run = await self.owned_run(run_id, owner)
+        payload = dict(run.input_payload or {})
+        tasks = [AcademicTask.model_validate(item) for item in payload.get("tasks", [])]
+        if not tasks:
+            raise SchedulingInputInvalid()
+        connection = await self.notion.connection(owner)
+        client = await self.notion.client(connection)
+        action = CreateNotionTaskDatabaseAction(
+            title=f"Relay study plan ({len(tasks)} task{'' if len(tasks) == 1 else 's'})",
+            parent_page_id=destination_page_id,
+            properties=STUDY_PLAN_DATABASE_PROPERTIES,
+            rows=tuple(build_task_row_properties(task) for task in tasks),
+            connection_id=str(connection.id),
+        )
+        notion_connector: RealNotionConnector | MockNotionConnector = (
+            MockNotionConnector()
+            if get_settings().notion_publish_mode == "mock"
+            else RealNotionConnector(client)
+        )
+        # Each export intentionally creates a fresh database (no
+        # update-in-place), so unlike Collaborate/Learn's approval-gated
+        # writes, this key has no retry to stay stable across -- it just
+        # needs to be unique per call.
+        result = await notion_connector.create_task_database(action, f"plan-export-{uuid4()}")
+        payload["notion_export"] = {
+            "database_id": result.external_id,
+            "database_url": result.external_url,
+            "exported_at": datetime.now(UTC).isoformat(),
+            "task_count": result.task_count,
+        }
+        run.input_payload = payload
+        record(
+            self.session,
+            owner,
+            "PLAN_EXPORTED_TO_NOTION",
+            run.id,
+            {"database_id": result.external_id, "task_count": result.task_count},
+        )
         await self.session.commit()
         return await self.detail(run_id, owner)
 

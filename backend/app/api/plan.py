@@ -7,18 +7,21 @@ from app.api.dependencies import Repository
 from app.api.routes import google_oauth
 from app.auth.users import CurrentUser
 from app.connectors.google.service import GoogleCalendarService
-from app.connectors.notion import NotionTaskSourceService
+from app.connectors.notion.service import NotionDestinationService
 from app.core.config import get_settings
+from app.domain.enums import ApprovalStatus, WorkflowStatus
 from app.infrastructure.credentials import credential_store
 from app.runtime.client import RuntimeClient
 from app.runtime.factory import runtime_client as build_runtime_client
 from app.scheduling.models import StudySession
 from app.scheduling.service import StudySchedulingService
 from app.schemas.domain import RunRead
+from app.services.approvals import ApprovalService
 from app.services.runtime_execution import RuntimeExecutionService
 from app.workflows.study_plan.execution import StudyPlanExecutionService
 from app.workflows.study_plan.schemas import (
     LockSessionInput,
+    NotionExportInput,
     PlanSetupInput,
     SessionAdjustmentInput,
 )
@@ -38,9 +41,9 @@ def google_service(repo: Repository) -> GoogleCalendarService:
     )
 
 
-def notion_service(repo: Repository) -> NotionTaskSourceService:
+def notion_service(repo: Repository) -> NotionDestinationService:
     settings = get_settings()
-    return NotionTaskSourceService(
+    return NotionDestinationService(
         repo,
         credential_store(),
         api_base_url=settings.notion_api_base_url,
@@ -94,9 +97,11 @@ async def generate(
     return await plan.generate(run_id, user.id, data)
 
 
-@router.post("/{run_id}/tasks/import")
-async def import_tasks(run_id: UUID, user: CurrentUser, plan: Plan) -> dict[str, object]:
-    return await plan.import_tasks(run_id, user.id)
+@router.post("/{run_id}/export/notion")
+async def export_notion(
+    run_id: UUID, data: NotionExportInput, user: CurrentUser, plan: Plan
+) -> dict[str, object]:
+    return await plan.export_to_notion(run_id, user.id, data.destination_page_id)
 
 
 @router.put("/{run_id}/tasks")
@@ -163,6 +168,22 @@ async def request_approval(run_id: UUID, user: CurrentUser, plan: Plan) -> dict[
 @router.post("/{run_id}/execute", response_model=RunRead)
 async def execute(run_id: UUID, user: CurrentUser, plan: Plan, runtime: Runtime) -> RunRead:
     await plan.owned_run(run_id, user.id)
+    return await StudyPlanExecutionService(plan.repo, runtime).execute(run_id, user.id)
+
+
+@router.post("/{run_id}/approve-and-execute", response_model=RunRead)
+async def approve_and_execute(
+    run_id: UUID, user: CurrentUser, plan: Plan, runtime: Runtime
+) -> RunRead:
+    run = await plan.owned_run(run_id, user.id)
+    if run.status == WorkflowStatus.PLAN_READY:
+        await plan.request_approval(run_id, user.id)
+    approvals = await plan.repo.run_approvals(run_id)
+    pending = next((item for item in approvals if item.status == ApprovalStatus.PENDING), None)
+    if pending is not None:
+        await ApprovalService(plan.repo).resolve(
+            pending.id, user.id, pending.original_payload, approve=True
+        )
     return await StudyPlanExecutionService(plan.repo, runtime).execute(run_id, user.id)
 
 

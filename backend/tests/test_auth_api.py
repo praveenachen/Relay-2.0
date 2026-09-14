@@ -2,7 +2,9 @@ import pytest
 from conftest import login, register
 from sqlalchemy import select
 
-from app.models.entities import AuditEvent, User
+from app.domain.enums import Provider
+from app.infrastructure.credentials import FernetCredentialStore
+from app.models.entities import AuditEvent, ConnectedAccount, ProjectWorkspace, User, UserPreference
 
 
 async def test_signup_login_logout(client, session_factory):
@@ -94,3 +96,62 @@ async def test_profile_and_onboarding(client, account):
     assert (await client.patch("/users/me", json={"name": " "})).status_code == 422
     assert (await client.post("/users/me/onboarding")).status_code == 204
     assert (await client.get("/users/me")).json()["onboarding_completed"] is True
+
+
+async def test_reset_history_clears_profile_activity_but_keeps_connection(
+    client, account, session_factory
+):
+    key = "Nq0gMu1xFQPTg1D0Yv4qPNXBJYVw-MLEaxCYe4mDTiU="
+    store = FernetCredentialStore([key])
+    async with session_factory() as session:
+        session.add(
+            ConnectedAccount(
+                user_id=account["id"],
+                provider=Provider.NOTION,
+                external_account_id="workspace-1",
+                display_name="Student Workspace",
+                access_token_encrypted=store.encrypt("notion-token"),
+                scopes=["read_content"],
+                provider_metadata={
+                    "workspace_id": "workspace-1",
+                    "default_destination_id": "page-1",
+                    "default_destination_title": "Notes",
+                },
+                status="CONNECTED",
+            )
+        )
+        await session.commit()
+
+    created = await client.post("/projects", json={"name": "StudySync"})
+    assert created.status_code == 201, created.text
+    await client.put(
+        "/preferences",
+        json={
+            "timezone": "America/Toronto",
+            "earliest_study_time": "09:00:00",
+            "latest_study_time": "21:00:00",
+            "preferred_session_minutes": 45,
+            "maximum_session_minutes": 75,
+            "minimum_break_minutes": 5,
+        },
+    )
+    assert (await client.post("/users/me/onboarding")).status_code == 204
+
+    response = await client.post("/users/me/history/reset")
+
+    assert response.status_code == 204
+    assert (await client.get("/projects")).json() == []
+    me = (await client.get("/users/me")).json()
+    assert me["onboarding_completed"] is False
+    prefs = (await client.get("/preferences")).json()
+    assert prefs["timezone"] == "UTC"
+    assert prefs["preferred_session_minutes"] == 50
+
+    async with session_factory() as session:
+        assert await session.get(User, account["id"]) is not None
+        connection = await session.scalar(select(ConnectedAccount))
+        assert connection is not None
+        assert connection.status == "CONNECTED"
+        assert "default_destination_id" not in connection.provider_metadata
+        assert await session.scalar(select(ProjectWorkspace)) is None
+        assert await session.scalar(select(UserPreference)) is not None

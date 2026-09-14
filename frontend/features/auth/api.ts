@@ -17,4 +17,6 @@ export const auth = {
     request("/users/me", userSchema, json({ name }, "PATCH")),
   finish: () =>
     request("/users/me/onboarding", z.undefined(), { method: "POST" }),
+  resetHistory: () =>
+    request("/users/me/history/reset", z.undefined(), { method: "POST" }),
 };

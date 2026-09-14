@@ -1,14 +1,12 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
-  Check,
   Database,
-  Keyboard,
   Lock,
   Play,
   Plus,
@@ -18,7 +16,6 @@ import {
   Unlock,
   X,
 } from "lucide-react";
-import { approvals } from "@/features/approvals/api";
 import { connections } from "@/features/connections/api";
 import { preferences } from "@/features/preferences/api";
 import { useConnections, usePreferences } from "@/hooks/queries";
@@ -63,93 +60,6 @@ function defaultWindow(): { startDate: string; endDate: string } {
   };
 }
 
-function normalizePropertyName(value: string): string {
-  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function pickProperty(
-  properties: { name: string; type: string }[],
-  allowedTypes: string[],
-  preferredNames: string[],
-  fallback = "",
-): string {
-  const allowed = properties.filter((property) =>
-    allowedTypes.includes(property.type),
-  );
-  for (const preferred of preferredNames) {
-    const normalized = normalizePropertyName(preferred);
-    const exact = allowed.find(
-      (property) => normalizePropertyName(property.name) === normalized,
-    );
-    if (exact) return exact.name;
-  }
-  for (const preferred of preferredNames) {
-    const normalized = normalizePropertyName(preferred);
-    const partial = allowed.find((property) =>
-      normalizePropertyName(property.name).includes(normalized),
-    );
-    if (partial) return partial.name;
-  }
-  return allowed[0]?.name || fallback;
-}
-
-function compatiblePropertyValue(
-  value: string,
-  properties: { name: string; type: string }[],
-  allowedTypes: string[],
-  fallback: string,
-): string {
-  if (
-    value &&
-    properties.some(
-      (property) =>
-        property.name === value && allowedTypes.includes(property.type),
-    )
-  ) {
-    return value;
-  }
-  return fallback;
-}
-
-function PropertySelect({
-  label,
-  value,
-  onChange,
-  properties,
-  allowedTypes,
-  optional = false,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  properties: { name: string; type: string }[];
-  allowedTypes: string[];
-  optional?: boolean;
-}) {
-  const options = properties.filter((property) =>
-    allowedTypes.includes(property.type),
-  );
-  return (
-    <label className="field">
-      {label}
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
-        {optional && <option value="">Do not import</option>}
-        {!optional && <option value="">Choose a property</option>}
-        {options.map((property) => (
-          <option key={property.name} value={property.name}>
-            {property.name}
-          </option>
-        ))}
-      </select>
-      {options.length === 0 && (
-        <span className="text-xs text-muted">
-          No compatible {label.toLowerCase()} column found in this database.
-        </span>
-      )}
-    </label>
-  );
-}
-
 function prioritizeTasks(tasks: AcademicTask[]): AcademicTask[] {
   return tasks.map((task, index) => ({
     ...task,
@@ -182,20 +92,21 @@ export function PlanEntry() {
       <PageTitle
         eyebrow="PLAN"
         title="Build a realistic study schedule."
-        description="Relay reads your Notion tasks and Google Calendar availability, then a deterministic CP-SAT solver -- never a language model -- decides the actual times you study."
+        description="Enter your study tasks, and Relay reads your Google Calendar availability, then a deterministic CP-SAT solver -- never a language model -- decides the actual times you study."
         action={<WorkflowBadge workflow={workflowDisplay.study_scheduler} />}
       />
       <RelayLine
-        sources={[{ label: "Notion tasks" }, { label: "Calendar" }]}
-        destinations={[{ label: "Google Calendar" }]}
+        sources={[{ label: "Your tasks" }, { label: "Calendar" }]}
+        destinations={[
+          { label: "Google Calendar" },
+          { label: "Notion (optional)" },
+        ]}
         status="DRAFT"
       />
       <section className="panel my-8">
         <h2 className="section-title">What Relay will do</h2>
         <ol className="learn-steps">
-          <li>
-            Collect your tasks from manual entry or a selected Notion database.
-          </li>
+          <li>Collect your study tasks, entered directly in Relay.</li>
           <li>Read the selected Google Calendar and avoid existing events.</li>
           <li>
             Generate a balanced schedule across available days, weighted by
@@ -205,6 +116,7 @@ export function PlanEntry() {
             Let you lock, remove, or regenerate sessions before approving.
           </li>
           <li>Create only the approved study blocks on your calendar.</li>
+          <li>Optionally export your task list to a new Notion database.</li>
         </ol>
         <button
           className="button mt-6"
@@ -248,12 +160,15 @@ export function PlanRun({ id }: { id: string }) {
             ? `Study plan for ${taskCount} task${taskCount === 1 ? "" : "s"}`
             : "Study plan"
         }
-        description="Review the imported tasks, calendar availability, generated schedule, and approval for this PLAN workflow."
+        description="Review your tasks, calendar availability, generated schedule, and final calendar publish action for this PLAN workflow."
         action={<Status value={data.run.status} />}
       />
       <RelayLine
-        sources={[{ label: "Notion tasks" }, { label: "Calendar" }]}
-        destinations={[{ label: "Google Calendar" }]}
+        sources={[{ label: "Your tasks" }, { label: "Calendar" }]}
+        destinations={[
+          { label: "Google Calendar" },
+          { label: "Notion (optional)" },
+        ]}
         status={data.run.status}
       />
       {data.run.error_message && (
@@ -267,6 +182,9 @@ export function PlanRun({ id }: { id: string }) {
       ) : (
         <ReviewAndApprove id={id} data={data} invalidate={invalidate} />
       )}
+      {taskCount > 0 && (
+        <NotionExportPanel id={id} data={data} invalidate={invalidate} />
+      )}
     </>
   );
 }
@@ -274,8 +192,6 @@ export function PlanRun({ id }: { id: string }) {
 function planSetupNextStep(
   stage: string | undefined,
   busy: boolean,
-  usingNotion: boolean,
-  databaseId: string,
   taskCount: number,
   hasGoogle: boolean,
   calendarId: string,
@@ -302,21 +218,10 @@ function planSetupNextStep(
       };
     }
     return {
-      title: "Next: save your planning setup.",
-      description: usingNotion
-        ? databaseId
-          ? "Relay will use the selected Notion database after you save this setup."
-          : "Choose a Notion task database, then save the setup."
-        : taskCount
-          ? "Save the manually entered tasks and planning window to continue."
-          : "Add at least one manual task, or import tasks from Notion, then save the setup.",
-    };
-  }
-  if (stage === "tasks_imported") {
-    return {
-      title: "Next: review tasks and load availability.",
-      description:
-        "Check deadlines and estimates, save edits if needed, then continue to calendar availability.",
+      title: "Next: generate your study plan.",
+      description: taskCount
+        ? "Save your tasks and planning window, then generate the schedule."
+        : "Add at least one task, then generate the schedule.",
     };
   }
   if (stage === "availability_loaded") {
@@ -335,7 +240,7 @@ function planSetupNextStep(
 function planReviewNextStep(
   data: PlanDetail,
   busy: boolean,
-  canRequestApproval: boolean,
+  canPublish: boolean,
 ) {
   if (busy) {
     return {
@@ -343,27 +248,16 @@ function planReviewNextStep(
       description: "Wait for the current action to finish before moving on.",
     };
   }
-  if (data.run.status === "PLAN_READY") {
+  if (
+    ["PLAN_READY", "AWAITING_APPROVAL", "APPROVED"].includes(data.run.status)
+  ) {
     return {
-      title: canRequestApproval
-        ? "Next: request approval for this schedule."
+      title: canPublish
+        ? "Next: approve and create calendar blocks."
         : "Next: choose where Relay should publish this schedule.",
-      description: canRequestApproval
-        ? "Review the sessions below, then request approval when the calendar blocks look right."
-        : "This schedule is locked in, but it needs a Google Calendar destination before approval.",
-    };
-  }
-  if (data.approval?.status === "PENDING") {
-    return {
-      title: "Next: approve or reject the plan.",
-      description:
-        "Approval is the final checkpoint before Relay writes to Google Calendar.",
-    };
-  }
-  if (data.run.status === "APPROVED") {
-    return {
-      title: "Next: publish the approved schedule.",
-      description: "Create the approved study blocks on Google Calendar.",
+      description: canPublish
+        ? "Review the sessions below, then Relay will approve the exact plan and write those blocks to Google Calendar in one step."
+        : "This schedule is locked in, but it needs a Google Calendar destination before publishing.",
     };
   }
   return {
@@ -418,129 +312,28 @@ function SetupWizard({
     preferencesQuery.data?.latest_study_time.slice(0, 5) || "22:00",
   );
   const [calendarId, setCalendarId] = useState(setup?.calendar_id || "");
-  const [taskSource, setTaskSource] = useState<"manual" | "notion">(
-    setup?.notion_database_id ? "notion" : "manual",
-  );
-  const [databaseId, setDatabaseId] = useState(setup?.notion_database_id || "");
   const [editingSetup, setEditingSetup] = useState(!setup);
-  const [mappingTitle, setMappingTitle] = useState(
-    setup?.notion_mapping?.title || "Task Name",
-  );
-  const [mappingCourse, setMappingCourse] = useState(
-    setup?.notion_mapping?.course || "",
-  );
-  const [mappingDeadline, setMappingDeadline] = useState(
-    setup?.notion_mapping?.deadline || "Due Date",
-  );
-  const [mappingEstimate, setMappingEstimate] = useState(
-    setup?.notion_mapping?.estimated_minutes || "Estimated Hours",
-  );
-  const [mappingUnit, setMappingUnit] = useState<"minutes" | "hours">(
-    setup?.notion_mapping?.estimate_unit || "hours",
-  );
-  const [mappingPriority, setMappingPriority] = useState(
-    setup?.notion_mapping?.priority || "",
-  );
-  const [mappingStatus, setMappingStatus] = useState(
-    setup?.notion_mapping?.status || "Status",
-  );
   const [tasks, setTasks] = useState<AcademicTask[]>(setup?.tasks || []);
 
   const hasGoogle = (connectionsQuery.data || []).some(
     (item) => item.provider === "GOOGLE" && item.status === "CONNECTED",
-  );
-  const hasNotion = (connectionsQuery.data || []).some(
-    (item) => item.provider === "NOTION" && item.status === "CONNECTED",
   );
   const googleCalendars = useQuery({
     queryKey: ["connections", "google-calendars"],
     queryFn: connections.googleCalendars,
     enabled: hasGoogle,
   });
-  const notionDatabases = useQuery({
-    queryKey: ["connections", "notion-task-databases"],
-    queryFn: connections.notionTaskDatabases,
-    enabled: hasNotion && taskSource === "notion",
-  });
-  const usingNotion = taskSource === "notion";
-  const selectedDatabase = useMemo(
-    () =>
-      (notionDatabases.data || []).find(
-        (database) => database.id === databaseId,
-      ),
-    [databaseId, notionDatabases.data],
-  );
-  const databaseProperties = useMemo(
-    () => selectedDatabase?.properties || [],
-    [selectedDatabase],
-  );
-  const hasDatabaseSchema = databaseProperties.length > 0;
-  const effectiveMappingTitle = compatiblePropertyValue(
-    mappingTitle,
-    databaseProperties,
-    ["title"],
-    pickProperty(databaseProperties, ["title"], ["Name", "Task", "Title"]),
-  );
-  const effectiveMappingCourse = compatiblePropertyValue(
-    mappingCourse,
-    databaseProperties,
-    ["rich_text", "select", "status"],
-    "",
-  );
-  const effectiveMappingDeadline = compatiblePropertyValue(
-    mappingDeadline,
-    databaseProperties,
-    ["date"],
-    pickProperty(databaseProperties, ["date"], ["Due", "Due Date", "Deadline"]),
-  );
-  const effectiveMappingEstimate = compatiblePropertyValue(
-    mappingEstimate,
-    databaseProperties,
-    ["number", "rich_text"],
-    pickProperty(
-      databaseProperties,
-      ["number", "rich_text"],
-      ["Estimate", "Estimated Hours", "Estimated Minutes", "Hours"],
-    ),
-  );
-  const effectiveMappingPriority = compatiblePropertyValue(
-    mappingPriority,
-    databaseProperties,
-    ["number", "select"],
-    "",
-  );
-  const effectiveMappingStatus = compatiblePropertyValue(
-    mappingStatus,
-    databaseProperties,
-    ["status", "select"],
-    "",
-  );
 
   const selectedCalendarId =
     calendarId ||
     (googleCalendars.data?.length === 1 ? googleCalendars.data[0].id : "");
 
-  const buildMapping = () => ({
-    title: effectiveMappingTitle,
-    course: effectiveMappingCourse || null,
-    deadline: effectiveMappingDeadline,
-    priority: effectiveMappingPriority || null,
-    estimated_minutes: effectiveMappingEstimate,
-    status: effectiveMappingStatus || null,
-    estimate_unit: mappingUnit,
+  const planSetupPayload = () => ({
+    start: combineLocalDateTime(startDate, studyStartTime),
+    end: combineLocalDateTime(endDate, studyEndTime),
+    calendar_id: selectedCalendarId || null,
+    tasks: prioritizeTasks(tasks),
   });
-
-  const planSetupPayload = () => {
-    const selectedDatabaseId = usingNotion ? databaseId || null : null;
-    return {
-      start: combineLocalDateTime(startDate, studyStartTime),
-      end: combineLocalDateTime(endDate, studyEndTime),
-      calendar_id: selectedCalendarId || null,
-      notion_database_id: selectedDatabaseId,
-      notion_mapping: selectedDatabaseId ? buildMapping() : null,
-      tasks: prioritizeTasks(tasks),
-    };
-  };
 
   const generatePlan = useMutation({
     mutationFn: async () => {
@@ -560,10 +353,6 @@ function SetupWizard({
     },
     onError: invalidate,
   });
-  const importTasks = useMutation({
-    mutationFn: () => plan.importTasks(id),
-    onSuccess: invalidate,
-  });
   const loadAvailability = useMutation({
     mutationFn: () => plan.loadAvailability(id),
     onSuccess: invalidate,
@@ -580,61 +369,20 @@ function SetupWizard({
       });
     },
   });
-  const refreshDatabases = useMutation({
-    mutationFn: connections.refreshNotionTaskDatabases,
-    onSuccess: async () => {
-      await cache.invalidateQueries({
-        queryKey: ["connections", "notion-task-databases"],
-      });
-    },
-  });
 
   const busy =
     generatePlan.isPending ||
-    importTasks.isPending ||
     loadAvailability.isPending ||
     solve.isPending ||
-    refreshCalendars.isPending ||
-    refreshDatabases.isPending;
+    refreshCalendars.isPending;
   const stage = setup?.stage;
   const setupError =
-    generatePlan.error ||
-    importTasks.error ||
-    loadAvailability.error ||
-    solve.error;
+    generatePlan.error || loadAvailability.error || solve.error;
   const calendarError = hasGoogle
     ? refreshCalendars.error || googleCalendars.error
     : null;
-  const notionSourceError = usingNotion
-    ? refreshDatabases.error || notionDatabases.error
-    : null;
-  const requiredNotionMappingMissing =
-    usingNotion && databaseId
-      ? !effectiveMappingTitle ||
-        !effectiveMappingDeadline ||
-        !effectiveMappingEstimate
-      : false;
-  const needsTaskSource = usingNotion
-    ? !databaseId || requiredNotionMappingMissing
-    : tasks.length === 0;
+  const needsTaskSource = tasks.length === 0;
   const needsCalendar = !selectedCalendarId;
-
-  const chooseManualTasks = () => {
-    setTaskSource("manual");
-    setDatabaseId("");
-    refreshDatabases.reset();
-  };
-
-  const chooseNotionTasks = () => {
-    setTaskSource("notion");
-    if (
-      hasNotion &&
-      !notionDatabases.data?.length &&
-      !notionDatabases.isFetching
-    ) {
-      refreshDatabases.mutate();
-    }
-  };
 
   return (
     <section className="my-8 space-y-8">
@@ -642,8 +390,6 @@ function SetupWizard({
         {...planSetupNextStep(
           stage,
           busy,
-          usingNotion,
-          databaseId,
           tasks.length,
           hasGoogle,
           selectedCalendarId,
@@ -696,244 +442,58 @@ function SetupWizard({
               />
             </label>
           </div>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <div className="field">
-              <div className="destination-picker-heading">
-                <span className="field-label">
-                  Calendar Relay schedules into
-                </span>
-                {hasGoogle && (
-                  <button
-                    className="icon-button"
-                    disabled={busy}
-                    onClick={() => refreshCalendars.mutate()}
-                    aria-label="Refresh Google calendars"
-                    title="Refresh Google calendars"
-                    type="button"
-                  >
-                    <RotateCcw aria-hidden="true" />
-                  </button>
-                )}
-              </div>
-              {hasGoogle ? (
-                <>
-                  <select
-                    value={selectedCalendarId}
-                    onChange={(event) => setCalendarId(event.target.value)}
-                  >
-                    <option value="" disabled>
-                      Select a calendar
+          <div className="mt-5 field">
+            <div className="destination-picker-heading">
+              <span className="field-label">Calendar Relay schedules into</span>
+              {hasGoogle && (
+                <button
+                  className="icon-button"
+                  disabled={busy}
+                  onClick={() => refreshCalendars.mutate()}
+                  aria-label="Refresh Google calendars"
+                  title="Refresh Google calendars"
+                  type="button"
+                >
+                  <RotateCcw aria-hidden="true" />
+                </button>
+              )}
+            </div>
+            {hasGoogle ? (
+              <>
+                <select
+                  value={selectedCalendarId}
+                  onChange={(event) => setCalendarId(event.target.value)}
+                >
+                  <option value="" disabled>
+                    Select a calendar
+                  </option>
+                  {(googleCalendars.data || []).map((calendar) => (
+                    <option key={calendar.id} value={calendar.id}>
+                      {calendar.summary}
                     </option>
-                    {(googleCalendars.data || []).map((calendar) => (
-                      <option key={calendar.id} value={calendar.id}>
-                        {calendar.summary}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-sm text-muted">
-                    {googleCalendars.isFetching || refreshCalendars.isPending
-                      ? "Loading calendars from your connected Google account..."
-                      : (googleCalendars.data || []).length === 0
-                        ? "Your Google account is connected, but Relay has no calendar list yet. Refresh calendars, then choose where study blocks should go."
-                        : "Your Google account is connected. Choose the specific calendar for this plan."}
-                  </p>
-                  <ErrorMessage error={calendarError} />
-                </>
-              ) : (
-                <span className="text-sm text-muted">
-                  <Link className="text-link" href="/connections">
-                    Connect Google Calendar
-                  </Link>{" "}
-                  to choose a calendar. Relay needs one to schedule study
-                  blocks.
-                </span>
-              )}
-            </div>
-            <div className="field">
-              <span className="field-label">Task source</span>
-              <div className="task-source-options" role="radiogroup">
-                <button
-                  type="button"
-                  className={`task-source-option ${!usingNotion ? "selected" : ""}`}
-                  aria-pressed={!usingNotion}
-                  onClick={chooseManualTasks}
-                >
-                  <Keyboard aria-hidden="true" />
-                  <span>
-                    <strong>Enter tasks manually</strong>
-                    <small>Add and reorder tasks in Relay.</small>
-                  </span>
-                </button>
-                <button
-                  type="button"
-                  className={`task-source-option ${usingNotion ? "selected" : ""}`}
-                  aria-pressed={usingNotion}
-                  disabled={!hasNotion}
-                  onClick={chooseNotionTasks}
-                >
-                  <Database aria-hidden="true" />
-                  <span>
-                    <strong>Import from Notion</strong>
-                    <small>Choose a task database to pull from.</small>
-                  </span>
-                </button>
-              </div>
-              {!hasNotion && (
-                <span className="text-sm text-muted">
-                  <Link className="text-link" href="/connections">
-                    Connect Notion
-                  </Link>{" "}
-                  to import tasks from a database.
-                </span>
-              )}
-              {usingNotion && hasNotion && (
-                <div className="task-source-picker">
-                  <div className="destination-picker-heading">
-                    <span className="field-label">Choose Notion database</span>
-                    <button
-                      className="icon-button"
-                      disabled={busy}
-                      onClick={() => refreshDatabases.mutate()}
-                      aria-label="Refresh Notion databases"
-                      title="Refresh Notion databases"
-                      type="button"
-                    >
-                      <RotateCcw aria-hidden="true" />
-                    </button>
-                  </div>
-                  <select
-                    value={databaseId}
-                    onChange={(event) => setDatabaseId(event.target.value)}
-                  >
-                    <option value="">Select a Notion database</option>
-                    {(notionDatabases.data || []).map((database) => (
-                      <option key={database.id} value={database.id}>
-                        {database.title}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-sm text-muted">
-                    {notionDatabases.isFetching || refreshDatabases.isPending
-                      ? "Loading Notion databases..."
-                      : (notionDatabases.data || []).length === 0
-                        ? "No databases found. If you do not want to import tasks from Notion, choose Enter tasks manually."
-                        : "Select the database that contains the tasks Relay should schedule."}
-                  </p>
-                  <ErrorMessage error={notionSourceError} />
-                </div>
-              )}
-            </div>
+                  ))}
+                </select>
+                <p className="text-sm text-muted">
+                  {googleCalendars.isFetching || refreshCalendars.isPending
+                    ? "Loading calendars from your connected Google account..."
+                    : (googleCalendars.data || []).length === 0
+                      ? "Your Google account is connected, but Relay has no calendar list yet. Refresh calendars, then choose where study blocks should go."
+                      : "Your Google account is connected. Choose the specific calendar for this plan."}
+                </p>
+                <ErrorMessage error={calendarError} />
+              </>
+            ) : (
+              <span className="text-sm text-muted">
+                <Link className="text-link" href="/connections">
+                  Connect Google Calendar
+                </Link>{" "}
+                to choose a calendar. Relay needs one to schedule study blocks.
+              </span>
+            )}
           </div>
-          {usingNotion && databaseId && (
-            <div className="mt-6 border-t border-line pt-5">
-              <h3 className="section-title">Notion property mapping</h3>
-              <p className="text-sm text-muted">
-                Relay auto-selects the most likely columns from this database.
-                Review the dropdowns before generating the plan.
-              </p>
-              {!hasDatabaseSchema && (
-                <p className="mt-2 text-sm text-muted">
-                  Refresh databases to load this database&apos;s column names.
-                </p>
-              )}
-              {requiredNotionMappingMissing && hasDatabaseSchema && (
-                <p className="mt-2 text-sm text-danger">
-                  Choose a title, deadline, and estimate property before
-                  generating a plan.
-                </p>
-              )}
-              {setup?.task_issues && setup.task_issues.length > 0 && (
-                <div className="notice error mt-4">
-                  <X aria-hidden="true" />
-                  <div>
-                    <p className="font-medium">
-                      Some Notion rows could not be imported.
-                    </p>
-                    <ul className="mt-2 list-disc pl-5 text-sm">
-                      {setup.task_issues.slice(0, 5).map((issue, index) => (
-                        <li
-                          key={`${issue.code}-${issue.notion_page_id || index}`}
-                        >
-                          {issue.message}
-                          {issue.field ? ` Check ${issue.field}.` : ""}
-                        </li>
-                      ))}
-                    </ul>
-                    {setup.task_issues.length > 5 && (
-                      <p className="mt-2 text-sm">
-                        {setup.task_issues.length - 5} more row(s) had import
-                        issues.
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-              <div className="mt-4 grid gap-4 md:grid-cols-3">
-                <PropertySelect
-                  label="Title property"
-                  value={effectiveMappingTitle}
-                  onChange={setMappingTitle}
-                  properties={databaseProperties}
-                  allowedTypes={["title"]}
-                />
-                <PropertySelect
-                  label="Category property (optional)"
-                  value={effectiveMappingCourse}
-                  onChange={setMappingCourse}
-                  properties={databaseProperties}
-                  allowedTypes={["rich_text", "select", "status"]}
-                  optional
-                />
-                <PropertySelect
-                  label="Status property"
-                  value={effectiveMappingStatus}
-                  onChange={setMappingStatus}
-                  properties={databaseProperties}
-                  allowedTypes={["status", "select"]}
-                  optional
-                />
-                <PropertySelect
-                  label="Deadline property"
-                  value={effectiveMappingDeadline}
-                  onChange={setMappingDeadline}
-                  properties={databaseProperties}
-                  allowedTypes={["date"]}
-                />
-                <PropertySelect
-                  label="Priority property (optional)"
-                  value={effectiveMappingPriority}
-                  onChange={setMappingPriority}
-                  properties={databaseProperties}
-                  allowedTypes={["number", "select"]}
-                  optional
-                />
-                <PropertySelect
-                  label="Estimate property"
-                  value={effectiveMappingEstimate}
-                  onChange={setMappingEstimate}
-                  properties={databaseProperties}
-                  allowedTypes={["number", "rich_text"]}
-                />
-                <label className="field">
-                  Estimate unit
-                  <select
-                    value={mappingUnit}
-                    onChange={(e) =>
-                      setMappingUnit(e.target.value as "minutes" | "hours")
-                    }
-                  >
-                    <option value="minutes">Minutes</option>
-                    <option value="hours">Hours</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-          )}
-          {!usingNotion && (
-            <div className="mt-6 border-t border-line pt-5">
-              <TaskTable tasks={tasks} onChange={setTasks} editable />
-            </div>
-          )}
+          <div className="mt-6 border-t border-line pt-5">
+            <TaskTable tasks={tasks} onChange={setTasks} editable />
+          </div>
           <button
             className="button mt-6"
             disabled={busy || needsTaskSource || needsCalendar}
@@ -1172,53 +732,28 @@ function ReviewAndApprove({
     mutationFn: (sessionId: string) => plan.removeSession(id, sessionId),
     onSuccess: invalidate,
   });
-  const requestApproval = useMutation({
-    mutationFn: () => plan.requestApproval(id),
-    onSuccess: invalidate,
-  });
-  const resolve = useMutation({
-    mutationFn: ({ approve }: { approve: boolean }) => {
-      const approval = data.approval;
-      if (!approval) throw new Error("No approval is available.");
-      return approvals.resolve(approval, approve);
-    },
-    onSuccess: invalidate,
-  });
-  const execute = useMutation({
-    mutationFn: () => plan.execute(id),
+  const publish = useMutation({
+    mutationFn: () => plan.approveAndExecute(id),
     onSuccess: invalidate,
   });
 
   const busy =
-    solve.isPending ||
-    lock.isPending ||
-    remove.isPending ||
-    requestApproval.isPending ||
-    resolve.isPending ||
-    execute.isPending;
+    solve.isPending || lock.isPending || remove.isPending || publish.isPending;
 
   const canRegenerate = data.run.status === "PLAN_READY";
   const missingCalendar = !setup?.calendar_id;
-  const canRequestApproval =
-    data.run.status === "PLAN_READY" &&
+  const canPublish =
+    ["PLAN_READY", "AWAITING_APPROVAL", "APPROVED"].includes(data.run.status) &&
     !!result &&
     result.status !== "INFEASIBLE" &&
     result.sessions.length > 0 &&
     !missingCalendar;
-  const pendingApproval = data.approval?.status === "PENDING";
 
   return (
     <section className="my-8 space-y-8">
-      <NextStepNotice {...planReviewNextStep(data, busy, canRequestApproval)} />
+      <NextStepNotice {...planReviewNextStep(data, busy, canPublish)} />
       <ErrorMessage
-        error={
-          solve.error ||
-          lock.error ||
-          remove.error ||
-          requestApproval.error ||
-          resolve.error ||
-          execute.error
-        }
+        error={solve.error || lock.error || remove.error || publish.error}
       />
       {result ? (
         <SchedulePanel
@@ -1234,7 +769,7 @@ function ReviewAndApprove({
           Generate a study plan from the setup step.
         </Empty>
       )}
-      {canRegenerate && (
+      {(canRegenerate || canPublish || missingCalendar) && (
         <div className="panel plan-action-panel">
           {missingCalendar ? (
             <div className="blocked-action-card">
@@ -1243,8 +778,8 @@ function ReviewAndApprove({
                   Choose a Google Calendar to continue.
                 </p>
                 <p className="mt-1 text-sm text-muted">
-                  This schedule is generated, but Relay cannot request approval
-                  until the plan has a calendar destination. Connect Google
+                  This schedule is generated, but Relay needs a calendar
+                  destination before it can create study blocks. Connect Google
                   Calendar, then start a new plan and select that calendar in
                   setup.
                 </p>
@@ -1259,74 +794,51 @@ function ReviewAndApprove({
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap gap-3">
-              <button
-                className="button secondary"
-                disabled={busy}
-                onClick={() => solve.mutate()}
-              >
-                <RotateCcw aria-hidden="true" />
-                Regenerate remaining sessions
-              </button>
-              <button
-                className={
-                  canRequestApproval && !busy ? "button" : "button secondary"
-                }
-                disabled={busy || !canRequestApproval}
-                onClick={() => requestApproval.mutate()}
-              >
-                <Send aria-hidden="true" />
-                Request approval
-              </button>
-            </div>
+            <>
+              <div className="section-heading">
+                <div>
+                  <h2 className="section-title">Finalize schedule</h2>
+                  <p className="text-sm text-muted">
+                    One click approves this exact schedule and creates the study
+                    blocks on Google Calendar.
+                  </p>
+                </div>
+                {data.approval && <Status value={data.approval.status} />}
+              </div>
+              <div className="mt-5 flex flex-wrap gap-3">
+                {canRegenerate && (
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => solve.mutate()}
+                  >
+                    <RotateCcw aria-hidden="true" />
+                    Regenerate remaining sessions
+                  </button>
+                )}
+                <button
+                  className={
+                    canPublish && !busy ? "button" : "button secondary"
+                  }
+                  disabled={busy || !canPublish}
+                  onClick={() => publish.mutate()}
+                >
+                  <Send aria-hidden="true" />
+                  {publish.isPending
+                    ? "Creating calendar blocks..."
+                    : "Approve and create calendar blocks"}
+                </button>
+              </div>
+            </>
           )}
           {!missingCalendar &&
-            !canRequestApproval &&
+            !canPublish &&
             result?.status === "INFEASIBLE" && (
               <p className="mt-3 text-sm text-muted">
                 This plan is not feasible yet -- adjust the window, preferences,
-                or task load before requesting approval.
+                or task load before publishing.
               </p>
             )}
-        </div>
-      )}
-      {data.approval && (
-        <div className="panel">
-          <h2 className="section-title">Approval</h2>
-          <Status value={data.approval.status} />
-          {pendingApproval && (
-            <div className="mt-5 flex flex-wrap gap-3">
-              <button
-                className="button"
-                disabled={busy}
-                onClick={() => resolve.mutate({ approve: true })}
-              >
-                <Check aria-hidden="true" />
-                Approve plan
-              </button>
-              <button
-                className="button secondary"
-                disabled={busy}
-                onClick={() => resolve.mutate({ approve: false })}
-              >
-                <X aria-hidden="true" />
-                Reject
-              </button>
-            </div>
-          )}
-          {data.run.status === "APPROVED" && (
-            <div className="approval-action-row mt-5">
-              <Status value={data.approval.status} />
-              <button
-                className="button"
-                disabled={busy}
-                onClick={() => execute.mutate()}
-              >
-                <Send aria-hidden="true" />
-                Create approved calendar blocks
-              </button>
-            </div>
-          )}
         </div>
       )}
       {(data.run.status === "COMPLETED" ||
@@ -1359,6 +871,130 @@ function ExecutionSummary({ data }: { data: PlanDetail }) {
           Start another
         </Link>
       </div>
+    </div>
+  );
+}
+
+function NotionExportPanel({
+  id,
+  data,
+  invalidate,
+}: {
+  id: string;
+  data: PlanDetail;
+  invalidate: () => Promise<void>;
+}) {
+  const cache = useQueryClient();
+  const connectionsQuery = useConnections();
+  const hasNotion = (connectionsQuery.data || []).some(
+    (item) => item.provider === "NOTION" && item.status === "CONNECTED",
+  );
+  const [destinationId, setDestinationId] = useState("");
+  const destinations = useQuery({
+    queryKey: ["connections", "notion-destinations"],
+    queryFn: connections.notionDestinations,
+    enabled: hasNotion,
+  });
+  const refreshDestinations = useMutation({
+    mutationFn: connections.refreshNotionDestinations,
+    onSuccess: (items) => {
+      cache.setQueryData(["connections", "notion-destinations"], items);
+    },
+  });
+  const exportToNotion = useMutation({
+    mutationFn: () => plan.exportToNotion(id, destinationId),
+    onSuccess: invalidate,
+  });
+
+  const notionExport = data.setup?.notion_export;
+  const busy = refreshDestinations.isPending || exportToNotion.isPending;
+
+  return (
+    <div className="panel">
+      <div className="section-heading">
+        <h2 className="section-title">Export to Notion</h2>
+        <Database aria-hidden="true" />
+      </div>
+      {notionExport && (
+        <p className="text-sm text-muted">
+          Last exported {notionExport.task_count} task
+          {notionExport.task_count === 1 ? "" : "s"} to{" "}
+          <a
+            className="text-link"
+            href={notionExport.database_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            this Notion database
+          </a>
+          .
+        </p>
+      )}
+      {!hasNotion ? (
+        <p className="mt-3 text-sm text-muted">
+          <Link className="text-link" href="/connections">
+            Connect Notion
+          </Link>{" "}
+          to export your task list there.
+        </p>
+      ) : (
+        <>
+          <div className="mt-4 task-source-picker">
+            <div className="destination-picker-heading">
+              <span className="field-label">
+                Notion page to create the database under
+              </span>
+              <button
+                className="icon-button"
+                disabled={busy}
+                onClick={() => refreshDestinations.mutate()}
+                aria-label="Refresh Notion pages"
+                title="Refresh Notion pages"
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" />
+              </button>
+            </div>
+            <select
+              value={destinationId}
+              onChange={(event) => setDestinationId(event.target.value)}
+            >
+              <option value="">Select a Notion page</option>
+              {(destinations.data || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.title}
+                </option>
+              ))}
+            </select>
+            <p className="text-sm text-muted">
+              {destinations.isFetching || refreshDestinations.isPending
+                ? "Loading Notion pages..."
+                : (destinations.data || []).length === 0
+                  ? "No pages found. Refresh after sharing a page with the Relay Notion integration."
+                  : "Relay creates a new database under this page and adds one row per task."}
+            </p>
+          </div>
+          <ErrorMessage
+            error={
+              refreshDestinations.error ||
+              destinations.error ||
+              exportToNotion.error
+            }
+          />
+          <button
+            className="button mt-5"
+            disabled={busy || !destinationId}
+            onClick={() => exportToNotion.mutate()}
+          >
+            <Send aria-hidden="true" />
+            {exportToNotion.isPending
+              ? "Exporting..."
+              : notionExport
+                ? "Export again"
+                : "Export to Notion"}
+          </button>
+        </>
+      )}
     </div>
   );
 }
@@ -1428,7 +1064,7 @@ function SchedulePanel({
               {sessions.map((session) => (
                 <div
                   key={session.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-4 py-3"
+                  className={`session-card flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-4 py-3 ${session.locked ? "locked" : ""}`}
                 >
                   <div>
                     <p className="font-medium">{titleFor(session.task_id)}</p>
@@ -1450,10 +1086,20 @@ function SchedulePanel({
                   {editable && session.id && (
                     <div className="flex gap-2">
                       <button
-                        className="button secondary"
+                        className={
+                          session.locked ? "button" : "button secondary"
+                        }
                         disabled={busy}
+                        aria-pressed={session.locked}
                         aria-label={
-                          session.locked ? "Unlock session" : "Lock session"
+                          session.locked
+                            ? "Locked -- click to unlock this session"
+                            : "Click to lock this session in place"
+                        }
+                        title={
+                          session.locked
+                            ? "Locked in place -- click to unlock"
+                            : "Click to lock this session in place"
                         }
                         onClick={() =>
                           onLock(session.id as string, !session.locked)
@@ -1464,19 +1110,21 @@ function SchedulePanel({
                         ) : (
                           <Lock aria-hidden="true" />
                         )}
+                        {session.locked ? "Locked" : "Lock"}
                       </button>
                       <button
                         className="button secondary"
                         disabled={busy}
                         aria-label="Remove session"
+                        title="Remove this session"
                         onClick={() => onRemove(session.id as string)}
                       >
                         <Trash2 aria-hidden="true" />
                       </button>
                     </div>
                   )}
-                  {session.locked && (
-                    <span className="context-tag">Locked</span>
+                  {(!editable || !session.id) && session.locked && (
+                    <span className="context-tag locked">Locked</span>
                   )}
                 </div>
               ))}

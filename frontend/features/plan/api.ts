@@ -1,7 +1,6 @@
 import { z } from "zod";
 import { json, request } from "@/lib/api";
 import { approvalSchema, runSchema } from "@/lib/schemas";
-import { notionTaskPropertyMappingSchema } from "@/features/connections/api";
 
 export const academicTaskSchema = z.object({
   id: z.string(),
@@ -13,13 +12,6 @@ export const academicTaskSchema = z.object({
   status: z.string(),
 });
 export type AcademicTask = z.infer<typeof academicTaskSchema>;
-
-export const taskMappingIssueSchema = z.object({
-  code: z.string(),
-  message: z.string(),
-  notion_page_id: z.string().nullable(),
-  field: z.string().nullable(),
-});
 
 export const busyIntervalSchema = z.object({
   start: z.string(),
@@ -62,18 +54,24 @@ export const schedulingResultSchema = z.object({
 });
 export type SchedulingResult = z.infer<typeof schedulingResultSchema>;
 
+export const notionExportSchema = z.object({
+  database_id: z.string(),
+  database_url: z.string(),
+  exported_at: z.string(),
+  task_count: z.number(),
+});
+export type NotionExport = z.infer<typeof notionExportSchema>;
+
 export const planSetupSchema = z
   .object({
     stage: z.string(),
     window: z.object({ start: z.string(), end: z.string() }),
     calendar_id: z.string().nullable(),
-    notion_database_id: z.string().nullable(),
-    notion_mapping: notionTaskPropertyMappingSchema.nullable(),
     tasks: z.array(academicTaskSchema),
-    task_issues: z.array(taskMappingIssueSchema),
     busy_intervals: z.array(busyIntervalSchema),
     sessions: z.array(studySessionSchema),
     locked_sessions: z.array(studySessionSchema),
+    notion_export: notionExportSchema.nullable(),
   })
   .nullable();
 
@@ -94,8 +92,6 @@ export type PlanSetupInput = {
   start: string;
   end: string;
   calendar_id: string | null;
-  notion_database_id: string | null;
-  notion_mapping: unknown | null;
   tasks: AcademicTask[];
 };
 
@@ -111,10 +107,12 @@ export const plan = {
       planDetailSchema,
       json(data, "PUT"),
     ),
-  importTasks: (id: string) =>
-    request(`/workflows/plan/${id}/tasks/import`, planDetailSchema, {
-      method: "POST",
-    }),
+  exportToNotion: (id: string, destinationPageId: string) =>
+    request(
+      `/workflows/plan/${id}/export/notion`,
+      planDetailSchema,
+      json({ destination_page_id: destinationPageId }, "POST"),
+    ),
   loadAvailability: (id: string) =>
     request(`/workflows/plan/${id}/availability`, planDetailSchema, {
       method: "POST",
@@ -145,4 +143,8 @@ export const plan = {
     }),
   execute: (id: string) =>
     request(`/workflows/plan/${id}/execute`, runSchema, { method: "POST" }),
+  approveAndExecute: (id: string) =>
+    request(`/workflows/plan/${id}/approve-and-execute`, runSchema, {
+      method: "POST",
+    }),
 };

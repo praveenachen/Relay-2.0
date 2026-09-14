@@ -15,6 +15,18 @@ export default function Settings() {
       auth.profile(z.string().trim().min(1).max(120).parse(name)),
     onSuccess: () => cache.invalidateQueries({ queryKey: ["user"] }),
   });
+  const resetHistory = useMutation({
+    mutationFn: auth.resetHistory,
+    onSuccess: async () => {
+      await cache.invalidateQueries();
+    },
+  });
+  function resetRelayHistory() {
+    const confirmed = window.confirm(
+      "Clear Relay history for this profile? This removes runs, approvals, projects, cached destinations, and saved study preferences. Connected accounts stay connected.",
+    );
+    if (confirmed) resetHistory.mutate();
+  }
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     profile.mutate(String(new FormData(event.currentTarget).get("name")));
@@ -66,6 +78,27 @@ export default function Settings() {
           <Link className="text-link mt-4 inline-flex" href="/connections">
             Manage connections
           </Link>
+        </section>
+        <section className="panel">
+          <h2 className="section-title">Refresh history</h2>
+          <p className="text-sm text-muted">
+            Clear workflow runs, approvals, projects, cached destinations, and
+            saved study preferences for this profile. Your login and connected
+            tools stay connected.
+          </p>
+          <ErrorMessage error={resetHistory.error} />
+          {resetHistory.isSuccess && (
+            <p role="status" className="text-sm text-accent">
+              Relay history cleared.
+            </p>
+          )}
+          <button
+            className="button secondary mt-4"
+            disabled={resetHistory.isPending}
+            onClick={resetRelayHistory}
+          >
+            {resetHistory.isPending ? "Clearing..." : "Clear Relay history"}
+          </button>
         </section>
       </div>
     </>

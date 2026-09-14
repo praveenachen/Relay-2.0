@@ -25,6 +25,7 @@ class MockGitHubConnector:
             external_url=f"mock://github/issue/{identifier}",
             number=number,
             title=action.title,
+            simulated=True,
         )
 
     async def request_review(
@@ -41,4 +42,5 @@ class MockGitHubConnector:
             external_url=f"mock://github/review/{identifier}",
             pull_number=action.pull_number,
             reviewer=action.reviewer,
+            simulated=True,
         )

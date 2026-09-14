@@ -147,6 +147,59 @@ def _mock_client(handler) -> GitHubApiClient:
     return TestClient("token")
 
 
+async def test_list_repositories_retries_with_type_all_when_affiliation_is_empty() -> None:
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(dict(request.url.params))
+        if len(calls) == 1:
+            return httpx.Response(200, json=[])
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "name": "Relay-2.0",
+                    "full_name": "praveenachen/Relay-2.0",
+                    "private": False,
+                    "html_url": "https://github.com/praveenachen/Relay-2.0",
+                    "owner": {"login": "praveenachen"},
+                }
+            ],
+        )
+
+    client = _mock_client(handler)
+    repos = await client.list_repositories()
+
+    assert calls[0]["affiliation"] == "owner,collaborator,organization_member"
+    assert calls[1]["type"] == "all"
+    assert repos[0].full_name == "praveenachen/Relay-2.0"
+
+
+async def test_list_repositories_includes_owned_collaborator_and_org_repos() -> None:
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["affiliation"] = request.url.params.get("affiliation")
+        return httpx.Response(
+            200,
+            json=[
+                {
+                    "name": "app",
+                    "full_name": "team/app",
+                    "private": False,
+                    "html_url": "https://github.com/team/app",
+                    "owner": {"login": "team"},
+                }
+            ],
+        )
+
+    client = _mock_client(handler)
+    repos = await client.list_repositories()
+
+    assert captured["affiliation"] == "owner,collaborator,organization_member"
+    assert repos[0].full_name == "team/app"
+
+
 async def test_repository_access_labels_and_collaborators() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/repos/team/app":

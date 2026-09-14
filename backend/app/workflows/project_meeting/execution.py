@@ -169,7 +169,12 @@ class CollaborateExecutionService:
                     owner,
                     f"{action.provider.value}_ARTIFACT_CREATED",
                     run.id,
-                    {"action_id": str(action.id)},
+                    {
+                        "action_id": str(action.id),
+                        "artifact_id": str(artifact.id) if artifact else None,
+                        "external_url": artifact.external_url if artifact else None,
+                        "simulated": bool(snapshot.result.get("simulated", False)),
+                    },
                 )
             else:
                 action.status = ActionStatus.FAILED
@@ -259,12 +264,15 @@ class CollaborateExecutionService:
         if existing is not None:
             return existing
         connection_id = action.payload.get("connection_id")
+        artifact_type = _ARTIFACT_TYPES.get(action.action_type, action.action_type)
+        if result.get("simulated"):
+            artifact_type = f"mock_{artifact_type}"
         artifact = ExternalArtifact(
             workflow_run_id=run_id,
             proposed_action_id=action.id,
             connected_account_id=UUID(connection_id) if connection_id else None,
             provider=action.provider,
-            artifact_type=_ARTIFACT_TYPES.get(action.action_type, action.action_type),
+            artifact_type=artifact_type,
             external_id=external_id,
             external_url=external_url,
             idempotency_key=idempotency_key,

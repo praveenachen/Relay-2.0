@@ -7,9 +7,9 @@ from app.workflows.lecture_notes.schemas import StrictModel
 
 class NotionActionItemPropertyMapping(StrictModel):
     """Configures how a COLLABORATE action item is written into a Notion
-    database's properties. Separate from NotionTaskPropertyMapping (PLAN),
-    which reads tasks rather than writing them, and maps different field
-    names (course/estimate vs. description/owner)."""
+    database the user already configured. Separate from PLAN's export
+    (study_plan_export.py), which creates its own database with a fixed,
+    Relay-controlled schema and needs no user-provided mapping."""
 
     title: str
     description: str | None = None

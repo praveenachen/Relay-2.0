@@ -78,10 +78,31 @@ export function RunDetail({ id }: { id: string }) {
               <li className="border-l-2 border-accent pl-5" key={event.id}>
                 <p className="text-sm font-medium">
                   {event.event_type.toLowerCase().replaceAll("_", " ")}
+                  {event.event_metadata.simulated === true
+                    ? " (simulated)"
+                    : ""}
                 </p>
                 <p className="mt-1 text-xs text-muted">
                   {new Date(event.created_at).toLocaleString()}
                 </p>
+                {typeof event.event_metadata.external_url === "string" && (
+                  <p className="mt-1 text-xs">
+                    {event.event_metadata.external_url.startsWith("mock://") ? (
+                      <span className="text-muted">
+                        Simulated artifact: {event.event_metadata.external_url}
+                      </span>
+                    ) : (
+                      <a
+                        className="text-link"
+                        href={event.event_metadata.external_url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open artifact
+                      </a>
+                    )}
+                  </p>
+                )}
               </li>
             ))}
           </ol>

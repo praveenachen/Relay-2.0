@@ -10,6 +10,7 @@ from app.connectors.google.errors import CalendarRateLimited
 from app.connectors.google.schemas import CalendarEventResult
 from app.core.config import get_settings
 from app.domain.enums import Provider
+from app.infrastructure.credentials import FernetCredentialStore
 from app.models.entities import ConnectedAccount, ExternalArtifact, LocalExecution
 
 
@@ -83,8 +84,6 @@ async def start_and_setup(
             "start": start,
             "end": end,
             "calendar_id": None,
-            "notion_database_id": None,
-            "notion_mapping": None,
             "tasks": tasks,
         },
     )
@@ -95,8 +94,6 @@ async def start_and_setup(
 async def ready(client, session_factory, account, encryption_key, *, tasks=None):
     await connect_google(session_factory, account, encryption_key)
     path, detail = await start_and_setup(client, tasks=tasks or [task_payload("essay")])
-    imported = await client.post(path + "/tasks/import")
-    assert imported.status_code == 200, imported.text
     availability = await client.post(path + "/availability")
     assert availability.status_code == 200, availability.text
     solved = await client.post(path + "/solve")
@@ -142,7 +139,7 @@ async def test_new_plan_detail_has_null_setup(client, account):
     assert detail.json()["approval"] is None
 
 
-async def test_generate_plan_condenses_setup_import_availability_and_solve(
+async def test_generate_plan_condenses_setup_availability_and_solve(
     client, account, session_factory, encryption_key, monkeypatch
 ):
     monkeypatch.setattr(GoogleCalendarApiClient, "busy_intervals", no_busy_intervals)
@@ -157,8 +154,6 @@ async def test_generate_plan_condenses_setup_import_availability_and_solve(
             "start": "2026-01-05T00:00:00+00:00",
             "end": "2026-01-12T00:00:00+00:00",
             "calendar_id": "primary",
-            "notion_database_id": None,
-            "notion_mapping": None,
             "tasks": [task_payload("essay")],
         },
     )
@@ -196,7 +191,6 @@ async def test_infeasible_schedule_reports_conflicts(
         start="2026-01-05T00:00:00+00:00",
         end="2026-01-05T03:00:00+00:00",
     )
-    await client.post(path + "/tasks/import")
     await client.post(path + "/availability")
     solved = await client.post(path + "/solve")
     assert solved.status_code == 200, solved.text
@@ -241,6 +235,38 @@ async def test_remove_session(client, account, session_factory, encryption_key, 
     removed = await client.delete(path + f"/sessions/{session_id}")
     assert removed.status_code == 200, removed.text
     assert all(s["id"] != session_id for s in removed.json()["setup"]["sessions"])
+
+
+async def test_approve_and_execute_condenses_plan_approval_flow(
+    client, account, session_factory, encryption_key, monkeypatch
+):
+    monkeypatch.setattr(GoogleCalendarApiClient, "busy_intervals", no_busy_intervals)
+    monkeypatch.setattr(GoogleCalendarApiClient, "create_event", fake_create_event())
+    path, detail = await ready(client, session_factory, account, encryption_key)
+
+    done = await client.post(path + "/approve-and-execute")
+
+    assert done.status_code == 200, done.text
+    assert done.json()["status"] == "COMPLETED"
+    session_count = len(detail["result"]["sessions"])
+    assert done.json()["result_payload"]["created_count"] == session_count
+    async with session_factory() as session:
+        assert (
+            await session.scalar(select(func.count()).select_from(ExternalArtifact))
+        ) == session_count
+
+    events = (await client.get(f"/workflow-runs/{done.json()['id']}/events")).json()
+    assert [
+        e["event_metadata"]["to"] for e in events if e["event_type"] == "WORKFLOW_STATE_CHANGED"
+    ] == [
+        "ANALYZING",
+        "PLAN_READY",
+        "AWAITING_APPROVAL",
+        "APPROVED",
+        "QUEUED",
+        "EXECUTING",
+        "COMPLETED",
+    ]
 
 
 async def test_full_lifecycle_approve_and_execute(
@@ -338,12 +364,10 @@ async def test_no_bypass_without_approval(
     assert (await client.post(path + "/execute")).status_code == 409
 
 
-async def test_generate_plan_reports_empty_notion_import_issues(
+async def test_export_to_notion_creates_database_with_one_row_per_task(
     client, account, session_factory, encryption_key, monkeypatch
 ):
-    from app.connectors.notion.client import NotionApiClient
-    from app.infrastructure.credentials import FernetCredentialStore
-
+    monkeypatch.setattr(get_settings(), "notion_publish_mode", "mock")
     store = FernetCredentialStore([encryption_key])
     async with session_factory() as session:
         session.add(
@@ -353,130 +377,37 @@ async def test_generate_plan_reports_empty_notion_import_issues(
                 external_account_id="workspace-1",
                 display_name="Student Workspace",
                 access_token_encrypted=store.encrypt("notion-token"),
-                scopes=["read_content", "insert_content"],
+                scopes=["insert_content"],
                 provider_metadata={"workspace_id": "workspace-1"},
                 status="CONNECTED",
             )
         )
         await session.commit()
 
-    async def fake_query_database(self, database_id):
-        assert database_id == "db-1"
-        return [
-            {
-                "id": "page-1",
-                "properties": {
-                    "Name": {"type": "title", "title": [{"plain_text": "Homework"}]},
-                    "Due": {"type": "date", "date": {"start": "2026-01-08T17:00:00-05:00"}},
-                    "Estimate": {"type": "number", "number": 2},
-                },
-            }
-        ]
+    path, _ = await start_and_setup(
+        client,
+        tasks=[task_payload("essay"), task_payload("lab", deadline="2026-01-09T17:00:00+00:00")],
+    )
 
-    monkeypatch.setattr(NotionApiClient, "query_database", fake_query_database)
-    monkeypatch.setattr(GoogleCalendarApiClient, "busy_intervals", no_busy_intervals)
-    await connect_google(session_factory, account, encryption_key)
+    exported = await client.post(path + "/export/notion", json={"destination_page_id": "page-1"})
+    assert exported.status_code == 200, exported.text
+    notion_export = exported.json()["setup"]["notion_export"]
+    assert notion_export["task_count"] == 2
+    assert notion_export["database_url"].startswith("mock://notion/database/")
+
+    detail = await client.get(path)
+    assert detail.status_code == 200, detail.text
+    assert detail.json()["setup"]["notion_export"] == notion_export
+
+    again = await client.post(path + "/export/notion", json={"destination_page_id": "page-1"})
+    assert again.status_code == 200, again.text
+    assert again.json()["setup"]["notion_export"]["database_id"] != notion_export["database_id"]
+
+
+async def test_export_to_notion_requires_tasks(client, account):
     created = await client.post("/workflows/plan")
     assert created.status_code == 201, created.text
     path = "/workflows/plan/" + created.json()["id"]
 
-    generated = await client.put(
-        path + "/generate",
-        json={
-            "start": "2026-01-05T00:00:00+00:00",
-            "end": "2026-01-12T00:00:00+00:00",
-            "calendar_id": "primary",
-            "notion_database_id": "db-1",
-            "notion_mapping": {
-                "title": "Name",
-                "deadline": "Due Date",
-                "estimated_minutes": "Estimated Hours",
-                "estimate_unit": "hours",
-            },
-            "tasks": [],
-        },
-    )
-
-    assert generated.status_code == 422, generated.text
-    assert generated.json()["code"] == "NOTION_TASK_IMPORT_EMPTY"
-    detail = await client.get(path)
-    assert detail.status_code == 200, detail.text
-    setup = detail.json()["setup"]
-    assert setup["stage"] == "tasks_imported"
-    assert setup["tasks"] == []
-    assert {issue["code"] for issue in setup["task_issues"]} == {"TASK_DEADLINE_MISSING"}
-
-
-async def test_import_tasks_uses_default_notion_task_database(
-    client, account, session_factory, encryption_key, monkeypatch
-):
-    from app.connectors.notion.client import NotionApiClient
-    from app.connectors.notion.schemas import NotionTaskDatabase
-    from app.connectors.notion.service import NotionTaskSourceService
-    from app.connectors.notion.tasks import NotionTaskPropertyMapping
-    from app.infrastructure.credentials import FernetCredentialStore
-    from app.repositories.relay import RelayRepository
-
-    store = FernetCredentialStore([encryption_key])
-    async with session_factory() as session:
-        session.add(
-            ConnectedAccount(
-                user_id=UUID(account["id"]),
-                provider=Provider.NOTION,
-                external_account_id="workspace-1",
-                display_name="Student Workspace",
-                access_token_encrypted=store.encrypt("notion-token"),
-                scopes=["read_content", "insert_content"],
-                provider_metadata={"workspace_id": "workspace-1"},
-                status="CONNECTED",
-            )
-        )
-        await session.commit()
-
-        class FakeClient:
-            async def search_databases(self):
-                return [NotionTaskDatabase(id="db-1", title="Assignments")]
-
-        class Service(NotionTaskSourceService):
-            async def client(self, connection):
-                return FakeClient()
-
-        service = Service(RelayRepository(session), store)
-        owner = UUID(account["id"])
-        await service.refresh(owner)
-        await service.select(
-            owner,
-            "db-1",
-            NotionTaskPropertyMapping(
-                title="Task Name",
-                deadline="Due Date",
-                estimated_minutes="Estimated Hours",
-                estimate_unit="hours",
-            ),
-        )
-
-    async def fake_query_database(self, database_id):
-        assert database_id == "db-1"
-        return [
-            {
-                "id": "page-1",
-                "properties": {
-                    "Task Name": {"type": "title", "title": [{"plain_text": "Homework"}]},
-                    "Due Date": {
-                        "type": "date",
-                        "date": {"start": "2026-01-08T17:00:00-05:00"},
-                    },
-                    "Estimated Hours": {"type": "number", "number": 2},
-                },
-            }
-        ]
-
-    monkeypatch.setattr(NotionApiClient, "query_database", fake_query_database)
-    await connect_google(session_factory, account, encryption_key)
-    path, detail = await start_and_setup(client, tasks=[])
-    imported = await client.post(path + "/tasks/import")
-    assert imported.status_code == 200, imported.text
-    tasks = imported.json()["setup"]["tasks"]
-    assert len(tasks) == 1
-    assert tasks[0]["title"] == "Homework"
-    assert tasks[0]["estimated_minutes"] == 120
+    exported = await client.post(path + "/export/notion", json={"destination_page_id": "page-1"})
+    assert exported.status_code == 422, exported.text

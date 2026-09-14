@@ -52,3 +52,30 @@ def test_second_colon_in_a_speakers_line_stays_part_of_the_text():
     transcript = parse_transcript("Sarah: Note: I will finish this by Friday.")
     assert transcript.segments[0].speaker == "Sarah"
     assert transcript.segments[0].text == "Note: I will finish this by Friday."
+
+
+def test_markdown_bold_speaker_format_extracts_speaker_and_text():
+    transcript = parse_transcript(
+        "**Sarah:** I\u2019ll handle authentication.\n\n**Alex:** Sounds good."
+    )
+    assert [s.speaker for s in transcript.segments] == ["Sarah", "Alex"]
+    assert transcript.segments[0].text == "I'll handle authentication."
+    assert {p.name for p in transcript.participants} == {"Sarah", "Alex"}
+
+
+def test_timestamp_markdown_bold_speaker_format_extracts_timestamp():
+    raw = "[10:42] **Alex:**\nI\u2019ll review Sarah\u2019s PR.\nIt should be quick."
+    transcript = parse_transcript(raw)
+    assert len(transcript.segments) == 1
+    segment = transcript.segments[0]
+    assert segment.speaker == "Alex"
+    assert segment.timestamp == "10:42"
+    assert segment.text == "I'll review Sarah's PR. It should be quick."
+
+
+def test_markdown_metadata_is_not_treated_as_speakers():
+    transcript = parse_transcript(
+        "**Date:** October 6, 2026\n\n**Project:** StudySync\n\n**Maya:** I will lead demo prep."
+    )
+    assert [participant.name for participant in transcript.participants] == ["Maya"]
+    assert transcript.segments[-1].speaker == "Maya"

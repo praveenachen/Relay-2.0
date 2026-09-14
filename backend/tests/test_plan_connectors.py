@@ -11,76 +11,12 @@ from app.connectors.google.calendar import GoogleCalendarApiClient
 from app.connectors.google.errors import CalendarRateLimited, GoogleAuthorizationFailed
 from app.connectors.google.schemas import GoogleOAuthToken, GoogleTokenInfo
 from app.connectors.google.service import GoogleCalendarService
-from app.connectors.notion.errors import NotionTaskDatabaseNotFound
-from app.connectors.notion.schemas import NotionTaskDatabase
-from app.connectors.notion.service import NotionTaskSourceService
-from app.connectors.notion.tasks import NotionTaskMapper, NotionTaskPropertyMapping
 from app.domain.enums import Provider
 from app.infrastructure.credentials import FernetCredentialStore
 from app.models.entities import ConnectedAccount, GoogleCalendarRecord
 from app.repositories.relay import RelayRepository
 
 TZ = ZoneInfo("America/Toronto")
-
-
-def notion_page(
-    page_id: str,
-    *,
-    title: str = "Calculus Midterm",
-    due: str | None = "2026-01-10T17:00:00-05:00",
-    estimate: float | None = 3,
-    status: str = "Todo",
-    priority: int = 2,
-):
-    return {
-        "id": page_id,
-        "properties": {
-            "Task Name": {"type": "title", "title": [{"plain_text": title}]},
-            "Course": {"type": "rich_text", "rich_text": [{"plain_text": "MAT137"}]},
-            "Due Date": {"type": "date", "date": {"start": due} if due else None},
-            "Estimated Hours": {"type": "number", "number": estimate},
-            "Status": {"type": "status", "status": {"name": status}},
-            "Priority": {"type": "number", "number": priority},
-        },
-    }
-
-
-def mapping() -> NotionTaskPropertyMapping:
-    return NotionTaskPropertyMapping(
-        title="Task Name",
-        course="Course",
-        deadline="Due Date",
-        estimated_minutes="Estimated Hours",
-        estimate_unit="hours",
-        status="Status",
-        priority="Priority",
-    )
-
-
-def test_notion_task_mapper_normalizes_valid_pages_and_excludes_done() -> None:
-    result = NotionTaskMapper(mapping()).map_pages(
-        [notion_page("task-1"), notion_page("task-2", status="Done")]
-    )
-
-    assert len(result.tasks) == 1
-    task = result.tasks[0]
-    assert task.id == "task-1"
-    assert task.course == "MAT137"
-    assert task.estimated_minutes == 180
-    assert task.priority == 2
-    assert not result.issues
-
-
-def test_notion_task_mapper_reports_missing_deadline_and_estimate() -> None:
-    result = NotionTaskMapper(mapping()).map_pages(
-        [notion_page("task-1", due=None), notion_page("task-2", estimate=None)]
-    )
-
-    assert [issue.code for issue in result.issues] == [
-        "TASK_DEADLINE_MISSING",
-        "TASK_ESTIMATE_MISSING",
-    ]
-    assert not result.tasks
 
 
 def test_google_oauth_url_uses_calendar_scopes_only() -> None:
@@ -393,48 +329,3 @@ async def test_google_token_refresh_without_refresh_token_marks_expired(
             await service.connection(UUID(account["id"]))
         refreshed = await session.get(ConnectedAccount, connection.id)
         assert refreshed.status == "EXPIRED"
-
-
-async def test_notion_task_database_discovery_select_and_default(account, session_factory) -> None:
-    store = FernetCredentialStore([Fernet.generate_key().decode()])
-    async with session_factory() as session:
-        connection = ConnectedAccount(
-            user_id=UUID(account["id"]),
-            provider=Provider.NOTION,
-            external_account_id="workspace-1",
-            display_name="Student Workspace",
-            access_token_encrypted=store.encrypt("notion-token"),
-            scopes=["read_content", "insert_content"],
-            provider_metadata={"workspace_id": "workspace-1"},
-            status="CONNECTED",
-        )
-        session.add(connection)
-        await session.commit()
-
-        class FakeClient:
-            async def search_databases(self):
-                return [
-                    NotionTaskDatabase(id="db-1", title="Assignments"),
-                    NotionTaskDatabase(id="db-2", title="Archive"),
-                ]
-
-        class Service(NotionTaskSourceService):
-            async def client(self, connection):
-                return FakeClient()
-
-        service = Service(RelayRepository(session), store)
-        owner = UUID(account["id"])
-        refreshed = await service.refresh(owner)
-        assert {item.title for item in refreshed} == {"Assignments", "Archive"}
-
-        with pytest.raises(NotionTaskDatabaseNotFound):
-            await service.select(owner, "missing", mapping())
-
-        selected = await service.select(owner, "db-1", mapping())
-        assert selected.title == "Assignments"
-
-        default = await service.default(owner)
-        assert default is not None
-        database_id, saved_mapping = default
-        assert database_id == "db-1"
-        assert saved_mapping.title == mapping().title

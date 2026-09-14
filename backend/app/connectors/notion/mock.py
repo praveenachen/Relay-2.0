@@ -5,7 +5,9 @@ from app.connectors.notion.mapper import NotionStudyPageMapper
 from app.connectors.notion.schemas import (
     CreateNotionStudyPageAction,
     CreateNotionTaskAction,
+    CreateNotionTaskDatabaseAction,
     ExternalArtifactResult,
+    NotionTaskDatabaseResult,
     NotionTaskResult,
 )
 
@@ -46,4 +48,20 @@ class MockNotionConnector:
             external_id=identifier,
             external_url=f"mock://notion/page/{identifier}",
             title=action.title,
+            simulated=True,
+        )
+
+    async def create_task_database(
+        self,
+        action: CreateNotionTaskDatabaseAction,
+        idempotency_key: str,
+    ) -> NotionTaskDatabaseResult:
+        if self.fail:
+            raise MockNotionFailure()
+        identifier = "mock-" + uuid5(NAMESPACE_URL, idempotency_key).hex
+        return NotionTaskDatabaseResult(
+            external_id=identifier,
+            external_url=f"mock://notion/database/{identifier}",
+            title=action.title,
+            task_count=len(action.rows),
         )

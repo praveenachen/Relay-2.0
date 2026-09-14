@@ -3,20 +3,13 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.connectors.notion.client import NotionApiClient
-from app.connectors.notion.errors import (
-    NotionDestinationNotFound,
-    NotionNotConnected,
-    NotionTaskDatabaseNotFound,
-)
-from app.connectors.notion.schemas import NotionDestination, NotionTaskDatabase
-from app.connectors.notion.tasks import NotionTaskPropertyMapping
+from app.connectors.notion.errors import NotionDestinationNotFound, NotionNotConnected
+from app.connectors.notion.schemas import NotionDestination
 from app.domain.enums import ConnectionStatus, Provider
 from app.domain.ports import CredentialStore
-from app.models.entities import ConnectedAccount, NotionDestinationRecord, NotionTaskDatabaseRecord
+from app.models.entities import ConnectedAccount, NotionDestinationRecord
 from app.repositories.relay import RelayRepository
 from app.services.audit import record
-
-SCHEMA_KEY = "__schema"
 
 
 class NotionDestinationService:
@@ -49,6 +42,24 @@ class NotionDestinationService:
             base_url=self.api_base_url,
             timeout=self.timeout,
         )
+
+    async def list_databases(self, owner: UUID) -> list[NotionDestination]:
+        """Existing databases the connection can see, for Collaborate's
+        project setup to pick which one to sync action items into. Unlike
+        pages, these are never persisted/selected as a workflow "default" --
+        just a live list fetched on demand. Defined before `list` below so
+        this return-type annotation still resolves to the builtin list."""
+        connection = await self.connection(owner)
+        databases = await (await self.client(connection)).search_databases()
+        seen_titles: set[str] = set()
+        unique: list[NotionDestination] = []
+        for database in databases:
+            key = " ".join(database.title.casefold().split())
+            if key in seen_titles:
+                continue
+            seen_titles.add(key)
+            unique.append(database)
+        return unique
 
     async def refresh(self, owner: UUID) -> list[NotionDestination]:
         connection = await self.connection(owner)
@@ -129,158 +140,3 @@ class NotionDestinationService:
             title=selected.title,
             icon_url=selected.icon_url,
         )
-
-
-class NotionTaskSourceService:
-    """Lists the user's Notion databases and persists which one, and which
-    property mapping, PLAN reads academic tasks from. Separate from
-    NotionDestinationService because task databases and LEARN's page
-    destinations are different Notion object types with different selection
-    state."""
-
-    def __init__(
-        self,
-        repo: RelayRepository,
-        store: CredentialStore,
-        *,
-        api_base_url: str = "https://api.notion.com",
-        timeout: int = 20,
-    ):
-        self.repo, self.session, self.store = repo, repo.session, store
-        self.api_base_url, self.timeout = api_base_url, timeout
-
-    async def connection(self, owner: UUID) -> ConnectedAccount:
-        connections = [
-            item
-            for item in await self.repo.connections(owner, Provider.NOTION, lock=True)
-            if item.status == ConnectionStatus.CONNECTED and item.access_token_encrypted
-        ]
-        if not connections:
-            raise NotionNotConnected()
-        return connections[0]
-
-    async def client(self, connection: ConnectedAccount) -> NotionApiClient:
-        if connection.access_token_encrypted is None:
-            raise NotionNotConnected()
-        return NotionApiClient(
-            self.store.decrypt(connection.access_token_encrypted),
-            base_url=self.api_base_url,
-            timeout=self.timeout,
-        )
-
-    async def refresh(self, owner: UUID) -> list[NotionTaskDatabase]:
-        connection = await self.connection(owner)
-        databases = await (await self.client(connection)).search_databases()
-        for database in databases:
-            record_item = await self.session.scalar(
-                select(NotionTaskDatabaseRecord).where(
-                    NotionTaskDatabaseRecord.connection_id == connection.id,
-                    NotionTaskDatabaseRecord.provider_database_id == database.id,
-                )
-            )
-            if record_item is None:
-                self.session.add(
-                    NotionTaskDatabaseRecord(
-                        user_id=owner,
-                        connection_id=connection.id,
-                        provider_database_id=database.id,
-                        title=database.title,
-                        property_mapping={
-                            SCHEMA_KEY: [
-                                item.model_dump(mode="json") for item in database.properties
-                            ]
-                        },
-                    )
-                )
-            else:
-                record_item.title = database.title
-                mapping = dict(record_item.property_mapping or {})
-                mapping[SCHEMA_KEY] = [item.model_dump(mode="json") for item in database.properties]
-                record_item.property_mapping = mapping
-        await self.session.commit()
-        return await self.list(owner)
-
-    async def list(self, owner: UUID) -> list[NotionTaskDatabase]:
-        connection = await self.connection(owner)
-        records = (
-            await self.session.scalars(
-                select(NotionTaskDatabaseRecord)
-                .where(
-                    NotionTaskDatabaseRecord.user_id == owner,
-                    NotionTaskDatabaseRecord.connection_id == connection.id,
-                )
-                .order_by(NotionTaskDatabaseRecord.selected.desc(), NotionTaskDatabaseRecord.title)
-            )
-        ).all()
-        return [
-            NotionTaskDatabase(
-                id=item.provider_database_id,
-                title=item.title,
-                properties=(item.property_mapping or {}).get(SCHEMA_KEY, []),
-            )
-            for item in records
-        ]
-
-    async def select(
-        self, owner: UUID, database_id: str, mapping: NotionTaskPropertyMapping
-    ) -> NotionTaskDatabase:
-        connection = await self.connection(owner)
-        records = (
-            await self.session.scalars(
-                select(NotionTaskDatabaseRecord).where(
-                    NotionTaskDatabaseRecord.user_id == owner,
-                    NotionTaskDatabaseRecord.connection_id == connection.id,
-                )
-            )
-        ).all()
-        selected = None
-        for item in records:
-            item.selected = item.provider_database_id == database_id
-            if item.selected:
-                stored = dict(item.property_mapping or {})
-                schema = stored.get(SCHEMA_KEY, [])
-                stored = mapping.model_dump(mode="json")
-                stored[SCHEMA_KEY] = schema
-                item.property_mapping = stored
-                selected = item
-        if selected is None:
-            raise NotionTaskDatabaseNotFound()
-        metadata = dict(connection.provider_metadata or {})
-        metadata["default_task_database_id"] = selected.provider_database_id
-        metadata["default_task_database_title"] = selected.title
-        connection.provider_metadata = metadata
-        record(
-            self.session,
-            owner,
-            "NOTION_TASK_DATABASE_SELECTED",
-            metadata={
-                "connection_id": str(connection.id),
-                "database_id": selected.provider_database_id,
-            },
-        )
-        await self.session.commit()
-        return NotionTaskDatabase(
-            id=selected.provider_database_id,
-            title=selected.title,
-            properties=(selected.property_mapping or {}).get(SCHEMA_KEY, []),
-        )
-
-    async def default(self, owner: UUID) -> tuple[str, NotionTaskPropertyMapping] | None:
-        """The database + mapping PLAN should use when a run's setup does
-        not explicitly override them."""
-        connection = await self.connection(owner)
-        record_item = await self.session.scalar(
-            select(NotionTaskDatabaseRecord).where(
-                NotionTaskDatabaseRecord.user_id == owner,
-                NotionTaskDatabaseRecord.connection_id == connection.id,
-                NotionTaskDatabaseRecord.selected.is_(True),
-            )
-        )
-        if record_item is None or not record_item.property_mapping:
-            return None
-        mapping = {
-            key: value for key, value in record_item.property_mapping.items() if key != SCHEMA_KEY
-        }
-        if not mapping:
-            return None
-        return record_item.provider_database_id, NotionTaskPropertyMapping.model_validate(mapping)

@@ -25,12 +25,6 @@ class NotionDestinationNotFound(DomainError):
     message = "Relay could not find the selected Notion destination."
 
 
-class NotionTaskDatabaseNotFound(DomainError):
-    code = "NOTION_TASK_DATABASE_NOT_FOUND"
-    status_code = 404
-    message = "Relay could not find the selected Notion task database."
-
-
 class NotionRateLimited(DomainError):
     code = "NOTION_RATE_LIMITED"
     status_code = 429

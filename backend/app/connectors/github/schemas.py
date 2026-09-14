@@ -61,6 +61,7 @@ class GitHubIssueResult(StrictModel):
     external_url: str
     number: int
     title: str
+    simulated: bool = False
 
 
 class RequestPullRequestReviewAction(StrictModel):
@@ -78,3 +79,4 @@ class GitHubReviewRequestResult(StrictModel):
     external_url: str
     pull_number: int
     reviewer: str
+    simulated: bool = False

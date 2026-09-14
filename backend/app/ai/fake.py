@@ -35,12 +35,17 @@ class FakeLanguageModel:
         action_items = []
         for segment in segments:
             text = str(segment.get("text", ""))
-            lower = text.lower()
+            try:
+                normalized_text = text.encode("cp1252").decode("utf-8")
+            except UnicodeError:
+                normalized_text = text
+            normalized_text = normalized_text.replace("\u2019", "'").replace("\u2018", "'")
+            lower = normalized_text.lower()
             if any(marker in lower for marker in decision_markers):
                 decisions.append(
                     MeetingDecision(
-                        title=text[:80],
-                        description=text[:300],
+                        title=normalized_text[:80],
+                        description=normalized_text[:300],
                         source_refs=[MeetingSourceReference(segment_id=segment["id"])],
                     )
                 )
@@ -55,12 +60,12 @@ class FakeLanguageModel:
                         else "GENERAL_TASK"
                     )
                 )
-                pr_match = _PR_REFERENCE.search(text)
+                pr_match = _PR_REFERENCE.search(normalized_text)
                 deadline_match = _DEADLINE_PHRASE.search(lower)
                 action_items.append(
                     MeetingActionItem(
-                        title=text[:80],
-                        description=text[:300],
+                        title=normalized_text[:80],
+                        description=normalized_text[:300],
                         owner_name=segment.get("speaker"),
                         deadline_text=deadline_match.group(0) if deadline_match else None,
                         category=category,

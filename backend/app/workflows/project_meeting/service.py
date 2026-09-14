@@ -10,7 +10,7 @@ from app.connectors.github.schemas import CreateGitHubIssueAction, RequestPullRe
 from app.connectors.github.service import GitHubService
 from app.connectors.notion.action_items import NotionActionItemPropertyMapping
 from app.connectors.notion.schemas import CreateNotionTaskAction
-from app.connectors.notion.service import NotionTaskSourceService
+from app.connectors.notion.service import NotionDestinationService
 from app.core.config import get_settings
 from app.documents.base import FileStore
 from app.documents.errors import DocumentParseFailed
@@ -59,7 +59,7 @@ class ProjectMeetingWorkflowService:
         analysis: MeetingAnalysisService,
         github: GitHubService,
         provider_name: str,
-        notion: NotionTaskSourceService,
+        notion: NotionDestinationService,
     ):
         self.repo, self.session = repo, repo.session
         self.documents, self.store, self.analysis = documents, store, analysis
