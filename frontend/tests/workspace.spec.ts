@@ -126,6 +126,14 @@ test("LEARN upload review approval and mock publish", async ({
   await expect(page).toHaveURL(/\/workflows\/learn\/[a-f0-9-]+$/);
   await page.getByRole("button", { name: "Parse", exact: true }).click();
   await expect(page.getByText("2 sections parsed")).toBeVisible();
+  await expect(page.locator(".relay-stage")).toHaveCount(4);
+  await expect(
+    page.getByRole("heading", { name: "Destination", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.locator(".relay-stage.complete")).toHaveCSS(
+    "border-top-style",
+    "solid",
+  );
   await page.getByRole("button", { name: "Summarize", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Study page draft" }),
@@ -146,6 +154,13 @@ test("LEARN upload review approval and mock publish", async ({
   await expect(page.getByText("mock://notion/page/")).toBeVisible({
     timeout: 15000,
   });
+  await expect(
+    page.getByRole("link", { name: "Return to Dashboard", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "View Completed Actions", exact: true }),
+  ).toHaveCount(0);
+  await page.getByText("View study notes", { exact: true }).click();
   await expect(
     page
       .getByRole("heading", { name: "Week 7 - Eigenvalues", level: 1 })

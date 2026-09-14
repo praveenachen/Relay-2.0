@@ -23,6 +23,7 @@ import {
 } from "@/features/collaborate/api";
 import { Project, ProjectMember, projects } from "@/features/projects/api";
 import { WorkflowBadge } from "@/components/workflow-badge";
+import { CompletionActions } from "@/components/completion-actions";
 import { RelayLine } from "@/components/relay-line";
 import {
   Empty,
@@ -65,65 +66,72 @@ export function CollaborateEntry() {
         action={<WorkflowBadge workflow={workflowDisplay.project_meeting} />}
       />
       <RelayLine
+        tone="collaborate"
         sources={[{ label: "Meeting transcript" }]}
         destinations={[{ label: "Notion" }, { label: "GitHub" }]}
         status="DRAFT"
       />
-      <section className="panel my-8">
-        <h2 className="section-title">Choose a project</h2>
-        <p className="text-sm text-muted">
-          A project remembers your team&apos;s members, Notion task database,
-          and GitHub repository so Relay never has to guess them from a
-          transcript.
-        </p>
-        {projectsQuery.isPending ? (
-          <Loading />
-        ) : (
-          <>
-            <ErrorMessage error={projectsQuery.error} />
-            {projectsQuery.data && projectsQuery.data.length > 0 && (
-              <div className="mt-5 flex flex-wrap items-center gap-3">
-                <select
-                  className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
-                  value={selected}
-                  onChange={(event) => setSelected(event.target.value)}
-                >
-                  <option value="">Choose a project</option>
-                  {projectsQuery.data.map((project) => (
-                    <option key={project.id} value={project.id}>
-                      {project.name}
-                      {project.course ? ` (${project.course})` : ""}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className="button"
-                  disabled={!selected || start.isPending}
-                  onClick={() => start.mutate(selected)}
-                >
-                  <Play aria-hidden="true" />
-                  Start a meeting
-                </button>
-              </div>
-            )}
-            <ErrorMessage error={start.error} />
-            <button
-              className="button secondary mt-5"
-              onClick={() => setCreating((value) => !value)}
-            >
-              <Plus aria-hidden="true" />
-              {creating ? "Cancel" : "New project"}
-            </button>
-            {creating && (
-              <ProjectSetupForm
-                onCreated={(project) => {
-                  setCreating(false);
-                  setSelected(project.id);
-                }}
-              />
-            )}
-          </>
-        )}
+      <section className="panel project-picker my-6">
+        <div className="project-picker-intro">
+          <h2 className="section-title">Choose a project</h2>
+          <p className="text-sm text-muted">
+            A project remembers your team&apos;s members, Notion task database,
+            and GitHub repository so Relay never has to guess them from a
+            transcript.
+          </p>
+        </div>
+        <div className="project-picker-controls">
+          {projectsQuery.isPending ? (
+            <Loading />
+          ) : (
+            <>
+              <ErrorMessage error={projectsQuery.error} />
+              {projectsQuery.data && projectsQuery.data.length > 0 && (
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <select
+                    className="min-h-11 rounded-md border border-line bg-surface px-3 text-sm"
+                    aria-label="Project"
+                    value={selected}
+                    onChange={(event) => setSelected(event.target.value)}
+                  >
+                    <option value="">Choose a project</option>
+                    {projectsQuery.data.map((project) => (
+                      <option key={project.id} value={project.id}>
+                        {project.name}
+                        {project.course ? ` (${project.course})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className="button"
+                    disabled={!selected || start.isPending}
+                    onClick={() => start.mutate(selected)}
+                  >
+                    <Play aria-hidden="true" />
+                    Start a meeting
+                  </button>
+                </div>
+              )}
+              <ErrorMessage error={start.error} />
+              <button
+                className="button secondary mt-5"
+                aria-expanded={creating}
+                onClick={() => setCreating((value) => !value)}
+              >
+                <Plus aria-hidden="true" />
+                {creating ? "Cancel" : "New project"}
+              </button>
+              {creating && (
+                <ProjectSetupForm
+                  onCreated={(project) => {
+                    setCreating(false);
+                    setSelected(project.id);
+                  }}
+                />
+              )}
+            </>
+          )}
+        </div>
       </section>
     </>
   );
@@ -407,6 +415,7 @@ export function CollaborateRun({ id }: { id: string }) {
         action={<Status value={data.run.status} />}
       />
       <RelayLine
+        tone="collaborate"
         sources={[{ label: "Meeting transcript" }]}
         destinations={[{ label: "Notion" }, { label: "GitHub" }]}
         status={data.run.status}
@@ -788,32 +797,32 @@ function ReviewAndApprove({
                 ))}
               </div>
             )}
-            {canEdit && (
-              <div className="mt-5 flex flex-wrap gap-3">
-                {items && (
-                  <button
-                    className="button"
-                    disabled={busy}
-                    onClick={() => save.mutate(actionItems)}
-                  >
-                    Save edits
-                  </button>
-                )}
-                <button
-                  className={
-                    !items && actionItems.length > 0 && !busy
-                      ? "button"
-                      : "button secondary"
-                  }
-                  disabled={busy || actionItems.length === 0}
-                  onClick={() => requestApproval.mutate()}
-                >
-                  <Send aria-hidden="true" />
-                  Request approval
-                </button>
-              </div>
-            )}
           </DisclosurePanel>
+          {canEdit && (
+            <div className="mt-5 flex flex-wrap gap-3">
+              {items && (
+                <button
+                  className="button"
+                  disabled={busy}
+                  onClick={() => save.mutate(actionItems)}
+                >
+                  Save edits
+                </button>
+              )}
+              <button
+                className={
+                  !items && actionItems.length > 0 && !busy
+                    ? "button"
+                    : "button secondary"
+                }
+                disabled={busy || actionItems.length === 0}
+                onClick={() => requestApproval.mutate()}
+              >
+                <Send aria-hidden="true" />
+                Proceed to Approval
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -1085,6 +1094,7 @@ function ActionItemCard({
 
 function ExecutionSummary({ data }: { data: CollaborateDetail }) {
   const payload = data.run.result_payload as {
+    results?: { status?: string; external_url?: string }[];
     succeeded_count?: number;
     failed_count?: number;
     total_count?: number;
@@ -1097,14 +1107,12 @@ function ExecutionSummary({ data }: { data: CollaborateDetail }) {
         actions completed
         {payload?.failed_count ? `, ${payload.failed_count} failed` : ""}.
       </p>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Link className="button secondary" href="/dashboard">
-          Dashboard
-        </Link>
-        <Link className="button secondary" href="/workflows/collaborate">
-          Start another
-        </Link>
-      </div>
+      <CompletionActions
+        workflow="collaborate"
+        destinations={(payload?.results || [])
+          .filter((item) => item.status === "succeeded")
+          .map((item) => item.external_url)}
+      />
     </div>
   );
 }

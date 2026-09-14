@@ -21,14 +21,9 @@ import { approvals } from "@/features/approvals/api";
 import { connections } from "@/features/connections/api";
 import { learn, LectureSummary } from "@/features/learn/api";
 import { WorkflowBadge } from "@/components/workflow-badge";
+import { CompletionActions } from "@/components/completion-actions";
 import { RelayLine } from "@/components/relay-line";
-import {
-  Empty,
-  ErrorMessage,
-  Loading,
-  PageTitle,
-  Status,
-} from "@/components/ui";
+import { ErrorMessage, Loading, PageTitle, Status } from "@/components/ui";
 import { workflowDisplay } from "@/features/workflows/display";
 
 function refsLabel(
@@ -77,11 +72,12 @@ export function LearnEntry() {
         action={<WorkflowBadge workflow={workflowDisplay.lecture_to_notion} />}
       />
       <RelayLine
+        tone="learn"
         sources={[{ label: "Lecture notes" }]}
         destinations={[{ label: "Notion" }]}
         status="DRAFT"
       />
-      <section className="my-10 grid gap-6 lg:grid-cols-[1fr_0.8fr]">
+      <section className="workflow-entry-layout my-6 grid gap-6 lg:grid-cols-[1.4fr_0.7fr]">
         <div className="panel">
           <h2 className="section-title">Source document</h2>
           <label className="learn-drop">
@@ -129,7 +125,7 @@ export function LearnEntry() {
             </p>
           </div>
         </div>
-        <div className="panel">
+        <div className="workflow-guide">
           <h2 className="section-title">What Relay will prepare</h2>
           <ol className="learn-steps">
             <li>Store the original file privately on this machine.</li>
@@ -302,6 +298,23 @@ export function LearnRun({ id }: { id: string }) {
         notionConnections.error
       : null);
 
+  const approvalPanel = (
+    <ApprovalPanel
+      detail={data}
+      busy={busy}
+      realPublish={realPublish}
+      hasDestination={hasDestination}
+      connectionName={notionConnection?.display_name}
+      refreshDestinations={() => refreshDestinations.mutate()}
+      showDestinationControls={pending || (realPublish && !hasDestination)}
+      destinations={refreshDestinations.data || notionDestinations.data || []}
+      selectDestination={(destinationId) =>
+        selectDestination.mutate(destinationId)
+      }
+      reject={() => resolve.mutate({ approve: false })}
+      execute={() => execute.mutate()}
+    />
+  );
   return (
     <>
       <Link className="back-link" href="/workflows/learn">
@@ -315,6 +328,7 @@ export function LearnRun({ id }: { id: string }) {
         action={<Status value={data.run.status} />}
       />
       <RelayLine
+        tone="learn"
         sources={[{ label: data.source?.filename || "Lecture notes" }]}
         destinations={[{ label: "Notion" }]}
         status={data.run.status}
@@ -334,62 +348,51 @@ export function LearnRun({ id }: { id: string }) {
           <p>{data.run.error_message}</p>
         </div>
       )}
-      <section className="my-8 grid gap-5 lg:grid-cols-3">
-        <SourcePanel
-          detail={data}
-          file={file}
-          pasted={pasted}
-          tooLarge={tooLarge}
-          canUpload={canUpload}
-          uploading={upload.isPending}
-          setFile={setFile}
-          setPasted={setPasted}
-          upload={() => upload.mutate()}
-        />
-        <ProcessingPanel
-          detail={data}
-          busy={busy}
-          parse={() => parse.mutate()}
-          summarize={() => summarize.mutate()}
-        />
-        <ApprovalPanel
-          detail={data}
-          busy={busy}
-          realPublish={realPublish}
-          hasDestination={hasDestination}
-          connectionName={notionConnection?.display_name}
-          refreshDestinations={() => refreshDestinations.mutate()}
-          showDestinationControls={pending || (realPublish && !hasDestination)}
-          destinations={
-            refreshDestinations.data || notionDestinations.data || []
-          }
-          selectDestination={(destinationId) =>
-            selectDestination.mutate(destinationId)
-          }
-          reject={() => resolve.mutate({ approve: false })}
-          execute={() => execute.mutate()}
-        />
+      <section className="my-8 space-y-8">
+        {!data.source && data.run.status === "DRAFT" && (
+          <SourcePanel
+            detail={data}
+            file={file}
+            pasted={pasted}
+            tooLarge={tooLarge}
+            canUpload={canUpload}
+            uploading={upload.isPending}
+            setFile={setFile}
+            setPasted={setPasted}
+            upload={() => upload.mutate()}
+          />
+        )}
+        {data.source && !data.summary && (
+          <ProcessingPanel
+            detail={data}
+            busy={busy}
+            parse={() => parse.mutate()}
+            summarize={() => summarize.mutate()}
+          />
+        )}
+        {data.summary && pending && (
+          <div className="panel learn-stage-review">
+            <SummaryReview
+              key={JSON.stringify(data.summary)}
+              summary={data.summary}
+              pending={pending}
+              busy={busy}
+              approvalPayload={data.approval?.original_payload}
+              realPublish={realPublish}
+              hasDestination={hasDestination}
+              approve={() => resolve.mutate({ approve: true })}
+              onSave={(summary, expectedPayload) =>
+                save.mutate({ summary, expectedPayload })
+              }
+            />
+            {approvalPanel}
+          </div>
+        )}
+        {data.summary &&
+          !pending &&
+          data.run.status !== "COMPLETED" &&
+          approvalPanel}
       </section>
-      {data.summary ? (
-        <SummaryReview
-          key={JSON.stringify(data.summary)}
-          summary={data.summary}
-          pending={pending}
-          busy={busy}
-          approvalPayload={data.approval?.original_payload}
-          realPublish={realPublish}
-          hasDestination={hasDestination}
-          approve={() => resolve.mutate({ approve: true })}
-          onSave={(summary, expectedPayload) =>
-            save.mutate({ summary, expectedPayload })
-          }
-        />
-      ) : (
-        <Empty title="No generated notes yet.">
-          Parse and summarize the uploaded source to review the proposed study
-          page.
-        </Empty>
-      )}
       {data.run.status === "COMPLETED" && (
         <section className="panel mt-8">
           <h2 className="section-title">
@@ -411,26 +414,18 @@ export function LearnRun({ id }: { id: string }) {
                 Created{" "}
                 {new Date(artifact.data?.created_at || "").toLocaleString()}
               </p>
-              {artifact.data?.external_url.startsWith("https://") && (
-                <a
-                  className="button mt-5"
-                  href={artifact.data.external_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open in Notion
-                </a>
-              )}
             </div>
           )}
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Link className="button secondary" href="/dashboard">
-              Dashboard
-            </Link>
-            <Link className="button secondary" href="/workflows/learn">
-              Start another
-            </Link>
-          </div>
+          <CompletionActions
+            workflow="learn"
+            destinations={[artifact.data?.external_url]}
+          />
+          {data.summary && (
+            <details className="learn-disclosure mt-6">
+              <summary>View study notes</summary>
+              <StudyPagePreview summary={data.summary} />
+            </details>
+          )}
         </section>
       )}
     </>
@@ -517,16 +512,6 @@ function PublishedNotice({
               ? "Relay recorded a mock Notion artifact for this completed run."
               : "Your approved study page has been created in the selected Notion destination."}
         </p>
-        {artifact?.external_url.startsWith("https://") && (
-          <a
-            className="button mt-4"
-            href={artifact.external_url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open published page
-          </a>
-        )}
       </div>
     </div>
   );
@@ -700,7 +685,17 @@ function ProcessingPanel({
     !summarizing;
   return (
     <article className="panel">
-      <h2 className="section-title">Processing</h2>
+      <h2 className="section-title">
+        {detail.run.status === "DRAFT"
+          ? "Source document"
+          : "Understand your source"}
+      </h2>
+      <p className="text-sm">{detail.source?.filename}</p>
+      {detail.source && (
+        <p className="text-sm text-muted">
+          {detail.source.sections.length} sections parsed
+        </p>
+      )}
       <p className="text-sm text-muted">
         Provider: {detail.provider}
         {detail.stage ? ` | ${detail.stage}` : ""}

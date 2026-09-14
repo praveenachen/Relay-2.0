@@ -27,6 +27,7 @@ export function RunDetail({ id }: { id: string }) {
         description="A clear record of your intent and every step that follows."
       />
       <RelayLine
+        tone={display?.tone}
         sources={display?.sources.map((label) => ({ label }))}
         destinations={display?.destinations.map((label) => ({ label }))}
         status={run.data.status}

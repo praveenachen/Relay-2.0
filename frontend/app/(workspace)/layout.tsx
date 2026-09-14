@@ -9,7 +9,7 @@ export default async function WorkspaceLayout({
   return (
     <>
       <WorkspaceNav name={user.name} />
-      <main className="mx-auto max-w-6xl px-6 py-10 sm:py-14">{children}</main>
+      <main className="workspace-shell">{children}</main>
     </>
   );
 }

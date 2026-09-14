@@ -42,11 +42,29 @@ export default function Dashboard() {
   );
   return (
     <>
-      <PageTitle
-        eyebrow="Your workspace"
-        title={`A clear next step, ${user.data?.name.split(" ")[0]}.`}
-        description="Keep your academic work moving, with you in control of what happens next."
-      />
+      <div className="dashboard-hero mb-10">
+        <PageTitle
+          eyebrow="Your workspace"
+          title={`A clear next step, ${user.data?.name.split(" ")[0]}.`}
+          description="Keep your academic work moving, with you in control of what happens next."
+        />
+        <div className="metric-grid">
+          <div className="metric-card">
+            <span className="metric-value">{recent.length}</span>
+            <span className="text-sm">recent relays</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-value">{pending.length}</span>
+            <span className="text-sm">waiting approvals</span>
+          </div>
+          <div className="metric-card">
+            <span className="metric-value">
+              {definitions.data?.length || 0}
+            </span>
+            <span className="text-sm">student workflows</span>
+          </div>
+        </div>
+      </div>
       {!user.data?.onboarding_completed && (
         <p className="notice mb-8">
           Make Relay yours.{" "}
@@ -55,7 +73,7 @@ export default function Dashboard() {
           </Link>
         </p>
       )}
-      <div className="mb-10 grid gap-6 md:grid-cols-2">
+      <div className="mb-12 grid gap-6 lg:grid-cols-[1.35fr_0.85fr]">
         <section>
           <h2 className="section-title">Continue where you left off</h2>
           {incomplete ? (
@@ -69,7 +87,7 @@ export default function Dashboard() {
         <section>
           <h2 className="section-title">Needs your attention</h2>
           {pending.length ? (
-            <div className="panel">
+            <div className="panel interactive">
               <p className="text-2xl font-semibold">
                 {pending.length}
                 {pending.length === 100 ? "+" : ""} pending{" "}
@@ -89,7 +107,7 @@ export default function Dashboard() {
           )}
         </section>
       </div>
-      <section className="mb-10">
+      <section className="mb-12">
         <h2 className="section-title">Start a Relay</h2>
         <p className="mb-5 text-sm text-muted">
           Pick a workflow to upload sources, prepare a draft, and review the
@@ -99,7 +117,10 @@ export default function Dashboard() {
           {definitions.data?.map((definition, index) => {
             const display = displayFor(definition.key);
             return (
-              <article key={definition.id} className="panel">
+              <article
+                key={definition.id}
+                className={`panel interactive workflow-card ${display?.slug || ""}`}
+              >
                 <p className="eyebrow">0{index + 1} / DRAFT ONLY</p>
                 <h3 className="mt-5 text-2xl font-semibold">
                   {definition.name}
@@ -128,7 +149,7 @@ export default function Dashboard() {
         </div>
       </section>
       <section>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex items-center justify-between border-t border-line pt-8">
           <h2 className="section-title mb-0">Recent Relays</h2>
           <Link href="/runs" className="text-sm text-accent underline">
             View all

@@ -26,6 +26,7 @@ import {
   plan,
 } from "@/features/plan/api";
 import { WorkflowBadge } from "@/components/workflow-badge";
+import { CompletionActions } from "@/components/completion-actions";
 import { RelayLine } from "@/components/relay-line";
 import {
   Empty,
@@ -96,6 +97,7 @@ export function PlanEntry() {
         action={<WorkflowBadge workflow={workflowDisplay.study_scheduler} />}
       />
       <RelayLine
+        tone="plan"
         sources={[{ label: "Your tasks" }, { label: "Calendar" }]}
         destinations={[
           { label: "Google Calendar" },
@@ -103,7 +105,7 @@ export function PlanEntry() {
         ]}
         status="DRAFT"
       />
-      <section className="panel my-8">
+      <section className="panel plan-intro my-6">
         <h2 className="section-title">What Relay will do</h2>
         <ol className="learn-steps">
           <li>Collect your study tasks, entered directly in Relay.</li>
@@ -164,6 +166,7 @@ export function PlanRun({ id }: { id: string }) {
         action={<Status value={data.run.status} />}
       />
       <RelayLine
+        tone="plan"
         sources={[{ label: "Your tasks" }, { label: "Calendar" }]}
         destinations={[
           { label: "Google Calendar" },
@@ -181,9 +184,6 @@ export function PlanRun({ id }: { id: string }) {
         <SetupWizard id={id} data={data} invalidate={invalidate} />
       ) : (
         <ReviewAndApprove id={id} data={data} invalidate={invalidate} />
-      )}
-      {taskCount > 0 && (
-        <NotionExportPanel id={id} data={data} invalidate={invalidate} />
       )}
     </>
   );
@@ -246,6 +246,16 @@ function planReviewNextStep(
     return {
       title: "Relay is working on this step.",
       description: "Wait for the current action to finish before moving on.",
+    };
+  }
+  if (
+    data.run.status === "COMPLETED" ||
+    data.run.status === "PARTIALLY_COMPLETED"
+  ) {
+    return {
+      title: "Workflow complete.",
+      description:
+        "Your approved study blocks have been published. You can export the task list to Notion if you want a separate database copy.",
     };
   }
   if (
@@ -740,6 +750,10 @@ function ReviewAndApprove({
   const busy =
     solve.isPending || lock.isPending || remove.isPending || publish.isPending;
 
+  const isCompletePhase =
+    data.run.status === "COMPLETED" ||
+    data.run.status === "PARTIALLY_COMPLETED";
+  const isReviewPhase = !isCompletePhase;
   const canRegenerate = data.run.status === "PLAN_READY";
   const missingCalendar = !setup?.calendar_id;
   const canPublish =
@@ -755,21 +769,24 @@ function ReviewAndApprove({
       <ErrorMessage
         error={solve.error || lock.error || remove.error || publish.error}
       />
-      {result ? (
-        <SchedulePanel
-          result={result}
-          tasks={setup?.tasks || []}
-          editable={canRegenerate}
-          busy={busy}
-          onLock={(sessionId, locked) => lock.mutate({ sessionId, locked })}
-          onRemove={(sessionId) => remove.mutate(sessionId)}
-        />
-      ) : (
-        <Empty title="No schedule generated yet.">
-          Generate a study plan from the setup step.
-        </Empty>
-      )}
-      {(canRegenerate || canPublish || missingCalendar) && (
+
+      {isReviewPhase &&
+        (result ? (
+          <SchedulePanel
+            result={result}
+            tasks={setup?.tasks || []}
+            editable={canRegenerate}
+            busy={busy}
+            onLock={(sessionId, locked) => lock.mutate({ sessionId, locked })}
+            onRemove={(sessionId) => remove.mutate(sessionId)}
+          />
+        ) : (
+          <Empty title="No schedule generated yet.">
+            Generate a study plan from the setup step.
+          </Empty>
+        ))}
+
+      {isReviewPhase && (canRegenerate || canPublish || missingCalendar) && (
         <div className="panel plan-action-panel">
           {missingCalendar ? (
             <div className="blocked-action-card">
@@ -841,9 +858,14 @@ function ReviewAndApprove({
             )}
         </div>
       )}
-      {(data.run.status === "COMPLETED" ||
-        data.run.status === "PARTIALLY_COMPLETED") && (
-        <ExecutionSummary data={data} />
+
+      {isCompletePhase && (
+        <>
+          {(setup?.tasks.length || 0) > 0 && (
+            <NotionExportPanel id={id} data={data} invalidate={invalidate} />
+          )}
+          <ExecutionSummary data={data} />
+        </>
       )}
     </section>
   );
@@ -851,6 +873,9 @@ function ReviewAndApprove({
 
 function ExecutionSummary({ data }: { data: PlanDetail }) {
   const payload = data.run.result_payload as {
+    execution?: {
+      result?: { created?: { event?: { external_url?: string } }[] };
+    };
     created_count?: number;
     failed_count?: number;
     approved_count?: number;
@@ -863,14 +888,15 @@ function ExecutionSummary({ data }: { data: PlanDetail }) {
         study blocks created
         {payload?.failed_count ? `, ${payload.failed_count} failed` : ""}.
       </p>
-      <div className="mt-5 flex flex-wrap gap-3">
-        <Link className="button secondary" href="/dashboard">
-          Dashboard
-        </Link>
-        <Link className="button secondary" href="/workflows/plan">
-          Start another
-        </Link>
-      </div>
+      <CompletionActions
+        workflow="plan"
+        destinations={[
+          data.setup?.notion_export?.database_url,
+          ...(payload?.execution?.result?.created || []).map(
+            (item) => item.event?.external_url,
+          ),
+        ]}
+      />
     </div>
   );
 }

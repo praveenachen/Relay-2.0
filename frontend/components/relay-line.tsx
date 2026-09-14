@@ -1,5 +1,14 @@
 import type { CSSProperties, ReactNode } from "react";
-import { ArrowRight, Check, Circle, Clock3, X } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  FileInput,
+  Sparkles,
+  ScanEye,
+  Send,
+  Clock3,
+  X,
+} from "lucide-react";
 import type { Run } from "@/lib/schemas";
 import {
   stagesFor,
@@ -12,6 +21,7 @@ export type RelayEndpoint = {
   description?: string;
 };
 export type RelayLineProps = {
+  tone?: "learn" | "plan" | "collaborate";
   sources?: readonly RelayEndpoint[];
   destinations?: readonly RelayEndpoint[];
   stages?: readonly RelayStage[];
@@ -20,6 +30,7 @@ export type RelayLineProps = {
   label?: string;
 };
 export function RelayLine({
+  tone,
   sources = [{ label: "Your input" }],
   destinations = [{ label: "Your tools" }],
   stages,
@@ -28,9 +39,11 @@ export function RelayLine({
   label = "Relay progress",
 }: RelayLineProps) {
   const progress = stages || stagesFor(status);
+  const icons = [FileInput, Sparkles, ScanEye, Send];
   return (
     <figure
       className={`relay-line ${compact ? "compact" : ""}`}
+      data-workflow={tone}
       aria-label={label}
     >
       <div className="relay-track">
@@ -53,32 +66,46 @@ export function RelayLine({
           className="relay-stages"
           aria-label="Workflow stages"
         >
-          {progress.map((stage) => (
-            <li
-              key={stage.id}
-              className={`relay-stage ${stage.state}`}
-              aria-current={
-                stage.state === "active" || stage.state === "waiting"
-                  ? "step"
-                  : undefined
-              }
-            >
-              <span className="relay-node" aria-hidden="true">
-                {stage.state === "complete" ? (
-                  <Check />
-                ) : stage.state === "failed" ? (
-                  <X />
-                ) : stage.state === "waiting" ? (
-                  <Clock3 />
-                ) : (
-                  <Circle />
-                )}
-              </span>
-              <span className="relay-stage-label">{stage.label}</span>
-              <span className="stage-state">{stage.state}</span>
-              {stage.description && <small>{stage.description}</small>}
-            </li>
-          ))}
+          {progress.map((stage, index) => {
+            const Icon = icons[index] || Sparkles;
+            return (
+              <li
+                key={stage.id}
+                className={`relay-stage ${stage.state}`}
+                aria-label={`${stage.label}: ${stage.state}`}
+                aria-current={
+                  stage.state === "active" || stage.state === "waiting"
+                    ? "step"
+                    : undefined
+                }
+              >
+                <span className="relay-node" aria-hidden="true">
+                  {stage.state === "complete" ? (
+                    <Check />
+                  ) : stage.state === "failed" ? (
+                    <X />
+                  ) : stage.state === "waiting" ? (
+                    <Clock3 />
+                  ) : (
+                    <Icon />
+                  )}
+                </span>
+                <span className="relay-stage-label">{stage.label}</span>
+                <span className="stage-state" key={stage.state}>
+                  {stage.state === "waiting"
+                    ? "Your next step"
+                    : stage.state === "active"
+                      ? "In progress"
+                      : stage.state === "complete"
+                        ? "Done"
+                        : stage.state === "failed"
+                          ? "Needs attention"
+                          : "Up next"}
+                </span>
+                {stage.description && <small>{stage.description}</small>}
+              </li>
+            );
+          })}
         </ol>
         <div className="relay-endpoints destinations">
           <p className="system-label">To</p>
@@ -101,7 +128,7 @@ export function RelayLine({
       {!compact && (
         <figcaption>
           <span>{statusFor(status).label}</span>
-          <span>Your review connects a proposal to an action.</span>
+          <span>{statusFor(status).description}</span>
         </figcaption>
       )}
     </figure>

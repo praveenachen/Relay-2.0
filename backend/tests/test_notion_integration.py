@@ -285,6 +285,17 @@ async def test_destination_discovery_paginates_and_selects(account, session_fact
         session.add(connection)
         await session.commit()
 
+        session.add(
+            NotionDestinationRecord(
+                user_id=UUID(account["id"]),
+                connection_id=connection.id,
+                provider_page_id="stale-row",
+                title="Previous task",
+                selected=True,
+            )
+        )
+        connection.provider_metadata = {"default_destination_id": "stale-row"}
+        await session.commit()
         calls = 0
 
         class PagedClient(NotionApiClient):
@@ -306,6 +317,7 @@ async def test_destination_discovery_paginates_and_selects(account, session_fact
         refreshed = await service.refresh(UUID(account["id"]))
         assert [item.title for item in refreshed] == ["Archive", "University Notes"]
         assert calls == 1
+        assert "default_destination_id" not in connection.provider_metadata
         selected = await service.select(UUID(account["id"]), "page-1")
         assert selected.title == "University Notes"
         assert (
@@ -379,6 +391,10 @@ async def test_notion_http_search_paginates():
                 json={
                     "results": [
                         {"object": "page", "id": "page-1", "properties": {}},
+                        {"object": "page", "id": "row", "parent": {"type": "database_id"}},
+                        {"object": "page", "id": "data-row", "parent": {"type": "data_source_id"}},
+                        {"object": "page", "id": "archived", "archived": True},
+                        {"object": "page", "id": "trashed", "in_trash": True},
                     ],
                     "has_more": True,
                     "next_cursor": "cursor-2",

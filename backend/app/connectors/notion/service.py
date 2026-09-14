@@ -1,13 +1,18 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.connectors.notion.client import NotionApiClient
 from app.connectors.notion.errors import NotionDestinationNotFound, NotionNotConnected
 from app.connectors.notion.schemas import NotionDestination
-from app.domain.enums import ConnectionStatus, Provider
+from app.domain.enums import ActionProvider, ConnectionStatus, Provider
 from app.domain.ports import CredentialStore
-from app.models.entities import ConnectedAccount, NotionDestinationRecord
+from app.models.entities import (
+    ConnectedAccount,
+    ExternalArtifact,
+    NotionDestinationRecord,
+    WorkflowRun,
+)
 from app.repositories.relay import RelayRepository
 from app.services.audit import record
 
@@ -64,6 +69,30 @@ class NotionDestinationService:
     async def refresh(self, owner: UUID) -> list[NotionDestination]:
         connection = await self.connection(owner)
         pages = await (await self.client(connection)).search_pages()
+        generated_ids = {
+            value.replace("-", "").lower()
+            for value in await self.session.scalars(
+                select(ExternalArtifact.external_id)
+                .join(WorkflowRun, ExternalArtifact.workflow_run_id == WorkflowRun.id)
+                .where(
+                    WorkflowRun.user_id == owner, ExternalArtifact.provider == ActionProvider.NOTION
+                )
+            )
+        }
+        pages = [page for page in pages if page.id.replace("-", "").lower() not in generated_ids]
+        page_ids = [page.id for page in pages]
+        await self.session.execute(
+            delete(NotionDestinationRecord).where(
+                NotionDestinationRecord.user_id == owner,
+                NotionDestinationRecord.connection_id == connection.id,
+                NotionDestinationRecord.provider_page_id.not_in(page_ids),
+            )
+        )
+        metadata = dict(connection.provider_metadata or {})
+        if metadata.get("default_destination_id") not in page_ids:
+            metadata.pop("default_destination_id", None)
+            metadata.pop("default_destination_title", None)
+            connection.provider_metadata = metadata
         for page in pages:
             record_item = await self.session.scalar(
                 select(NotionDestinationRecord).where(
@@ -85,9 +114,12 @@ class NotionDestinationService:
                 record_item.title = page.title
                 record_item.icon_url = page.icon_url
         await self.session.commit()
-        return await self.list(owner)
+        return await self._cached_list(owner)
 
     async def list(self, owner: UUID) -> list[NotionDestination]:
+        return await self.refresh(owner)
+
+    async def _cached_list(self, owner: UUID) -> "list[NotionDestination]":
         connection = await self.connection(owner)
         records = (
             await self.session.scalars(
@@ -105,6 +137,7 @@ class NotionDestinationService:
         ]
 
     async def select(self, owner: UUID, destination_id: str) -> NotionDestination:
+        await self.refresh(owner)
         connection = await self.connection(owner)
         records = (
             await self.session.scalars(

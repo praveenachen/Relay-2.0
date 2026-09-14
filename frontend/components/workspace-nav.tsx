@@ -52,7 +52,7 @@ export function WorkspaceNav({ name }: { name: string }) {
                 key={href}
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-sm ${active ? "bg-background font-semibold text-accent" : "text-muted"}`}
+                className={`nav-pill ${active ? "active" : ""}`}
               >
                 {label}
               </Link>
@@ -61,16 +61,14 @@ export function WorkspaceNav({ name }: { name: string }) {
         </nav>
         <nav
           aria-label="Account and system"
-          className="flex flex-wrap gap-4 border-l border-line pl-5 text-xs"
+          className="flex flex-wrap gap-3 border-l border-line pl-5 text-xs"
         >
           {secondaryLinks.map(([href, label]) => (
             <Link
               key={href}
               href={href}
               aria-current={path === href ? "page" : undefined}
-              className={
-                path === href ? "font-semibold text-accent" : "text-muted"
-              }
+              className={`nav-pill ${path === href ? "active" : ""}`}
             >
               {label}
             </Link>

@@ -31,6 +31,7 @@ export function WorkflowEntry({ display }: { display: WorkflowDisplay }) {
         action={<WorkflowBadge workflow={display} />}
       />
       <RelayLine
+        tone={display.tone}
         sources={display.sources.map((label) => ({ label }))}
         destinations={display.destinations.map((label) => ({ label }))}
         status="DRAFT"
@@ -39,7 +40,7 @@ export function WorkflowEntry({ display }: { display: WorkflowDisplay }) {
         <h2 className="section-title">How this Relay works</h2>
         <ol className="grid gap-5 sm:grid-cols-2">
           {display.steps.map((step, index) => (
-            <li key={step} className="panel">
+            <li key={step} className="panel interactive">
               <p className="eyebrow">Step {index + 1}</p>
               <p className="mt-3 text-sm leading-6">{step}</p>
             </li>

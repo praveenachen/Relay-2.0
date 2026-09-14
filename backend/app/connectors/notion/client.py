@@ -128,7 +128,13 @@ class NotionApiClient:
                 payload["start_cursor"] = cursor
             data = await self.request("POST", "/v1/search", payload)
             for item in data.get("results", []):
-                if item.get("object") == "page" and isinstance(item.get("id"), str):
+                if (
+                    item.get("object") == "page"
+                    and isinstance(item.get("id"), str)
+                    and item.get("parent", {}).get("type") not in {"database_id", "data_source_id"}
+                    and not item.get("archived")
+                    and not item.get("in_trash")
+                ):
                     results.append(
                         NotionDestination(
                             id=item["id"],
