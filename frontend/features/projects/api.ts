@@ -5,6 +5,9 @@ export const projectSchema = z.object({
   id: z.guid(),
   user_id: z.guid(),
   name: z.string(),
+  space: z.enum(["SCHOOL", "WORK", "PERSONAL"]),
+  description: z.string().nullable(),
+  deadline: z.string().nullable(),
   course: z.string().nullable(),
   notion_database_id: z.string().nullable(),
   notion_property_mapping: z.record(z.string(), z.json()).nullable(),
@@ -27,6 +30,9 @@ export type ProjectMember = z.infer<typeof projectMemberSchema>;
 
 export type ProjectInput = {
   name: string;
+  space?: "SCHOOL" | "WORK" | "PERSONAL";
+  description?: string | null;
+  deadline?: string | null;
   course?: string | null;
   notion_database_id?: string | null;
   notion_property_mapping?: Record<string, unknown> | null;

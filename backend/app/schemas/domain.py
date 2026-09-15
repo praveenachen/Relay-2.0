@@ -1,5 +1,5 @@
 from datetime import datetime, time
-from typing import Self
+from typing import Literal, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
@@ -131,6 +131,9 @@ class AuditRead(ReadModel):
 
 class ProjectInput(InputModel):
     name: str = Field(min_length=1, max_length=200)
+    space: Literal["SCHOOL", "WORK", "PERSONAL"] = "PERSONAL"
+    description: str | None = Field(default=None, max_length=2000)
+    deadline: datetime | None = None
     course: str | None = Field(default=None, max_length=200)
     notion_database_id: str | None = Field(default=None, max_length=255)
     notion_property_mapping: dict[str, JsonValue] | None = None
@@ -142,6 +145,9 @@ class ProjectRead(ReadModel):
     id: UUID
     user_id: UUID
     name: str
+    space: Literal["SCHOOL", "WORK", "PERSONAL"]
+    description: str | None
+    deadline: datetime | None
     course: str | None
     notion_database_id: str | None
     notion_property_mapping: dict[str, JsonValue] | None

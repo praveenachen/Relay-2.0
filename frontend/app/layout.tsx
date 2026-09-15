@@ -3,9 +3,8 @@ import { Providers } from "@/components/providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Relay | Academic work, connected",
-  description:
-    "A student workspace for understanding, planning, and approved action.",
+  title: "Relay | Projects, plans, and focus",
+  description: "A personal project workspace for everything you are moving forward.",
 };
 
 export default function RootLayout({

@@ -6,6 +6,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ArrowUp,
+  ChevronDown,
   Database,
   Lock,
   Play,
@@ -105,20 +106,12 @@ export function PlanEntry() {
         ]}
         status="DRAFT"
       />
-      <section className="panel plan-intro my-6">
-        <h2 className="section-title">What Relay will do</h2>
+      <section className="planner-entry my-8">
+        <h2 className="section-title">From deadlines to a realistic week</h2>
         <ol className="learn-steps">
-          <li>Collect your study tasks, entered directly in Relay.</li>
-          <li>Read the selected Google Calendar and avoid existing events.</li>
-          <li>
-            Generate a balanced schedule across available days, weighted by
-            deadlines, priority, study hours, and breaks.
-          </li>
-          <li>
-            Let you lock, remove, or regenerate sessions before approving.
-          </li>
-          <li>Create only the approved study blocks on your calendar.</li>
-          <li>Optionally export your task list to a new Notion database.</li>
+          <li>Add the tasks, deadlines, and effort you need to plan.</li>
+          <li>Fit focused study blocks around your existing calendar.</li>
+          <li>Adjust the week, then add it to Google Calendar.</li>
         </ol>
         <button
           className="button mt-6"
@@ -126,7 +119,7 @@ export function PlanEntry() {
           onClick={() => create.mutate()}
         >
           <Play aria-hidden="true" />
-          {create.isPending ? "Starting..." : "Start a study plan"}
+          {create.isPending ? "Starting…" : "Build a study plan"}
         </button>
         <ErrorMessage error={create.error} />
       </section>
@@ -198,8 +191,8 @@ function planSetupNextStep(
 ) {
   if (busy) {
     return {
-      title: "Relay is working on this step.",
-      description: "Wait for the current action to finish before moving on.",
+      title: "Building your study plan…",
+      description: "Finding realistic times for each task.",
     };
   }
   if (!stage || stage === "setup") {
@@ -218,17 +211,17 @@ function planSetupNextStep(
       };
     }
     return {
-      title: "Next: generate your study plan.",
+      title: "Ready to build your plan.",
       description: taskCount
-        ? "Save your tasks and planning window, then generate the schedule."
-        : "Add at least one task, then generate the schedule.",
+        ? "Check your tasks, then build your schedule."
+        : "Add at least one task to get started.",
     };
   }
   if (stage === "availability_loaded") {
     return {
-      title: "Next: generate the study plan.",
+      title: "Ready to build your plan.",
       description:
-        "Relay will run the scheduler against tasks, deadlines, preferences, and calendar availability.",
+        "Relay will fit your tasks around your calendar and preferences.",
     };
   }
   return {
@@ -244,8 +237,8 @@ function planReviewNextStep(
 ) {
   if (busy) {
     return {
-      title: "Relay is working on this step.",
-      description: "Wait for the current action to finish before moving on.",
+      title: "Updating your study plan…",
+      description: "Your calendar will refresh when it is ready.",
     };
   }
   if (
@@ -253,9 +246,9 @@ function planReviewNextStep(
     data.run.status === "PARTIALLY_COMPLETED"
   ) {
     return {
-      title: "Workflow complete.",
+      title: "Added to Google Calendar.",
       description:
-        "Your approved study blocks have been published. You can export the task list to Notion if you want a separate database copy.",
+        "Your study blocks are ready alongside the rest of your week.",
     };
   }
   if (
@@ -263,17 +256,16 @@ function planReviewNextStep(
   ) {
     return {
       title: canPublish
-        ? "Next: approve and create calendar blocks."
-        : "Next: choose where Relay should publish this schedule.",
+        ? "Your week is ready to add."
+        : "Choose a calendar for this plan.",
       description: canPublish
-        ? "Review the sessions below, then Relay will approve the exact plan and write those blocks to Google Calendar in one step."
-        : "This schedule is locked in, but it needs a Google Calendar destination before publishing.",
+        ? "Review the study blocks below, then add them to Google Calendar."
+        : "Select where these study blocks should be added.",
     };
   }
   return {
-    title: "Workflow status updated.",
-    description:
-      "Relay will show the next available action as the plan progresses.",
+    title: "Your plan was updated.",
+    description: "Review the schedule below for your next step.",
   };
 }
 
@@ -284,7 +276,7 @@ function NextStepNotice({
   title: string;
   description: string;
 }) {
-  const working = title.startsWith("Relay is working");
+  const working = title.includes("…");
   return (
     <div className={`notice next-step my-6 ${working ? "working" : ""}`}>
       <div>
@@ -407,117 +399,133 @@ function SetupWizard({
       />
       <ErrorMessage error={setupError} />
       {editingSetup ? (
-        <div className="panel">
-          <div className="section-heading">
-            <h2 className="section-title">Planning window &amp; sources</h2>
-            <Link className="text-link text-sm" href="/settings">
-              Study preferences
-            </Link>
-          </div>
-          <p className="text-sm text-muted">
-            Choose the date range for this plan, then set the daily study-hour
-            window Relay should use when scheduling.
-          </p>
-          <div className="mt-5 grid gap-5 md:grid-cols-2">
-            <label className="field">
-              Start date
-              <input
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              End date
-              <input
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              Preferred study start time
-              <input
-                type="time"
-                value={studyStartTime}
-                onChange={(event) => setStudyStartTime(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              Preferred study end time
-              <input
-                type="time"
-                value={studyEndTime}
-                onChange={(event) => setStudyEndTime(event.target.value)}
-              />
-            </label>
-          </div>
-          <div className="mt-5 field">
-            <div className="destination-picker-heading">
-              <span className="field-label">Calendar Relay schedules into</span>
-              {hasGoogle && (
-                <button
-                  className="icon-button"
-                  disabled={busy}
-                  onClick={() => refreshCalendars.mutate()}
-                  aria-label="Refresh Google calendars"
-                  title="Refresh Google calendars"
-                  type="button"
-                >
-                  <RotateCcw aria-hidden="true" />
-                </button>
-              )}
-            </div>
-            {hasGoogle ? (
-              <>
-                <select
-                  value={selectedCalendarId}
-                  onChange={(event) => setCalendarId(event.target.value)}
-                >
-                  <option value="" disabled>
-                    Select a calendar
-                  </option>
-                  {(googleCalendars.data || []).map((calendar) => (
-                    <option key={calendar.id} value={calendar.id}>
-                      {calendar.summary}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-sm text-muted">
-                  {googleCalendars.isFetching || refreshCalendars.isPending
-                    ? "Loading calendars from your connected Google account..."
-                    : (googleCalendars.data || []).length === 0
-                      ? "Your Google account is connected, but Relay has no calendar list yet. Refresh calendars, then choose where study blocks should go."
-                      : "Your Google account is connected. Choose the specific calendar for this plan."}
-                </p>
-                <ErrorMessage error={calendarError} />
-              </>
-            ) : (
-              <span className="text-sm text-muted">
-                <Link className="text-link" href="/connections">
-                  Connect Google Calendar
-                </Link>{" "}
-                to choose a calendar. Relay needs one to schedule study blocks.
-              </span>
-            )}
-          </div>
-          <div className="mt-6 border-t border-line pt-5">
+        <div className="planner-setup">
+          <div className="planner-task-pane">
             <TaskTable tasks={tasks} onChange={setTasks} editable />
           </div>
-          <button
-            className="button mt-6"
-            disabled={busy || needsTaskSource || needsCalendar}
-            onClick={() => generatePlan.mutate()}
-          >
-            {generatePlan.isPending ? "Generating..." : "Generate study plan"}
-          </button>
+          <aside className="planner-setup-sidebar">
+            <details className="planner-preferences" open={!setup}>
+              <summary>
+                <span>
+                  <strong>Study preferences</strong>
+                  <small>
+                    {startDate} – {endDate} · {studyStartTime}–{studyEndTime}
+                  </small>
+                </span>
+                <ChevronDown aria-hidden="true" />
+              </summary>
+              <div className="planner-preferences-fields">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="field">
+                    Start date
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(event) => setStartDate(event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    End date
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(event) => setEndDate(event.target.value)}
+                    />
+                  </label>
+                  <label className="field">
+                    Study from
+                    <input
+                      type="time"
+                      value={studyStartTime}
+                      onChange={(event) =>
+                        setStudyStartTime(event.target.value)
+                      }
+                    />
+                  </label>
+                  <label className="field">
+                    Study until
+                    <input
+                      type="time"
+                      value={studyEndTime}
+                      onChange={(event) => setStudyEndTime(event.target.value)}
+                    />
+                  </label>
+                </div>
+                <div className="field mt-4">
+                  <div className="destination-picker-heading">
+                    <span className="field-label">Add study blocks to</span>
+                    {hasGoogle && (
+                      <button
+                        className="icon-button"
+                        disabled={busy}
+                        onClick={() => refreshCalendars.mutate()}
+                        aria-label="Refresh Google calendars"
+                        title="Refresh Google calendars"
+                        type="button"
+                      >
+                        <RotateCcw aria-hidden="true" />
+                      </button>
+                    )}
+                  </div>
+                  {hasGoogle ? (
+                    <>
+                      <select
+                        value={selectedCalendarId}
+                        onChange={(event) => setCalendarId(event.target.value)}
+                      >
+                        <option value="" disabled>
+                          Select a calendar
+                        </option>
+                        {(googleCalendars.data || []).map((calendar) => (
+                          <option key={calendar.id} value={calendar.id}>
+                            {calendar.summary}
+                          </option>
+                        ))}
+                      </select>
+                      <ErrorMessage error={calendarError} />
+                    </>
+                  ) : (
+                    <span className="text-sm text-muted">
+                      <Link className="text-link" href="/connections">
+                        Connect Google Calendar
+                      </Link>{" "}
+                      to choose where study blocks should go.
+                    </span>
+                  )}
+                </div>
+                <Link
+                  className="text-link mt-4 inline-flex text-sm"
+                  href="/settings"
+                >
+                  More study preferences
+                </Link>
+                {preferencesQuery.data && (
+                  <p className="mt-2 text-xs text-muted">
+                    Study blocks are up to{" "}
+                    {preferencesQuery.data.maximum_session_minutes} minutes with
+                    at least {preferencesQuery.data.minimum_break_minutes}{" "}
+                    minutes between them.
+                  </p>
+                )}
+              </div>
+            </details>
+            <button
+              className="button planner-build-button"
+              disabled={busy || needsTaskSource || needsCalendar}
+              onClick={() => generatePlan.mutate()}
+            >
+              {generatePlan.isPending
+                ? "Building your study plan…"
+                : "Build my plan"}
+            </button>
+          </aside>
         </div>
       ) : null}
 
       {!editingSetup && stage === "setup" && (
         <div className="panel">
           <div className="section-heading">
-            <h2 className="section-title">Plan setup saved</h2>
+            <h2 className="section-title">Your tasks are ready</h2>
             <button
               type="button"
               className="text-link text-sm"
@@ -527,15 +535,16 @@ function SetupWizard({
             </button>
           </div>
           <p className="text-sm text-muted">
-            Generate the study plan when the planning window, calendar, and task
-            source look right.
+            Build your plan when the tasks and study preferences look right.
           </p>
           <button
             className="button mt-5"
             disabled={busy}
             onClick={() => generatePlan.mutate()}
           >
-            {generatePlan.isPending ? "Generating..." : "Generate study plan"}
+            {generatePlan.isPending
+              ? "Building your study plan…"
+              : "Build my plan"}
           </button>
         </div>
       )}
@@ -592,11 +601,11 @@ function TaskTable({
       {tasks.length === 0 ? (
         <p className="mt-3 text-sm text-muted">No tasks yet.</p>
       ) : (
-        <div className="mt-4 space-y-4">
+        <div className="planner-task-list">
           {tasks.map((task, index) => (
             <article
               key={task.id}
-              className="learn-card"
+              className="planner-task-row"
               draggable={editable}
               onDragStart={() => setDragIndex(index)}
               onDragOver={(event) => editable && event.preventDefault()}
@@ -606,32 +615,14 @@ function TaskTable({
               }}
               onDragEnd={() => setDragIndex(null)}
             >
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="planner-task-fields">
                 <label className="field">
-                  Title
+                  Task name
                   <input
                     disabled={!editable}
                     value={task.title}
                     onChange={(e) => update(index, { title: e.target.value })}
                   />
-                </label>
-                <label className="field">
-                  Category (optional)
-                  <input
-                    disabled={!editable}
-                    value={task.course || ""}
-                    placeholder="Work, Personal, School..."
-                    list={`category-options-${task.id}`}
-                    onChange={(e) =>
-                      update(index, { course: e.target.value || null })
-                    }
-                  />
-                  <datalist id={`category-options-${task.id}`}>
-                    <option value="Work" />
-                    <option value="Personal" />
-                    <option value="School" />
-                    <option value="Other" />
-                  </datalist>
                 </label>
                 <label className="field">
                   Deadline
@@ -647,7 +638,7 @@ function TaskTable({
                   />
                 </label>
                 <label className="field">
-                  Estimated minutes
+                  Estimated effort (minutes)
                   <input
                     type="number"
                     min={5}
@@ -667,43 +658,57 @@ function TaskTable({
                 </label>
               </div>
               {editable && (
-                <div className="task-card-actions">
-                  <div className="task-priority-controls">
-                    <span className="text-sm text-muted">
-                      Priority: drag tasks or move them higher/lower
-                    </span>
-                    <button
-                      aria-label={`Move ${task.title || "task"} up`}
-                      className="button secondary compact-action"
-                      disabled={index === 0}
-                      onClick={() => move(index, -1)}
-                    >
-                      <ArrowUp aria-hidden="true" />
-                      Higher
-                    </button>
-                    <button
-                      aria-label={`Move ${task.title || "task"} down`}
-                      className="button secondary compact-action"
-                      disabled={index === tasks.length - 1}
-                      onClick={() => move(index, 1)}
-                    >
-                      <ArrowDown aria-hidden="true" />
-                      Lower
-                    </button>
+                <details className="planner-task-more">
+                  <summary>Category &amp; priority</summary>
+                  <div className="planner-task-more-content">
+                    <label className="field grow">
+                      Category (optional)
+                      <input
+                        value={task.course || ""}
+                        placeholder="Course or category"
+                        list={`category-options-${task.id}`}
+                        onChange={(e) =>
+                          update(index, { course: e.target.value || null })
+                        }
+                      />
+                      <datalist id={`category-options-${task.id}`}>
+                        <option value="Work" />
+                        <option value="Personal" />
+                        <option value="School" />
+                        <option value="Other" />
+                      </datalist>
+                    </label>
+                    <div className="task-priority-controls">
+                      <button
+                        aria-label={`Move ${task.title || "task"} up`}
+                        className="button secondary compact-action"
+                        disabled={index === 0}
+                        onClick={() => move(index, -1)}
+                      >
+                        <ArrowUp aria-hidden="true" /> Higher
+                      </button>
+                      <button
+                        aria-label={`Move ${task.title || "task"} down`}
+                        className="button secondary compact-action"
+                        disabled={index === tasks.length - 1}
+                        onClick={() => move(index, 1)}
+                      >
+                        <ArrowDown aria-hidden="true" /> Lower
+                      </button>
+                    </div>
                   </div>
                   <button
                     aria-label={`Remove ${task.title || "task"}`}
-                    className="button secondary compact-action"
+                    className="text-link danger-link mt-3"
                     onClick={() =>
                       onChange(
                         prioritizeTasks(tasks.filter((_, i) => i !== index)),
                       )
                     }
                   >
-                    <Trash2 aria-hidden="true" />
-                    Remove
+                    <Trash2 aria-hidden="true" /> Remove task
                   </button>
-                </div>
+                </details>
               )}
             </article>
           ))}
@@ -724,6 +729,14 @@ function ReviewAndApprove({
 }) {
   const setup = data.setup;
   const result = data.result;
+  const calendars = useQuery({
+    queryKey: ["connections", "google-calendars"],
+    queryFn: connections.googleCalendars,
+    enabled: !!setup?.calendar_id,
+  });
+  const calendarName =
+    calendars.data?.find((calendar) => calendar.id === setup?.calendar_id)
+      ?.summary || "your selected Google Calendar";
   const solve = useMutation({
     mutationFn: () => plan.solve(id),
     onSuccess: invalidate,
@@ -814,10 +827,13 @@ function ReviewAndApprove({
             <>
               <div className="section-heading">
                 <div>
-                  <h2 className="section-title">Finalize schedule</h2>
+                  <h2 className="section-title">
+                    Add this week to your calendar
+                  </h2>
                   <p className="text-sm text-muted">
-                    One click approves this exact schedule and creates the study
-                    blocks on Google Calendar.
+                    {result?.sessions.length || 0} study{" "}
+                    {(result?.sessions.length || 0) === 1 ? "block" : "blocks"}{" "}
+                    will be created in {calendarName}.
                   </p>
                 </div>
                 {data.approval && <Status value={data.approval.status} />}
@@ -830,7 +846,7 @@ function ReviewAndApprove({
                     onClick={() => solve.mutate()}
                   >
                     <RotateCcw aria-hidden="true" />
-                    Regenerate remaining sessions
+                    Rebuild schedule
                   </button>
                 )}
                 <button
@@ -842,8 +858,8 @@ function ReviewAndApprove({
                 >
                   <Send aria-hidden="true" />
                   {publish.isPending
-                    ? "Creating calendar blocks..."
-                    : "Approve and create calendar blocks"}
+                    ? "Adding to Google Calendar…"
+                    : "Add to Google Calendar"}
                 </button>
               </div>
             </>
@@ -852,8 +868,8 @@ function ReviewAndApprove({
             !canPublish &&
             result?.status === "INFEASIBLE" && (
               <p className="mt-3 text-sm text-muted">
-                This plan is not feasible yet -- adjust the window, preferences,
-                or task load before publishing.
+                Relay could not fit everything into this week. Adjust your
+                dates, preferences, or task list and rebuild the schedule.
               </p>
             )}
         </div>
@@ -882,14 +898,19 @@ function ExecutionSummary({ data }: { data: PlanDetail }) {
   } | null;
   return (
     <div className="panel">
-      <h2 className="section-title">Calendar result</h2>
+      <h2 className="section-title">Added to Google Calendar</h2>
       <p className="text-sm">
-        {payload?.created_count ?? 0} of {payload?.approved_count ?? 0} approved
-        study blocks created
-        {payload?.failed_count ? `, ${payload.failed_count} failed` : ""}.
+        {payload?.created_count ?? 0} study{" "}
+        {(payload?.created_count ?? 0) === 1 ? "block was" : "blocks were"}{" "}
+        added
+        {payload?.failed_count
+          ? `. ${payload.failed_count} could not be added`
+          : ""}
+        .
       </p>
       <CompletionActions
         workflow="plan"
+        actionLabel="Open Google Calendar"
         destinations={[
           data.setup?.notion_export?.database_url,
           ...(payload?.execution?.result?.created || []).map(
@@ -1046,29 +1067,23 @@ function SchedulePanel({
   const courseFor = (taskId: string) =>
     tasks.find((task) => task.id === taskId)?.course;
   const byDay = new Map<string, StudySession[]>();
-  for (const session of result.sessions) {
-    const day = new Date(session.start).toLocaleDateString(undefined, {
-      weekday: "long",
-      month: "short",
-      day: "numeric",
-    });
+  for (const session of [...result.sessions].sort((a, b) =>
+    a.start.localeCompare(b.start),
+  )) {
+    const day = localDateValue(session.start);
     byDay.set(day, [...(byDay.get(day) || []), session]);
   }
   return (
-    <div className="panel">
-      <div className="section-heading">
-        <h2 className="section-title">Study plan</h2>
-        <Status value={result.status} />
-      </div>
-      <div className="mt-4 grid gap-3 text-sm text-muted md:grid-cols-4">
-        <span>
-          {result.metrics.tasks_fully_scheduled} task(s) fully scheduled
-        </span>
-        <span>
-          {result.metrics.tasks_partially_scheduled} partially scheduled
-        </span>
-        <span>{result.metrics.session_count} session(s)</span>
-        <span>{result.metrics.unscheduled_minutes} unscheduled minute(s)</span>
+    <div className="planner-result">
+      <div className="planner-result-heading">
+        <div>
+          <p className="eyebrow">Your study week</p>
+          <h2 className="section-title">What you’re studying, and when</h2>
+        </div>
+        <p className="planner-session-count">
+          {result.metrics.session_count} study{" "}
+          {result.metrics.session_count === 1 ? "block" : "blocks"}
+        </p>
       </div>
       {result.conflicts.length > 0 && (
         <div className="notice mt-5">
@@ -1082,81 +1097,112 @@ function SchedulePanel({
           </ul>
         </div>
       )}
-      <div className="mt-6 space-y-6">
-        {[...byDay.entries()].map(([day, sessions]) => (
-          <div key={day}>
-            <h3 className="section-title">{day}</h3>
-            <div className="mt-3 space-y-2">
-              {sessions.map((session) => (
-                <div
-                  key={session.id}
-                  className={`session-card flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-4 py-3 ${session.locked ? "locked" : ""}`}
-                >
-                  <div>
-                    <p className="font-medium">{titleFor(session.task_id)}</p>
-                    <p className="text-sm text-muted">
-                      {courseFor(session.task_id)
-                        ? `${courseFor(session.task_id)} - `
-                        : ""}
-                      {new Date(session.start).toLocaleTimeString(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}{" "}
-                      -{" "}
-                      {new Date(session.end).toLocaleTimeString(undefined, {
-                        hour: "numeric",
-                        minute: "2-digit",
-                      })}
-                    </p>
-                  </div>
-                  {editable && session.id && (
-                    <div className="flex gap-2">
-                      <button
-                        className={
-                          session.locked ? "button" : "button secondary"
-                        }
-                        disabled={busy}
-                        aria-pressed={session.locked}
-                        aria-label={
-                          session.locked
-                            ? "Locked -- click to unlock this session"
-                            : "Click to lock this session in place"
-                        }
-                        title={
-                          session.locked
-                            ? "Locked in place -- click to unlock"
-                            : "Click to lock this session in place"
-                        }
-                        onClick={() =>
-                          onLock(session.id as string, !session.locked)
-                        }
-                      >
-                        {session.locked ? (
-                          <Unlock aria-hidden="true" />
-                        ) : (
-                          <Lock aria-hidden="true" />
-                        )}
-                        {session.locked ? "Locked" : "Lock"}
-                      </button>
-                      <button
-                        className="button secondary"
-                        disabled={busy}
-                        aria-label="Remove session"
-                        title="Remove this session"
-                        onClick={() => onRemove(session.id as string)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
+      <div className="planner-workspace">
+        <aside className="planner-task-summary">
+          <h3>Tasks</h3>
+          <ul>
+            {tasks.map((task) => (
+              <li key={task.id}>
+                <strong>{task.title}</strong>
+                <span>
+                  {task.estimated_minutes} min · due{" "}
+                  {new Date(task.deadline).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </aside>
+        <div className="week-calendar" aria-label="Weekly study schedule">
+          {[...byDay.entries()].map(([day, sessions]) => (
+            <section className="calendar-day" key={day}>
+              <header>
+                <span>
+                  {new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
+                    weekday: "short",
+                  })}
+                </span>
+                <strong>
+                  {new Date(`${day}T12:00:00`).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </strong>
+              </header>
+              <div className="calendar-day-blocks">
+                {sessions.map((session) => (
+                  <div
+                    key={session.id}
+                    className={`session-card calendar-block ${session.locked ? "locked" : ""}`}
+                  >
+                    <div>
+                      <p className="font-medium">{titleFor(session.task_id)}</p>
+                      <p className="text-sm text-muted">
+                        {courseFor(session.task_id)
+                          ? `${courseFor(session.task_id)} · `
+                          : ""}
+                        {new Date(session.start).toLocaleTimeString(undefined, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}{" "}
+                        –{" "}
+                        {new Date(session.end).toLocaleTimeString(undefined, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </p>
                     </div>
-                  )}
-                  {(!editable || !session.id) && session.locked && (
-                    <span className="context-tag locked">Locked</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
+                    {editable && session.id && (
+                      <div className="calendar-block-actions">
+                        <button
+                          className={
+                            session.locked ? "button" : "button secondary"
+                          }
+                          disabled={busy}
+                          aria-pressed={session.locked}
+                          aria-label={
+                            session.locked
+                              ? "Locked -- click to unlock this session"
+                              : "Click to lock this session in place"
+                          }
+                          title={
+                            session.locked
+                              ? "Locked in place -- click to unlock"
+                              : "Click to lock this session in place"
+                          }
+                          onClick={() =>
+                            onLock(session.id as string, !session.locked)
+                          }
+                        >
+                          {session.locked ? (
+                            <Unlock aria-hidden="true" />
+                          ) : (
+                            <Lock aria-hidden="true" />
+                          )}
+                          {session.locked ? "Keep time" : "Keep time"}
+                        </button>
+                        <button
+                          className="button secondary"
+                          disabled={busy}
+                          aria-label="Remove session"
+                          title="Remove this session"
+                          onClick={() => onRemove(session.id as string)}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
+                    {(!editable || !session.id) && session.locked && (
+                      <span className="context-tag locked">Locked</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          ))}
+        </div>
       </div>
     </div>
   );

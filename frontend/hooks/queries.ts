@@ -6,6 +6,7 @@ import { runs } from "@/features/workflow-runs/api";
 import { approvals } from "@/features/approvals/api";
 import { connections } from "@/features/connections/api";
 import { preferences } from "@/features/preferences/api";
+import { projects } from "@/features/projects/api";
 
 export const useUser = () => useQuery({ queryKey: ["user"], queryFn: auth.me });
 export const useDefinitions = () =>
@@ -22,6 +23,10 @@ export const useConnections = () =>
   useQuery({ queryKey: ["connections"], queryFn: connections.list });
 export const usePreferences = () =>
   useQuery({ queryKey: ["preferences"], queryFn: preferences.get });
+export const useProjects = () =>
+  useQuery({ queryKey: ["projects"], queryFn: projects.list });
+export const useProject = (id: string) =>
+  useQuery({ queryKey: ["projects", id], queryFn: () => projects.get(id) });
 
 export const useIncompleteRun = () =>
   useQuery({ queryKey: ["runs", "incomplete"], queryFn: runs.incomplete });

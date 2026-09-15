@@ -58,8 +58,14 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.getByRole("link", { name: "Plan my week", exact: true }).click();
   await expect(page).toHaveURL(/\/workflows\/plan$/);
-  await page.getByRole("button", { name: "Start a study plan" }).click();
+  await page.getByRole("button", { name: "Build a study plan" }).click();
   await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
+  await page.getByRole("button", { name: "Add task" }).click();
+  await page.getByLabel("Task name").fill("Assignment 3");
+  await expect(page.getByLabel("Estimated effort (minutes)")).toHaveValue(
+    "60",
+  );
+  await expect(page.getByRole("button", { name: "Build my plan" })).toBeDisabled();
   // Google Calendar was never connected during onboarding (skipped above),
   // and Plan now requires an explicit calendar before setup can be saved.
   await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
@@ -91,6 +97,68 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await expect(
     page.getByRole("heading", { name: "Recent work" }),
   ).toBeVisible();
+});
+
+test("meeting workspace keeps action items compact and editable", async ({
+  page,
+}) => {
+  const email = `meeting-${Date.now()}@example.com`;
+  await page.goto("/signup");
+  await page.getByLabel("Name", { exact: true }).fill("Relay Student");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill("browser test password 123");
+  await page.getByRole("button", { name: "Create account" }).click();
+  await page.getByRole("button", { name: "Get started" }).click();
+  await page.getByRole("button", { name: "Skip for now" }).click();
+  await page.getByRole("button", { name: "Save and continue" }).click();
+  await page.getByRole("button", { name: "Go to dashboard" }).click();
+
+  await page.goto("/workflows/collaborate");
+  await page.getByRole("button", { name: "New project" }).click();
+  await page.getByLabel("Project name").fill("StudySync");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("button", { name: "Start a meeting" }).click();
+  await page
+    .getByLabel("Paste transcript text")
+    .fill(
+      "Sarah: We decided to use the new API.\nAlex: I'll implement the API tests by Friday.",
+    );
+  await page.getByRole("button", { name: "Save transcript" }).click();
+  await page.getByRole("button", { name: "Prepare meeting" }).click();
+  await page.getByRole("button", { name: "Process meeting" }).click();
+
+  await expect(page.getByRole("heading", { name: "Summary" })).toBeVisible({
+    timeout: 15_000,
+  });
+  await expect(page.locator(".action-item-row")).toHaveCount(1);
+  await expect(page.getByText(/confidence/i)).toHaveCount(0);
+
+  await page.locator(".action-item-row summary").click();
+  await page.getByLabel("Task").fill("Write API tests");
+  await page.getByRole("button", { name: "Save edits" }).click();
+  await expect(page.locator(".action-item-row summary")).toContainText(
+    "Write API tests",
+  );
+
+  await page
+    .locator(".learn-disclosure")
+    .filter({ hasText: "Action items" })
+    .locator("summary")
+    .first()
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Proceed to Approval" }),
+  ).toBeVisible();
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
 });
 
 test("LEARN upload review approval and mock publish", async ({

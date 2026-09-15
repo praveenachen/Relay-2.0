@@ -7,9 +7,9 @@ export default async function WorkspaceLayout({
 }) {
   const user = await requireUser();
   return (
-    <>
+    <div className="product-shell">
       <WorkspaceNav name={user.name} />
       <main className="workspace-shell">{children}</main>
-    </>
+    </div>
   );
 }

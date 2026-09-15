@@ -243,8 +243,7 @@ function ProjectSetupForm({
                 ))}
               </select>
               <span className="text-sm text-muted">
-                Choose a Notion database, not a page. Relay creates one task row
-                per approved action item.
+                Choose where confirmed meeting tasks should be added.
               </span>
               {notionDatabases.error && (
                 <span className="text-sm text-danger">
@@ -326,48 +325,51 @@ function ProjectSetupForm({
         </label>
       </div>
       {notionDatabaseId && (
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <label className="field">
-            Title property
-            <input
-              value={mappingTitle}
-              onChange={(e) => setMappingTitle(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            Owner property
-            <input
-              value={mappingOwner}
-              onChange={(e) => setMappingOwner(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            Deadline property
-            <input
-              value={mappingDeadline}
-              onChange={(e) => setMappingDeadline(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            Status property
-            <input
-              value={mappingStatus}
-              onChange={(e) => setMappingStatus(e.target.value)}
-            />
-          </label>
-          <label className="field">
-            Status property type
-            <select
-              value={statusType}
-              onChange={(e) =>
-                setStatusType(e.target.value as "select" | "status")
-              }
-            >
-              <option value="status">Status</option>
-              <option value="select">Select</option>
-            </select>
-          </label>
-        </div>
+        <details className="project-advanced">
+          <summary>Advanced Notion field settings</summary>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <label className="field">
+              Title property
+              <input
+                value={mappingTitle}
+                onChange={(e) => setMappingTitle(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              Owner property
+              <input
+                value={mappingOwner}
+                onChange={(e) => setMappingOwner(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              Deadline property
+              <input
+                value={mappingDeadline}
+                onChange={(e) => setMappingDeadline(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              Status property
+              <input
+                value={mappingStatus}
+                onChange={(e) => setMappingStatus(e.target.value)}
+              />
+            </label>
+            <label className="field">
+              Status property type
+              <select
+                value={statusType}
+                onChange={(e) =>
+                  setStatusType(e.target.value as "select" | "status")
+                }
+              >
+                <option value="status">Status</option>
+                <option value="select">Select</option>
+              </select>
+            </label>
+          </div>
+        </details>
       )}
       <ErrorMessage error={create.error} />
       <button
@@ -442,8 +444,8 @@ function transcriptNextStep(
 ) {
   if (busy) {
     return {
-      title: "Relay is working on this step.",
-      description: "Wait for the current action to finish before moving on.",
+      title: "Processing your meeting…",
+      description: "Finding the summary, decisions, and action items.",
     };
   }
   if (!data.source) {
@@ -456,15 +458,14 @@ function transcriptNextStep(
   }
   if (data.stage !== "transcript_ready" && data.stage !== "plan_ready") {
     return {
-      title: "Next: extract transcript segments.",
+      title: "Ready to process your meeting.",
       description:
-        "Relay will split the transcript into structured segments before analysis.",
+        "Relay will prepare the transcript, then find the important outcomes.",
     };
   }
   return {
-    title: "Next: analyze the meeting.",
-    description:
-      "Relay will identify decisions, owners, deadlines, and proposed Notion or GitHub work.",
+    title: "Find decisions and action items.",
+    description: "Relay will organize the meeting into a clear project update.",
   };
 }
 
@@ -476,40 +477,38 @@ function collaborateReviewNextStep(
 ) {
   if (busy) {
     return {
-      title: "Relay is working on this step.",
-      description: "Wait for the current action to finish before moving on.",
+      title: "Saving your changes…",
+      description: "Your meeting workspace will refresh when it is ready.",
     };
   }
   if (data.run.status === "PLAN_READY") {
     return {
       title: hasUnsavedEdits
         ? "Next: save your action-item edits."
-        : "Next: request approval for project actions.",
+        : "Your action items are ready.",
       description: hasUnsavedEdits
-        ? "Save the edited owners, deadlines, or destinations before asking for approval."
+        ? "Save your owner, due date, or destination changes before continuing."
         : actionCount
-          ? "Review the extracted action items, then request approval when they look right."
-          : "Relay did not find action items to approve in this transcript.",
+          ? "Review the tasks, then continue when they look right."
+          : "Relay did not find action items in this transcript.",
     };
   }
   if (data.approvals.some((approval) => approval.status === "PENDING")) {
     return {
-      title: "Next: approve the project actions.",
-      description:
-        "Approve all actions at once, or inspect individual actions before Relay writes to Notion or GitHub.",
+      title: "Confirm what Relay should create.",
+      description: "Review the Notion tasks and GitHub issues below.",
     };
   }
   if (data.run.status === "APPROVED") {
     return {
-      title: "Next: create approved project work.",
+      title: "Ready to create your project tasks.",
       description:
-        "Send the approved action items to their selected destinations.",
+        "Relay will create the confirmed Notion tasks and GitHub issues.",
     };
   }
   return {
-    title: "Workflow status updated.",
-    description:
-      "Relay will show the next available action as the collaboration workflow progresses.",
+    title: "Your meeting workspace was updated.",
+    description: "Review the latest details below.",
   };
 }
 
@@ -520,7 +519,7 @@ function NextStepNotice({
   title: string;
   description: string;
 }) {
-  const working = title.startsWith("Relay is working");
+  const working = title.includes("…");
   return (
     <div className={`notice next-step my-6 ${working ? "working" : ""}`}>
       <div>
@@ -624,7 +623,7 @@ function TranscriptStage({
             disabled={busy}
             onClick={() => parse.mutate()}
           >
-            Extract segments
+            Prepare meeting
           </button>
         )}
         {(data.stage === "transcript_ready" ||
@@ -635,7 +634,9 @@ function TranscriptStage({
             onClick={() => analyze.mutate()}
           >
             <Play aria-hidden="true" />
-            {data.stage === "analyzing" ? "Analyzing..." : "Analyze meeting"}
+            {data.stage === "analyzing"
+              ? "Processing your meeting…"
+              : "Process meeting"}
           </button>
         )}
       </div>
@@ -714,6 +715,13 @@ function ReviewAndApprove({
   const isCompletePhase =
     data.run.status === "COMPLETED" ||
     data.run.status === "PARTIALLY_COMPLETED";
+  const notionCount = pendingApprovals.filter(
+    (approval) => typeof approval.original_payload.database_id === "string",
+  ).length;
+  const githubCount = pendingApprovals.filter(
+    (approval) =>
+      typeof approval.original_payload.repository_owner === "string",
+  ).length;
 
   const updateItem = (index: number, patch: Partial<PlannedAction>) => {
     const next = actionItems.map((item, i) =>
@@ -750,15 +758,19 @@ function ReviewAndApprove({
 
       {isReviewPhase && (
         <>
+          <div className="meeting-meta">
+            <span>Meeting workspace</span>
+            {data.source?.filename && <span>{data.source.filename}</span>}
+          </div>
           {data.summary && <CollaborateSummary data={data} />}
           <DisclosurePanel
             title={`Decisions (${data.decisions.length})`}
-            defaultOpen={data.decisions.length > 0 && actionItems.length === 0}
+            defaultOpen
           >
             {data.decisions.length > 0 ? (
-              <div className="space-y-3">
+              <div className="decision-list">
                 {data.decisions.map((decision, index) => (
-                  <article key={index} className="learn-card">
+                  <article key={index} className="decision-item">
                     <p className="font-medium">{decision.title}</p>
                     <p className="mt-2 text-sm text-muted">
                       {decision.description}
@@ -767,7 +779,7 @@ function ReviewAndApprove({
                 ))}
               </div>
             ) : (
-              <Empty title="No decisions were extracted.">
+              <Empty title="No decisions found.">
                 Relay did not find explicit meeting decisions in this
                 transcript.
               </Empty>
@@ -779,12 +791,12 @@ function ReviewAndApprove({
             defaultOpen
           >
             {actionItems.length === 0 ? (
-              <Empty title="No action items were extracted.">
+              <Empty title="No action items found.">
                 Relay found decisions but no clear owner commitments in this
                 transcript.
               </Empty>
             ) : (
-              <div className="space-y-4">
+              <div className="action-item-list">
                 {actionItems.map((item, index) => (
                   <ActionItemCard
                     key={item.id}
@@ -827,13 +839,21 @@ function ReviewAndApprove({
       )}
 
       {isApprovalPhase && (
-        <div className="panel">
+        <div className="confirmation-panel">
           <div className="section-heading">
             <div>
-              <h2 className="section-title">Approvals</h2>
+              <p className="eyebrow">Ready to create</p>
+              <h2 className="section-title">Confirm these changes</h2>
               <p className="mt-2 text-sm text-muted">
-                Approve every pending action at once, or review and reject items
-                one by one.
+                {notionCount === 0 &&
+                  githubCount === 0 &&
+                  `${pendingApprovals.length} ${pendingApprovals.length === 1 ? "change" : "changes"} will be created`}
+                {notionCount > 0 &&
+                  `${notionCount} ${notionCount === 1 ? "task" : "tasks"} will be added to Notion`}
+                {notionCount > 0 && githubCount > 0 && ". "}
+                {githubCount > 0 &&
+                  `${githubCount} GitHub ${githubCount === 1 ? "issue or review" : "issues or reviews"} will be created`}
+                .
               </p>
             </div>
             <button
@@ -842,15 +862,12 @@ function ReviewAndApprove({
               onClick={() => approveAll.mutate()}
             >
               <Check aria-hidden="true" />
-              Approve all
+              Confirm all
             </button>
           </div>
           <div className="mt-4 space-y-3">
             {data.approvals.map((approval) => (
-              <div
-                key={approval.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-line px-4 py-3"
-              >
+              <div key={approval.id} className="confirmation-row">
                 <div>
                   <p className="text-sm font-medium">
                     {String(
@@ -860,6 +877,11 @@ function ReviewAndApprove({
                     )}
                   </p>
                   <Status value={approval.status} />
+                  <p className="mt-1 text-xs text-muted">
+                    {typeof approval.original_payload.database_id === "string"
+                      ? "Notion task"
+                      : "GitHub issue or review"}
+                  </p>
                 </div>
                 {approval.status === "PENDING" && (
                   <div className="flex gap-2">
@@ -869,7 +891,7 @@ function ReviewAndApprove({
                       onClick={() => resolve.mutate(approval)}
                     >
                       <Check aria-hidden="true" />
-                      Approve
+                      Confirm
                     </button>
                     <button
                       className="button secondary"
@@ -889,10 +911,10 @@ function ReviewAndApprove({
 
       {isExecutionPhase && (
         <div className="panel">
-          <h2 className="section-title">Ready to create work</h2>
+          <h2 className="section-title">Ready to create</h2>
           <p className="mt-2 text-sm text-muted">
-            All project actions are approved. Relay will create the selected
-            Notion and GitHub work next.
+            Your action items are confirmed. Relay will now create them in the
+            selected tools.
           </p>
           <button
             className="button mt-5"
@@ -900,7 +922,7 @@ function ReviewAndApprove({
             onClick={() => execute.mutate()}
           >
             <Send aria-hidden="true" />
-            Create approved Notion and GitHub work
+            Confirm &amp; create
           </button>
         </div>
       )}
@@ -912,9 +934,9 @@ function ReviewAndApprove({
 
 function CollaborateSummary({ data }: { data: CollaborateDetail }) {
   return (
-    <div className="panel">
+    <section className="meeting-summary">
       <h2 className="section-title">Summary</h2>
-      <p className="text-sm">{data.summary}</p>
+      <p>{data.summary}</p>
       {data.unresolved_questions.length > 0 && (
         <div className="notice mt-4">
           <p className="font-medium">Unresolved questions</p>
@@ -925,7 +947,7 @@ function CollaborateSummary({ data }: { data: CollaborateDetail }) {
           </ul>
         </div>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -970,145 +992,216 @@ function ActionItemCard({
         : [...item.destinations, destination],
     });
   };
+  const memberName = members.find(
+    (member) => member.id === item.member_id,
+  )?.display_name;
+  const owner = memberName || item.owner_name || "Unassigned";
+  const needsOwner = ["ambiguous", "unresolved"].includes(item.identity_status);
   return (
-    <article className="learn-card">
-      <div className="section-heading">
+    <details className="action-item-row">
+      <summary>
+        <span className="action-item-title">
+          <strong>{item.title}</strong>
+          {needsOwner && (
+            <small className="needs-confirmation">Owner unclear</small>
+          )}
+        </span>
+        <span>
+          <small>Owner</small>
+          {owner}
+        </span>
+        <span>
+          <small>Due</small>
+          {item.deadline_date
+            ? new Date(`${item.deadline_date}T12:00:00`).toLocaleDateString(
+                undefined,
+                { month: "short", day: "numeric" },
+              )
+            : "No due date"}
+        </span>
+        <span>
+          <small>Send to</small>
+          {item.destinations.length
+            ? item.destinations
+                .map((value) => (value === "notion" ? "Notion" : "GitHub"))
+                .join(" + ")
+            : "Nowhere yet"}
+        </span>
+        <ChevronDown className="action-item-chevron" aria-hidden="true" />
+      </summary>
+      <div className="action-item-editor">
         <label className="field grow">
-          Title
+          Task
           <input
             disabled={!editable}
             value={item.title}
             onChange={(event) => onChange({ title: event.target.value })}
           />
         </label>
+        <label className="field">
+          Description
+          <textarea
+            disabled={!editable}
+            rows={2}
+            value={item.description}
+            onChange={(event) => onChange({ description: event.target.value })}
+          />
+        </label>
+        <div className="action-item-edit-grid">
+          <label className="field">
+            Owner
+            {item.identity_status === "ambiguous" ? (
+              <select
+                disabled={!editable}
+                value={item.member_id || ""}
+                onChange={(event) =>
+                  onChange({
+                    member_id: event.target.value || null,
+                    identity_status: "resolved",
+                  })
+                }
+              >
+                <option value="">Choose who this is</option>
+                {item.identity_candidates.map((candidate) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {candidate.display_name}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <select
+                disabled={!editable}
+                value={item.member_id || ""}
+                onChange={(event) =>
+                  onChange({
+                    member_id: event.target.value || null,
+                    identity_status: event.target.value
+                      ? "resolved"
+                      : "unresolved",
+                  })
+                }
+              >
+                <option value="">{item.owner_name || "Unassigned"}</option>
+                {members.map((member) => (
+                  <option key={member.id} value={member.id}>
+                    {member.display_name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </label>
+          <label className="field">
+            Deadline
+            <input
+              type="date"
+              disabled={!editable}
+              value={item.deadline_date || ""}
+              onChange={(event) =>
+                onChange({ deadline_date: event.target.value || null })
+              }
+            />
+          </label>
+        </div>
+        {item.category === "REVIEW_REQUEST" && (
+          <p className="context-tag mt-3">
+            {item.pull_request_number
+              ? `Pull request #${item.pull_request_number}`
+              : "No pull request identified -- this review request stays unresolved."}
+          </p>
+        )}
+        <fieldset className="action-destinations">
+          <legend>Send to</legend>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              disabled={!editable}
+              checked={item.destinations.includes("notion")}
+              onChange={() => toggleDestination("notion")}
+            />
+            Notion
+          </label>
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              disabled={
+                !editable ||
+                (item.category === "REVIEW_REQUEST" &&
+                  !item.pull_request_number)
+              }
+              checked={item.destinations.includes("github")}
+              onChange={() => toggleDestination("github")}
+            />
+            GitHub
+          </label>
+        </fieldset>
         {editable && (
           <button
-            className="button secondary"
+            className="text-link danger-link"
             aria-label={`Remove ${item.title}`}
             onClick={onRemove}
           >
-            <Trash2 aria-hidden="true" />
+            <Trash2 aria-hidden="true" /> Remove task
           </button>
         )}
       </div>
-      <p className="mt-2 text-xs text-muted">
-        {item.category.replaceAll("_", " ")} - confidence {item.confidence}
-      </p>
-      <label className="field mt-3">
-        Description
-        <textarea
-          disabled={!editable}
-          rows={2}
-          value={item.description}
-          onChange={(event) => onChange({ description: event.target.value })}
-        />
-      </label>
-      <div className="mt-3 grid gap-3 md:grid-cols-2">
-        <label className="field">
-          Owner
-          {item.identity_status === "ambiguous" ? (
-            <select
-              disabled={!editable}
-              value={item.member_id || ""}
-              onChange={(event) =>
-                onChange({
-                  member_id: event.target.value || null,
-                  identity_status: "resolved",
-                })
-              }
-            >
-              <option value="">Choose who this is</option>
-              {item.identity_candidates.map((candidate) => (
-                <option key={candidate.id} value={candidate.id}>
-                  {candidate.display_name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <select
-              disabled={!editable}
-              value={item.member_id || ""}
-              onChange={(event) =>
-                onChange({
-                  member_id: event.target.value || null,
-                  identity_status: event.target.value
-                    ? "resolved"
-                    : "unresolved",
-                })
-              }
-            >
-              <option value="">{item.owner_name || "Unassigned"}</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.display_name}
-                </option>
-              ))}
-            </select>
-          )}
-        </label>
-        <label className="field">
-          Deadline
-          <input
-            type="date"
-            disabled={!editable}
-            value={item.deadline_date || ""}
-            onChange={(event) =>
-              onChange({ deadline_date: event.target.value || null })
-            }
-          />
-        </label>
-      </div>
-      {item.category === "REVIEW_REQUEST" && (
-        <p className="context-tag mt-3">
-          {item.pull_request_number
-            ? `Pull request #${item.pull_request_number}`
-            : "No pull request identified -- this review request stays unresolved."}
-        </p>
-      )}
-      <div className="mt-3 flex flex-wrap gap-4 text-sm">
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            disabled={!editable}
-            checked={item.destinations.includes("notion")}
-            onChange={() => toggleDestination("notion")}
-          />
-          Notion
-        </label>
-        <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            disabled={
-              !editable ||
-              (item.category === "REVIEW_REQUEST" && !item.pull_request_number)
-            }
-            checked={item.destinations.includes("github")}
-            onChange={() => toggleDestination("github")}
-          />
-          GitHub
-        </label>
-      </div>
-    </article>
+    </details>
   );
 }
 
 function ExecutionSummary({ data }: { data: CollaborateDetail }) {
   const payload = data.run.result_payload as {
-    results?: { status?: string; external_url?: string }[];
+    results?: {
+      status?: string;
+      external_url?: string;
+      action_type?: string;
+    }[];
     succeeded_count?: number;
     failed_count?: number;
     total_count?: number;
   } | null;
+  const succeeded = (payload?.results || []).filter(
+    (item) => item.status === "succeeded",
+  );
+  const notionCreated = succeeded.filter((item) =>
+    item.action_type?.toUpperCase().includes("NOTION"),
+  ).length;
+  const githubCreated = succeeded.filter((item) =>
+    item.action_type?.toUpperCase().includes("GITHUB"),
+  ).length;
   return (
-    <div className="panel">
-      <h2 className="section-title">Result</h2>
-      <p className="text-sm">
-        {payload?.succeeded_count ?? 0} of {payload?.total_count ?? 0} approved
-        actions completed
-        {payload?.failed_count ? `, ${payload.failed_count} failed` : ""}.
-      </p>
+    <div className="created-summary">
+      <p className="eyebrow">Created</p>
+      <h2 className="section-title">Your project tools are up to date</h2>
+      <ul>
+        {notionCreated > 0 && (
+          <li>
+            <Check aria-hidden="true" /> {notionCreated} Notion{" "}
+            {notionCreated === 1 ? "task" : "tasks"}
+          </li>
+        )}
+        {githubCreated > 0 && (
+          <li>
+            <Check aria-hidden="true" /> {githubCreated} GitHub{" "}
+            {githubCreated === 1 ? "issue or review" : "issues or reviews"}
+          </li>
+        )}
+        {notionCreated === 0 && githubCreated === 0 && (
+          <li>
+            <Check aria-hidden="true" /> {payload?.succeeded_count ?? 0} project{" "}
+            {(payload?.succeeded_count ?? 0) === 1 ? "item" : "items"}
+          </li>
+        )}
+      </ul>
+      {(payload?.failed_count || 0) > 0 && (
+        <p className="notice error mt-4">
+          {payload?.succeeded_count ?? 0}{" "}
+          {(payload?.succeeded_count ?? 0) === 1 ? "item was" : "items were"}{" "}
+          created. {payload?.failed_count} could not be created.
+        </p>
+      )}
       <CompletionActions
         workflow="collaborate"
+        actionLabel="Open created items"
         destinations={(payload?.results || [])
           .filter((item) => item.status === "succeeded")
           .map((item) => item.external_url)}
