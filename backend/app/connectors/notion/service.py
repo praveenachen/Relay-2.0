@@ -137,7 +137,6 @@ class NotionDestinationService:
         return await self.refresh(owner)
 
     async def select(self, owner: UUID, destination_id: str) -> NotionDestination:
-        await self.refresh(owner)
         connection = await self.connection(owner)
         records = (
             await self.session.scalars(
