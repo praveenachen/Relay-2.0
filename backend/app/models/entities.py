@@ -145,6 +145,40 @@ class ProjectMember(Identity, Timestamps, Base):
     github_username: Mapped[str | None] = mapped_column(String(255))
 
 
+class ProjectSource(Identity, Timestamps, Base):
+    __tablename__ = "project_source"
+    __table_args__ = (Index("ix_project_source_project", "project_workspace_id"),)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    project_workspace_id: Mapped[UUID] = mapped_column(ForeignKey("project_workspace.id"))
+    source_type: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(255))
+    original_filename: Mapped[str | None] = mapped_column(String(255))
+    content: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="PROCESSING")
+    error_message: Mapped[str | None] = mapped_column(Text)
+
+
+class ProjectTask(Identity, Timestamps, Base):
+    __tablename__ = "project_task"
+    __table_args__ = (
+        Index("ix_project_task_project", "project_workspace_id"),
+        UniqueConstraint("proposed_action_id"),
+    )
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("user.id"))
+    project_workspace_id: Mapped[UUID] = mapped_column(ForeignKey("project_workspace.id"))
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str | None] = mapped_column(Text)
+    due_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    estimate_minutes: Mapped[int | None]
+    priority: Mapped[str | None] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(20), default="TODO")
+    source_id: Mapped[UUID | None] = mapped_column(ForeignKey("project_source.id"))
+    source_reference: Mapped[str | None] = mapped_column(String(500))
+    proposed_action_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("proposed_action.id")
+    )
+
+
 class WorkflowRun(Identity, Timestamps, Base):
     __tablename__ = "workflow_run"
     __table_args__ = (Index("ix_run_user_created", "user_id", "created_at"),)

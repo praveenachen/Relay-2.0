@@ -18,6 +18,8 @@ from app.models.entities import (
     AuditEvent,
     ConnectedAccount,
     ProjectMember,
+    ProjectSource,
+    ProjectTask,
     ProjectWorkspace,
     ProposedAction,
     UserPreference,
@@ -163,5 +165,43 @@ class RelayRepository:
                 select(ProjectMember)
                 .where(ProjectMember.project_workspace_id == project_id)
                 .order_by(ProjectMember.display_name)
+            )
+        ).all()
+
+    async def sources(self, project_id: UUID, owner: UUID) -> Sequence[ProjectSource]:
+        await self.project(project_id, owner)
+        return (
+            await self.session.scalars(
+                select(ProjectSource)
+                .where(
+                    ProjectSource.project_workspace_id == project_id,
+                    ProjectSource.user_id == owner,
+                )
+                .order_by(ProjectSource.created_at.desc())
+            )
+        ).all()
+
+    async def source(self, source_id: UUID, owner: UUID) -> ProjectSource:
+        source = await self.session.scalar(
+            select(ProjectSource).where(
+                ProjectSource.id == source_id, ProjectSource.user_id == owner
+            )
+        )
+        if source is None:
+            from app.domain.errors import SourceNotFound
+
+            raise SourceNotFound()
+        return source
+
+    async def tasks(self, project_id: UUID, owner: UUID) -> Sequence[ProjectTask]:
+        await self.project(project_id, owner)
+        return (
+            await self.session.scalars(
+                select(ProjectTask)
+                .where(
+                    ProjectTask.project_workspace_id == project_id,
+                    ProjectTask.user_id == owner,
+                )
+                .order_by(ProjectTask.created_at, ProjectTask.id)
             )
         ).all()

@@ -79,6 +79,48 @@ class ProjectNotFound(DomainError):
     message = "Project not found."
 
 
+class SourceNotFound(DomainError):
+    code = "SOURCE_NOT_FOUND"
+    status_code = 404
+    message = "Source not found."
+
+
+class SourceTypeNotSupported(DomainError):
+    code = "SOURCE_TYPE_NOT_SUPPORTED"
+    status_code = 422
+    message = "This source type is not available in this space."
+
+
+class SourceContentRequired(DomainError):
+    code = "SOURCE_CONTENT_REQUIRED"
+    status_code = 422
+    message = "Add source text or choose a document to process."
+
+
+class SourceProcessingFailed(DomainError):
+    code = "SOURCE_PROCESSING_FAILED"
+    status_code = 422
+    message = "Relay couldn't process this source. Check it and try again."
+
+
+class TaskProposalNotFound(DomainError):
+    code = "TASK_PROPOSAL_NOT_FOUND"
+    status_code = 404
+    message = "Task proposal not found."
+
+
+class TaskProposalNeedsConfirmation(DomainError):
+    code = "TASK_PROPOSAL_NEEDS_CONFIRMATION"
+    status_code = 409
+    message = "Confirm the unclear fields before accepting this task."
+
+
+class TaskCreationFailed(DomainError):
+    code = "TASK_CREATION_FAILED"
+    status_code = 502
+    message = "Relay couldn't create the selected task. Please retry."
+
+
 class CredentialStorageUnavailable(DomainError):
     code = "CREDENTIAL_STORAGE_UNAVAILABLE"
     status_code = 503

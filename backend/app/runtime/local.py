@@ -32,6 +32,8 @@ from app.domain.errors import ApprovalPayloadMismatch, DomainError, Unauthorized
 from app.domain.ports import CredentialStore
 from app.models.entities import ConnectedAccount, LocalExecution, now
 from app.runtime.client import ExecutionRequest, ExecutionSnapshot, ExecutionStatus
+from app.sources.schemas import TaskProposalEdit
+from app.sources.service import CREATE_TASK_OPERATION
 from app.workflows.lecture_notes.actions import OPERATION as LEARN_OPERATION
 from app.workflows.project_meeting.actions import (
     CREATE_GITHUB_ISSUE_OPERATION,
@@ -156,6 +158,14 @@ class LocalRuntimeClient:
                     review_action, request.idempotency_key
                 )
                 snapshot.result = review_result.model_dump(mode="json")
+                snapshot.status = ExecutionStatus.SUCCEEDED
+            elif request.operation == CREATE_TASK_OPERATION:
+                task = TaskProposalEdit.model_validate(request.payload)
+                snapshot.result = {
+                    "accepted": True,
+                    "project_id": str(task.project_id),
+                    "source_id": str(task.source_id),
+                }
                 snapshot.status = ExecutionStatus.SUCCEEDED
             else:
                 raise ValueError("Unsupported local operation")

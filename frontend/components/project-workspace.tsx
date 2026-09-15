@@ -3,18 +3,24 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { CalendarDays, CheckCircle2, Circle, Clock3, FileText, ListTodo, MoreHorizontal, Plus, Sparkles, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { CalendarDays, CheckCircle2, Circle, Clock3, FileText, ListTodo, MoreHorizontal, Plus, Sparkles, Trash2, X } from "lucide-react";
 import { useProject } from "@/hooks/queries";
 import { Empty, ErrorMessage, Loading } from "@/components/ui";
 import { readTasks, useProjectTasks, writeTasks, type ProjectTask } from "@/lib/project-tasks";
+import { SourceCaptureModal } from "@/components/source-capture-modal";
+import { projects, type Project } from "@/features/projects/api";
+import type { SourceType } from "@/features/sources/api";
+import { useProjectSources, useServerTasks } from "@/hooks/queries";
+import { localDateValue } from "@/lib/datetime";
 
 const tabs = ["overview", "tasks", "plan", "sources"] as const;
 type Tab = (typeof tabs)[number];
 const statusLabels = { TODO: "Todo", IN_PROGRESS: "In progress", DONE: "Done" } as const;
 const addOptions = {
-  SCHOOL: [["Assignment / brief", "/workflows/learn"], ["Course outline", "/workflows/learn"], ["Study goal", "/workflows/plan"]],
-  WORK: [["Meeting notes / transcript", "/workflows/collaborate"], ["Document / brief", "/workflows/learn"], ["GitHub issue / link", "/connections"]],
-  PERSONAL: [["Goal / project idea", "/workflows/plan"], ["Notes / checklist", "/workflows/learn"]],
+  SCHOOL: [["Assignment / brief", "ASSIGNMENT_BRIEF"], ["Course outline", "COURSE_OUTLINE"], ["Study goal", "STUDY_GOAL"]],
+  WORK: [["Meeting notes / transcript", "MEETING_TRANSCRIPT"], ["Document / brief", "DOCUMENT_BRIEF"]],
+  PERSONAL: [["Goal / project idea", "PERSONAL_GOAL"], ["Notes / checklist", "NOTES_CHECKLIST"]],
 } as const;
 
 function TaskModal({ projectId, close, save }: { projectId: string; close: () => void; save: (task: ProjectTask) => void }) {
@@ -40,21 +46,51 @@ function TaskModal({ projectId, close, save }: { projectId: string; close: () =>
   );
 }
 
+function DeleteProjectModal({ name, close, confirm, pending, error }: { name: string; close: () => void; confirm: () => void; pending: boolean; error: unknown }) {
+  return (
+    <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && close()}>
+      <section className="project-modal compact" role="dialog" aria-modal="true" aria-labelledby="delete-project-title">
+        <div className="modal-heading"><div><p className="eyebrow">This can’t be undone</p><h2 id="delete-project-title">Delete “{name}”?</h2></div><button className="icon-button" onClick={close} aria-label="Close"><X /></button></div>
+        <p className="modal-body-text">This permanently removes its tasks, sources, and pending proposals.</p>
+        <ErrorMessage error={error} title="Couldn’t delete this project" />
+        <div className="modal-actions"><button type="button" className="button secondary" onClick={close} disabled={pending}>Cancel</button><button type="button" className="button reject-button" onClick={confirm} disabled={pending}>{pending ? "Deleting…" : "Delete project"}</button></div>
+      </section>
+    </div>
+  );
+}
+
 export function ProjectWorkspace() {
   const { id } = useParams<{ id: string }>();
   const search = useSearchParams();
   const router = useRouter();
   const project = useProject(id);
+  const cache = useQueryClient();
   const requestedTab = search.get("tab")?.toLowerCase();
   const [tab, setTab] = useState<Tab>(tabs.includes(requestedTab as Tab) ? requestedTab as Tab : "overview");
   const allTasks = useProjectTasks();
-  const tasks = allTasks.filter((task) => task.projectId === id);
+  const serverTasks = useServerTasks(id);
+  const remoteTasks: ProjectTask[] = (serverTasks.data || []).map((task) => ({
+    id: task.id, projectId: task.project_id, title: task.title, status: task.status,
+    priority: task.priority || "MEDIUM", dueDate: task.due_date ? localDateValue(task.due_date) : null,
+    estimate: task.estimate_minutes, sourceTitle: task.source_title,
+    sourceReference: task.source_reference, server: true,
+  }));
+  const tasks = [...remoteTasks, ...allTasks.filter((task) => task.projectId === id)];
   const [addingTask, setAddingTask] = useState(false);
+  const [addingSource, setAddingSource] = useState<SourceType | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const chooseTab = (next: Tab) => { setTab(next); router.replace(`/projects/${id}?tab=${next}`, { scroll: false }); };
   const persist = (nextProjectTasks: ProjectTask[]) => {
     const all = readTasks().filter((task) => task.projectId !== id);
-    writeTasks([...all, ...nextProjectTasks]);
+    writeTasks([...all, ...nextProjectTasks.filter((task) => !task.server)]);
   };
+  const deleteProject = useMutation({
+    mutationFn: () => projects.delete(id),
+    onSuccess: () => {
+      cache.setQueryData<Project[]>(["projects"], (current = []) => current.filter((p) => p.id !== id));
+      router.replace(`/spaces/${(project.data?.space || "personal").toLowerCase()}`);
+    },
+  });
   if (project.isPending) return <Loading label="Loading project" />;
   if (project.error || !project.data) return <ErrorMessage error={project.error || new Error("Project not found.")} />;
   const item = project.data;
@@ -65,14 +101,19 @@ export function ProjectWorkspace() {
       <Link className="project-back" href={`/spaces/${item.space.toLowerCase()}`}>← {item.space.toLowerCase()}</Link>
       <header className="project-header">
         <div><div className={`space-chip ${item.space.toLowerCase()}`}>{item.space.toLowerCase()}</div><h1>{item.name}</h1><div className="project-header-meta">{item.deadline && <span><CalendarDays /> Due {new Date(item.deadline).toLocaleDateString(undefined, { month: "long", day: "numeric" })}</span>}<span><CheckCircle2 /> {tasks.length ? `${progress}% complete` : "No tasks yet"}</span></div></div>
-        <details className="add-menu"><summary className="button"><Plus /> Add</summary><div className="add-popover"><button onClick={() => setAddingTask(true)}><ListTodo />Task</button>{addOptions[item.space].map(([label, href]) => <Link key={label} href={href}><FileText />{label}</Link>)}</div></details>
+        <div className="project-header-actions">
+          <details className="add-menu"><summary className="button"><Plus /> Add</summary><div className="add-popover"><button onClick={() => setAddingTask(true)}><ListTodo />Task</button>{addOptions[item.space].map(([label, sourceType]) => <button key={label} onClick={() => setAddingSource(sourceType)}><FileText />{label}</button>)}</div></details>
+          <button className="icon-button" onClick={() => setConfirmingDelete(true)} aria-label="Delete project" title="Delete project"><Trash2 /></button>
+        </div>
       </header>
       <nav className="project-tabs" aria-label="Project sections">{tabs.map((value) => <button key={value} className={tab === value ? "active" : ""} aria-current={tab === value ? "page" : undefined} onClick={() => chooseTab(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</nav>
       {tab === "overview" && <Overview description={item.description} tasks={tasks} deadline={item.deadline} onAdd={() => setAddingTask(true)} onTab={chooseTab} />}
       {tab === "tasks" && <TaskView tasks={tasks} update={persist} onAdd={() => setAddingTask(true)} />}
       {tab === "plan" && <PlanView tasks={tasks} />}
-      {tab === "sources" && <SourcesView project={item} />}
+      {tab === "sources" && <SourcesView projectId={id} project={item} />}
       {addingTask && <TaskModal projectId={id} close={() => setAddingTask(false)} save={(task) => { persist([...tasks, task]); setAddingTask(false); setTab("tasks"); }} />}
+      {addingSource && <SourceCaptureModal projectId={id} sourceType={addingSource} close={() => setAddingSource(null)} />}
+      {confirmingDelete && <DeleteProjectModal name={item.name} close={() => setConfirmingDelete(false)} confirm={() => deleteProject.mutate()} pending={deleteProject.isPending} error={deleteProject.error} />}
     </>
   );
 }
@@ -83,8 +124,11 @@ function Overview({ description, tasks, deadline, onAdd, onTab }: { description:
 }
 
 function TaskView({ tasks, update, onAdd }: { tasks: ProjectTask[]; update: (tasks: ProjectTask[]) => void; onAdd: () => void }) {
-  const change = (id: string, status: ProjectTask["status"]) => update(tasks.map((task) => task.id === id ? { ...task, status } : task));
-  return <section className="project-surface task-surface"><div className="surface-heading"><div><p className="eyebrow">Simple and focused</p><h2>Tasks</h2></div><button className="button secondary" onClick={onAdd}><Plus /> Add task</button></div>{tasks.length ? <div className="task-groups">{(["TODO", "IN_PROGRESS", "DONE"] as const).map((status) => <section key={status} className="task-group"><div className="task-group-title"><h3>{statusLabels[status]}</h3><span>{tasks.filter((task) => task.status === status).length}</span></div>{tasks.filter((task) => task.status === status).map((task) => <article className="task-row" key={task.id}><button aria-label={`Move ${task.title} forward`} onClick={() => change(task.id, status === "TODO" ? "IN_PROGRESS" : status === "IN_PROGRESS" ? "DONE" : "TODO")}>{status === "DONE" ? <CheckCircle2 /> : <Circle />}</button><div><strong>{task.title}</strong><p><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority.toLowerCase()}</span>{task.estimate && <span><Clock3 /> {task.estimate}m</span>}{task.dueDate && <span><CalendarDays /> {new Date(`${task.dueDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>}</p></div><MoreHorizontal /></article>)}</section>)}</div> : <Empty title="No tasks yet.">Add a first task to turn this project into a plan.</Empty>}</section>;
+  const change = (id: string, status: ProjectTask["status"]) => {
+    if (tasks.find((task) => task.id === id)?.server) return;
+    update(tasks.map((task) => task.id === id ? { ...task, status } : task));
+  };
+  return <section className="project-surface task-surface"><div className="surface-heading"><div><p className="eyebrow">Simple and focused</p><h2>Tasks</h2></div><button className="button secondary" onClick={onAdd}><Plus /> Add task</button></div>{tasks.length ? <div className="task-groups">{(["TODO", "IN_PROGRESS", "DONE"] as const).map((status) => <section key={status} className="task-group"><div className="task-group-title"><h3>{statusLabels[status]}</h3><span>{tasks.filter((task) => task.status === status).length}</span></div>{tasks.filter((task) => task.status === status).map((task) => <article className="task-row" key={task.id}><button aria-label={`Move ${task.title} forward`} onClick={() => change(task.id, status === "TODO" ? "IN_PROGRESS" : status === "IN_PROGRESS" ? "DONE" : "TODO")}>{status === "DONE" ? <CheckCircle2 /> : <Circle />}</button><div><strong>{task.title}</strong><p><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority.toLowerCase()}</span>{task.estimate && <span><Clock3 /> {task.estimate}m</span>}{task.dueDate && <span><CalendarDays /> {new Date(`${task.dueDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>}{task.sourceTitle && <span className="task-source">From {task.sourceTitle}{task.sourceReference ? ` · ${task.sourceReference}` : ""}</span>}</p></div><MoreHorizontal /></article>)}</section>)}</div> : <Empty title="No tasks yet.">Add a first task to turn this project into a plan.</Empty>}</section>;
 }
 
 function PlanView({ tasks }: { tasks: ProjectTask[] }) {
@@ -107,7 +151,9 @@ function PlanView({ tasks }: { tasks: ProjectTask[] }) {
   );
 }
 
-function SourcesView({ project }: { project: { notion_database_id: string | null; github_repository_owner: string | null; github_repository_name: string | null } }) {
-  const sources = [project.notion_database_id && { name: "Notion workspace", type: "Connected source" }, project.github_repository_owner && project.github_repository_name && { name: `${project.github_repository_owner}/${project.github_repository_name}`, type: "GitHub repository" }].filter(Boolean) as { name: string; type: string }[];
-  return <section className="project-surface source-surface"><div className="surface-heading"><div><p className="eyebrow">Reference material</p><h2>Sources</h2></div></div>{sources.length ? <ul className="source-list">{sources.map((source) => <li key={source.name}><span><FileText /></span><div><strong>{source.name}</strong><p>{source.type}</p></div></li>)}</ul> : <Empty title="No sources added.">Use the project Add menu to bring in a brief, notes, or another starting point.</Empty>}</section>;
+function SourcesView({ projectId, project }: { projectId: string; project: { notion_database_id: string | null; github_repository_owner: string | null; github_repository_name: string | null } }) {
+  const captured = useProjectSources(projectId);
+  const connected = [project.notion_database_id && { id: "notion", title: "Notion workspace", source_type: "Connected source", status: "READY" }, project.github_repository_owner && project.github_repository_name && { id: "github", title: `${project.github_repository_owner}/${project.github_repository_name}`, source_type: "GitHub repository", status: "READY" }].filter(Boolean) as { id: string; title: string; source_type: string; status: string }[];
+  const sources = [...(captured.data || []), ...connected];
+  return <section className="project-surface source-surface"><div className="surface-heading"><div><p className="eyebrow">Reference material</p><h2>Sources</h2></div></div>{sources.length ? <ul className="source-list">{sources.map((source) => <li key={source.id}><span><FileText /></span><div><strong>{source.title}</strong><p>{source.source_type.replaceAll("_", " ").toLowerCase()} · {source.status.toLowerCase()}</p></div></li>)}</ul> : <Empty title="No sources added.">Use the project Add menu to bring in a brief, notes, or another starting point.</Empty>}</section>;
 }

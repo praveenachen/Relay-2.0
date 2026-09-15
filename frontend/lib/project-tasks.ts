@@ -6,6 +6,9 @@ export type ProjectTask = {
   priority: "LOW" | "MEDIUM" | "HIGH";
   dueDate: string | null;
   estimate: number | null;
+  sourceTitle?: string | null;
+  sourceReference?: string | null;
+  server?: boolean;
 };
 
 const KEY = "relay-project-tasks";
@@ -23,6 +26,11 @@ export function readTasks(): ProjectTask[] {
 
 export function writeTasks(tasks: ProjectTask[]) {
   localStorage.setItem(KEY, JSON.stringify(tasks));
+  window.dispatchEvent(new Event("relay-tasks-changed"));
+}
+
+export function clearProjectTasks() {
+  localStorage.removeItem(KEY);
   window.dispatchEvent(new Event("relay-tasks-changed"));
 }
 

@@ -11,6 +11,7 @@ class ActionProvider(StrEnum):
     GOOGLE_CALENDAR = "GOOGLE_CALENDAR"
     NOTION = "NOTION"
     GITHUB = "GITHUB"
+    RELAY = "RELAY"
 
 
 class ConnectionStatus(StrEnum):

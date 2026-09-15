@@ -1,6 +1,6 @@
 from datetime import time
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select
 
 from app.domain.enums import Provider
 from app.models.entities import (
@@ -8,10 +8,13 @@ from app.models.entities import (
     AuditEvent,
     ExternalArtifact,
     GoogleCalendarRecord,
+    LocalExecution,
     NotionDestinationRecord,
     NotionTaskDatabaseRecord,
     OAuthState,
     ProjectMember,
+    ProjectSource,
+    ProjectTask,
     ProjectWorkspace,
     ProposedAction,
     SourceDocument,
@@ -37,8 +40,24 @@ class ProfileHistoryService:
                 select(ProjectWorkspace.id).where(ProjectWorkspace.user_id == owner)
             )
         )
+        action_ids = (
+            list(
+                await self.session.scalars(
+                    select(ProposedAction.id).where(
+                        ProposedAction.workflow_run_id.in_(run_ids)
+                    )
+                )
+            )
+            if run_ids
+            else []
+        )
 
         if run_ids:
+            # Internal tasks retain both proposal and source provenance, so they must
+            # be removed before either side of that relationship is cleared.
+            await self.session.execute(
+                delete(ProjectTask).where(ProjectTask.user_id == owner)
+            )
             await self.session.execute(
                 delete(ApprovalRequest).where(ApprovalRequest.workflow_run_id.in_(run_ids))
             )
@@ -54,9 +73,33 @@ class ProfileHistoryService:
             await self.session.execute(
                 delete(AuditEvent).where(AuditEvent.workflow_run_id.in_(run_ids))
             )
+            execution_keys = [
+                LocalExecution.idempotency_key.like(f"%:{run_id}:%")
+                for run_id in run_ids
+            ]
+            execution_keys.extend(
+                LocalExecution.idempotency_key == f"plan:{run_id}" for run_id in run_ids
+            )
+            execution_keys.extend(
+                LocalExecution.idempotency_key == f"source-task:{action_id}"
+                for action_id in action_ids
+            )
+            if execution_keys:
+                await self.session.execute(
+                    delete(LocalExecution).where(or_(*execution_keys))
+                )
             await self.session.execute(delete(WorkflowRun).where(WorkflowRun.id.in_(run_ids)))
 
         if project_ids:
+            # Sources can exist without proposals when interpretation failed.
+            await self.session.execute(
+                delete(ProjectTask).where(ProjectTask.project_workspace_id.in_(project_ids))
+            )
+            await self.session.execute(
+                delete(ProjectSource).where(
+                    ProjectSource.project_workspace_id.in_(project_ids)
+                )
+            )
             await self.session.execute(
                 delete(ProjectMember).where(ProjectMember.project_workspace_id.in_(project_ids))
             )

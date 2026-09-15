@@ -7,6 +7,7 @@ import { useUser } from "@/hooks/queries";
 import { auth } from "@/features/auth/api";
 import { PreferencesForm } from "@/components/preferences-form";
 import { ErrorMessage, Loading, PageTitle } from "@/components/ui";
+import { clearProjectTasks } from "@/lib/project-tasks";
 export default function Settings() {
   const user = useUser(),
     cache = useQueryClient();
@@ -18,6 +19,7 @@ export default function Settings() {
   const resetHistory = useMutation({
     mutationFn: auth.resetHistory,
     onSuccess: async () => {
+      clearProjectTasks();
       await cache.invalidateQueries();
     },
   });

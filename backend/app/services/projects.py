@@ -1,7 +1,21 @@
 from uuid import UUID
 
+from sqlalchemy import ColumnElement, delete, or_, select
+
 from app.domain.errors import ProjectNotFound
-from app.models.entities import ProjectMember, ProjectWorkspace
+from app.models.entities import (
+    ApprovalRequest,
+    AuditEvent,
+    ExternalArtifact,
+    LocalExecution,
+    ProjectMember,
+    ProjectSource,
+    ProjectTask,
+    ProjectWorkspace,
+    ProposedAction,
+    SourceDocument,
+    WorkflowRun,
+)
 from app.repositories.relay import RelayRepository
 from app.schemas.domain import ProjectInput, ProjectMemberInput, ProjectMemberRead, ProjectRead
 from app.services.audit import record
@@ -33,6 +47,66 @@ class ProjectService:
         record(self.session, owner, "PROJECT_UPDATED", metadata={"project_id": str(project.id)})
         await self.session.commit()
         return ProjectRead.model_validate(project)
+
+    async def delete(self, owner: UUID, project_id: UUID) -> None:
+        project = await self.repo.project(project_id, owner, lock=True)
+        run_ids = list(
+            await self.session.scalars(
+                select(WorkflowRun.id).where(WorkflowRun.project_workspace_id == project.id)
+            )
+        )
+        action_ids = (
+            list(
+                await self.session.scalars(
+                    select(ProposedAction.id).where(ProposedAction.workflow_run_id.in_(run_ids))
+                )
+            )
+            if run_ids
+            else []
+        )
+        # Tasks retain both proposal and source provenance, so they must be
+        # removed before either side of that relationship is cleared.
+        await self.session.execute(
+            delete(ProjectTask).where(ProjectTask.project_workspace_id == project.id)
+        )
+        if run_ids:
+            await self.session.execute(
+                delete(ApprovalRequest).where(ApprovalRequest.workflow_run_id.in_(run_ids))
+            )
+            await self.session.execute(
+                delete(ExternalArtifact).where(ExternalArtifact.workflow_run_id.in_(run_ids))
+            )
+            await self.session.execute(
+                delete(ProposedAction).where(ProposedAction.workflow_run_id.in_(run_ids))
+            )
+            await self.session.execute(
+                delete(SourceDocument).where(SourceDocument.workflow_run_id.in_(run_ids))
+            )
+            await self.session.execute(
+                delete(AuditEvent).where(AuditEvent.workflow_run_id.in_(run_ids))
+            )
+            execution_keys: list[ColumnElement[bool]] = [
+                LocalExecution.idempotency_key.like(f"%:{run_id}:%") for run_id in run_ids
+            ]
+            execution_keys.extend(
+                LocalExecution.idempotency_key == f"plan:{run_id}" for run_id in run_ids
+            )
+            execution_keys.extend(
+                LocalExecution.idempotency_key == f"source-task:{action_id}"
+                for action_id in action_ids
+            )
+            if execution_keys:
+                await self.session.execute(delete(LocalExecution).where(or_(*execution_keys)))
+            await self.session.execute(delete(WorkflowRun).where(WorkflowRun.id.in_(run_ids)))
+        await self.session.execute(
+            delete(ProjectSource).where(ProjectSource.project_workspace_id == project.id)
+        )
+        await self.session.execute(
+            delete(ProjectMember).where(ProjectMember.project_workspace_id == project.id)
+        )
+        await self.session.delete(project)
+        record(self.session, owner, "PROJECT_DELETED", metadata={"project_id": str(project_id)})
+        await self.session.commit()
 
     async def members(self, owner: UUID, project_id: UUID) -> list[ProjectMemberRead]:
         await self.repo.project(project_id, owner)

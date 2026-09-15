@@ -32,6 +32,12 @@ async def update_project(
     return await ProjectService(repo).update(user.id, project_id, data)
 
 
+@router.delete("/{project_id}", status_code=204)
+async def delete_project(project_id: UUID, user: CurrentUser, repo: Repository) -> Response:
+    await ProjectService(repo).delete(user.id, project_id)
+    return Response(status_code=204)
+
+
 @router.get("/{project_id}/members", response_model=list[ProjectMemberRead])
 async def list_members(
     project_id: UUID, user: CurrentUser, repo: Repository

@@ -7,6 +7,7 @@ import { approvals } from "@/features/approvals/api";
 import { connections } from "@/features/connections/api";
 import { preferences } from "@/features/preferences/api";
 import { projects } from "@/features/projects/api";
+import { sources, taskProposals } from "@/features/sources/api";
 
 export const useUser = () => useQuery({ queryKey: ["user"], queryFn: auth.me });
 export const useDefinitions = () =>
@@ -27,6 +28,12 @@ export const useProjects = () =>
   useQuery({ queryKey: ["projects"], queryFn: projects.list });
 export const useProject = (id: string) =>
   useQuery({ queryKey: ["projects", id], queryFn: () => projects.get(id) });
+export const useProjectSources = (id: string) =>
+  useQuery({ queryKey: ["projects", id, "sources"], queryFn: () => sources.list(id) });
+export const useServerTasks = (id: string) =>
+  useQuery({ queryKey: ["projects", id, "tasks"], queryFn: () => sources.tasks(id) });
+export const useTaskProposals = () =>
+  useQuery({ queryKey: ["task-proposals"], queryFn: taskProposals.list });
 
 export const useIncompleteRun = () =>
   useQuery({ queryKey: ["runs", "incomplete"], queryFn: runs.incomplete });

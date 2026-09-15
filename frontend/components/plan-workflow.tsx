@@ -34,20 +34,7 @@ import {
   PageTitle,
   Status,
 } from "@/components/ui";
-
-function localInputValue(iso: string): string {
-  const date = new Date(iso);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function localDateValue(iso: string): string {
-  return localInputValue(iso).slice(0, 10);
-}
-
-function combineLocalDateTime(date: string, time: string): string {
-  return new Date(`${date}T${time}`).toISOString();
-}
+import { combineLocalDateTime, localDateValue, localInputValue } from "@/lib/datetime";
 
 function defaultWindow(): { startDate: string; endDate: string } {
   const start = new Date();

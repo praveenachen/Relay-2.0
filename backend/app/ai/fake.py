@@ -1,7 +1,10 @@
 import json
 import re
+from datetime import datetime
 
 from app.ai.base import Message, T
+from app.sources.dates import first_literal_date
+from app.sources.schemas import TaskProposal, TaskProposalBatch
 from app.workflows.lecture_notes.schemas import LectureSummary, SourceReference, SummarySection
 from app.workflows.project_meeting.models import (
     MeetingActionItem,
@@ -22,7 +25,97 @@ class FakeLanguageModel:
     async def generate_structured(self, messages: list[Message], response_model: type[T]) -> T:
         if response_model is MeetingAnalysis:
             return self._meeting_analysis(messages, response_model)
+        if response_model is TaskProposalBatch:
+            return self._task_proposals(messages, response_model)
         return self._lecture_summary(messages, response_model)
+
+    def _task_proposals(self, messages: list[Message], response_model: type[T]) -> T:
+        source = json.loads(messages[-1].content)
+        source_type = str(source["source_type"])
+        content = str(source["content"])
+        current_user = str(source.get("current_user", "")).strip().lower()
+        lines = [line.strip(" \t-*[]") for line in content.splitlines() if line.strip()]
+        proposals: list[TaskProposal] = []
+
+        def add(
+            title: str,
+            line: str,
+            *,
+            owner: str | None = None,
+            due: datetime | None = None,
+            confirm: list[str] | None = None,
+        ) -> None:
+            clean = title.strip().rstrip(".")
+            if clean and clean.lower() not in {item.title.lower() for item in proposals}:
+                proposals.append(
+                    TaskProposal(
+                        title=clean[:300],
+                        description=line[:2000],
+                        due_date=due,
+                        priority="MEDIUM",
+                        owner=owner,
+                        source_reference=line[:180],
+                        reason="Proposed from the source content.",
+                        needs_confirmation=confirm or [],
+                    )
+                )
+
+        if source_type == "MEETING_TRANSCRIPT":
+            candidates: list[tuple[str | None, str]] = []
+            for line in lines:
+                speaker, separator, body = line.partition(":")
+                owner = speaker.strip() if separator and len(speaker) < 80 else None
+                text = body.strip() if separator else line
+                match = re.search(
+                    r"\b(?:i'll|i will|will|needs? to|should|action:)\s+(.+)",
+                    text,
+                    re.IGNORECASE,
+                )
+                if match:
+                    candidates.append((owner, match.group(1).strip()))
+            own = [item for item in candidates if item[0] and item[0].lower() in current_user]
+            chosen = own or [item for item in candidates if not item[0]] or candidates
+            for owner, text in chosen[:6]:
+                deadline = _DEADLINE_PHRASE.search(text)
+                title = re.split(r"\s+by\s+", text, maxsplit=1, flags=re.IGNORECASE)[0]
+                confirm: list[str] = []
+                if not owner:
+                    confirm.append("owner")
+                if not deadline:
+                    confirm.append("due_date")
+                add(title, text, owner=owner, confirm=confirm)
+        elif source_type in {"STUDY_GOAL", "PERSONAL_GOAL"}:
+            goal = lines[0] if lines else str(source.get("title", "Goal"))
+            for title in (
+                f"Review what is required for {goal}",
+                f"Gather materials for {goal}",
+                f"Complete a focused practice step for {goal}",
+                f"Review progress and weak areas for {goal}",
+            ):
+                add(title, goal, confirm=["due_date"])
+        else:
+            if source_type == "COURSE_OUTLINE":
+                keywords: tuple[str, ...] = (
+                    "exam", "midterm", "assignment", "project", "presentation", "assessment"
+                )
+                selected = [
+                    line for line in lines if any(word in line.lower() for word in keywords)
+                ]
+            elif source_type == "ASSIGNMENT_BRIEF":
+                keywords = ("submit", "deliver", "due", "write", "create", "complete", "assignment")
+                selected = [
+                    line for line in lines if any(word in line.lower() for word in keywords)
+                ]
+                selected = selected or lines
+            else:
+                selected = lines
+            for line in selected[:6]:
+                title = re.sub(r"^(?:due\s*:?|deliverable\s*:?|task\s*:?)\s*", "", line, flags=re.I)
+                due = first_literal_date(line)
+                add(title, line, due=due, confirm=[] if due else ["due_date"])
+        if not proposals:
+            add(str(source.get("title", "Review source")), content[:500], confirm=["details"])
+        return response_model.model_validate(TaskProposalBatch(proposals=proposals).model_dump())
 
     def _meeting_analysis(self, messages: list[Message], response_model: type[T]) -> T:
         source = json.loads(messages[-1].content)

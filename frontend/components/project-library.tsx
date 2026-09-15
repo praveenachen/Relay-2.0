@@ -5,7 +5,7 @@ import { Plus, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/queries";
 import { projects, type Project } from "@/features/projects/api";
-import { Empty, ErrorMessage, Loading } from "@/components/ui";
+import { ErrorMessage, Loading } from "@/components/ui";
 import { ProjectCard } from "@/components/project-card";
 import { useProjectTasks } from "@/lib/project-tasks";
 
@@ -50,18 +50,38 @@ export function NewProjectButton({ initialSpace }: { initialSpace: Space }) {
   );
 }
 
+const emptyStateCopy: Record<Space, { title: string; description: string }> = {
+  SCHOOL: {
+    title: "No school projects yet.",
+    description: "Create a project for an exam, assignment, course, or team project.",
+  },
+  WORK: {
+    title: "No work projects yet.",
+    description:
+      "Create a project for a sprint, deliverable, research initiative, or anything you're actively working on.",
+  },
+  PERSONAL: {
+    title: "No personal projects yet.",
+    description:
+      "Create a project for a goal, trip, portfolio update, event, or anything you want to organize.",
+  },
+};
+
 export function ProjectLibrary({ space }: { space: Space }) {
   const query = useProjects();
   const tasks = useProjectTasks();
   if (query.isPending) return <Loading label="Loading projects" />;
   if (query.error) return <ErrorMessage error={query.error} retry={() => query.refetch()} />;
   const items = (query.data || []).filter((project) => project.space === space);
-  if (!items.length) return (
-    <Empty title="Make this space yours.">
-      <p>Projects keep tasks, plans, and sources together.</p>
-      <NewProjectButton initialSpace={space} />
-    </Empty>
-  );
+  if (!items.length) {
+    const copy = emptyStateCopy[space];
+    return (
+      <div className={`home-empty space-empty ${space.toLowerCase()}`}>
+        <Sparkles />
+        <div><h3>{copy.title}</h3><p>{copy.description}</p></div>
+      </div>
+    );
+  }
   return <div className="project-grid">{items.map((project) => {
     const projectTasks = tasks.filter((task) => task.projectId === project.id);
     return <ProjectCard key={project.id} project={project} taskCount={projectTasks.length} doneCount={projectTasks.filter((task) => task.status === "DONE").length} />;

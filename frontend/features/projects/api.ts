@@ -54,6 +54,8 @@ export const projects = {
     request("/projects", projectSchema, json(data, "POST")),
   update: (id: string, data: ProjectInput) =>
     request(`/projects/${id}`, projectSchema, json(data, "PUT")),
+  delete: (id: string) =>
+    request(`/projects/${id}`, z.undefined(), { method: "DELETE" }),
   members: (id: string) =>
     request(`/projects/${id}/members`, projectMemberSchema.array()),
   addMember: (id: string, data: ProjectMemberInput) =>

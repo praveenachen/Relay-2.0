@@ -12,6 +12,7 @@ from app.api.learn import router as learn_router
 from app.api.plan import router as plan_router
 from app.api.projects import router as projects_router
 from app.api.routes import router
+from app.api.sources import router as sources_router
 from app.auth.users import UserCreate, UserRead, backend, users
 from app.core.config import get_settings
 from app.domain.errors import DomainError
@@ -87,6 +88,7 @@ def create_app() -> FastAPI:
     application.include_router(plan_router)
     application.include_router(collaborate_router)
     application.include_router(projects_router)
+    application.include_router(sources_router)
     return application
 
 
