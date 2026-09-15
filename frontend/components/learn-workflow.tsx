@@ -66,9 +66,9 @@ export function LearnEntry() {
   return (
     <>
       <PageTitle
-        eyebrow="LEARN"
+        eyebrow="Notes"
         title="Turn lecture material into reviewed study notes."
-        description="Upload PDF, DOCX, Markdown, or plain text. Relay parses it locally, generates a sourced summary, and waits for your approval before publishing to Notion."
+        description="Upload PDF, DOCX, Markdown, or plain text. Relay turns it into organized study notes for you to review before saving to Notion."
         action={<WorkflowBadge workflow={workflowDisplay.lecture_to_notion} />}
       />
       <RelayLine
@@ -118,20 +118,17 @@ export function LearnEntry() {
               onClick={() => create.mutate()}
             >
               <Play aria-hidden="true" />
-              {create.isPending ? "Creating..." : "Create LEARN run"}
+              {create.isPending ? "Creating..." : "Create study notes"}
             </button>
-            <p className="text-sm text-muted">
-              Provider: {config.data?.provider || "loading"}.
-            </p>
           </div>
         </div>
         <div className="workflow-guide">
           <h2 className="section-title">What Relay will prepare</h2>
           <ol className="learn-steps">
             <li>Store the original file privately on this machine.</li>
-            <li>Parse a structured document with pages and sections.</li>
-            <li>Generate sourced notes with a typed model response.</li>
-            <li>Save your approved payload before publishing.</li>
+            <li>Organize the document into clear pages and sections.</li>
+            <li>Create sourced notes you can check and edit.</li>
+            <li>Save only after you confirm the final notes.</li>
           </ol>
         </div>
       </section>
@@ -319,12 +316,12 @@ export function LearnRun({ id }: { id: string }) {
     <>
       <Link className="back-link" href="/workflows/learn">
         <ArrowLeft aria-hidden="true" />
-        Back to Learn runs
+        Back to Notes
       </Link>
       <PageTitle
-        eyebrow="LEARN run"
+        eyebrow="Notes"
         title={data.summary?.title || data.source?.filename || "Lecture notes"}
-        description="Review the source, generated notes, approval payload, and Notion publish result for this LEARN workflow."
+        description="Review and edit your study notes, then choose when to save them to Notion."
         action={<Status value={data.run.status} />}
       />
       <RelayLine

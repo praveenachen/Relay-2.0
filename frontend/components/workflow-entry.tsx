@@ -37,7 +37,7 @@ export function WorkflowEntry({ display }: { display: WorkflowDisplay }) {
         status="DRAFT"
       />
       <section className="my-10">
-        <h2 className="section-title">How this Relay works</h2>
+        <h2 className="section-title">What happens next</h2>
         <ol className="grid gap-5 sm:grid-cols-2">
           {display.steps.map((step, index) => (
             <li key={step} className="panel interactive">
@@ -74,7 +74,7 @@ export function WorkflowEntry({ display }: { display: WorkflowDisplay }) {
               : "Create draft"}
         </button>
         <p className="text-sm text-muted">
-          Saves a draft you can return to. Nothing is processed yet.
+          You can return and continue whenever you are ready.
         </p>
       </div>
       <ErrorMessage error={create.error} />

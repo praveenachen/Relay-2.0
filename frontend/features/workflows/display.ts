@@ -2,13 +2,13 @@ import type { Run } from "@/lib/schemas";
 
 export type WorkflowKey =
   "lecture_to_notion" | "study_scheduler" | "project_meeting";
-export type Pillar = "learn" | "plan" | "collaborate";
+export type Pillar = "notes" | "planner" | "projects";
 export const workflowDisplay = {
   lecture_to_notion: {
     key: "lecture_to_notion",
     slug: "learn",
-    pillar: "LEARN",
-    title: "Lecture Notes",
+    pillar: "Notes",
+    title: "Notes",
     tone: "learn",
     headline: "Move course material into organized knowledge.",
     description: "Turn lecture notes into organized study notes.",
@@ -22,13 +22,13 @@ export const workflowDisplay = {
     ],
     inputLabel: "Lecture notes",
     inputHint:
-      "Upload PDF, DOCX, Markdown, or text notes. Relay parses them locally, generates typed study notes, and waits for approval before publishing.",
+      "Upload PDF, DOCX, Markdown, or text notes. Relay organizes them into study notes for you to review before saving.",
   },
   study_scheduler: {
     key: "study_scheduler",
     slug: "plan",
-    pillar: "PLAN",
-    title: "Study Schedule",
+    pillar: "Planner",
+    title: "Planner",
     tone: "plan",
     headline: "Move academic workload into realistic time.",
     description: "Build a study schedule around your real deadlines.",
@@ -42,13 +42,13 @@ export const workflowDisplay = {
     ],
     inputLabel: "Tasks and availability",
     inputHint:
-      "Relay imports Notion tasks and Google Calendar availability, then a CP-SAT solver -- not a language model -- decides the actual study times.",
+      "Bring in your tasks and calendar availability to build a realistic study week.",
   },
   project_meeting: {
     key: "project_meeting",
     slug: "collaborate",
-    pillar: "COLLABORATE",
-    title: "Project Actions",
+    pillar: "Projects",
+    title: "Projects",
     tone: "collaborate",
     headline: "Move group discussion into accountable work.",
     description: "Turn project meetings into assigned work.",
@@ -62,7 +62,7 @@ export const workflowDisplay = {
     ],
     inputLabel: "Meeting transcript",
     inputHint:
-      "Relay extracts decisions and action items with a language model, but a deterministic planner -- not the model -- decides which typed Notion and GitHub actions get proposed.",
+      "Relay finds decisions and action items, then lets you confirm what should be saved to Notion or created in GitHub.",
   },
 } as const;
 export const workflows = Object.values(workflowDisplay);

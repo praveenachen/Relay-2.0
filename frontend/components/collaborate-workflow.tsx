@@ -60,9 +60,9 @@ export function CollaborateEntry() {
   return (
     <>
       <PageTitle
-        eyebrow="COLLABORATE"
+        eyebrow="Projects"
         title="Turn a meeting into accountable work."
-        description="Relay extracts decisions and action items from a transcript, resolves owners against your project's real members, and proposes typed Notion and GitHub actions you approve before anything is created."
+        description="Turn a transcript into decisions and assigned tasks, then confirm what to save to Notion or create in GitHub."
         action={<WorkflowBadge workflow={workflowDisplay.project_meeting} />}
       />
       <RelayLine
@@ -409,9 +409,9 @@ export function CollaborateRun({ id }: { id: string }) {
   return (
     <>
       <PageTitle
-        eyebrow="COLLABORATE run"
+        eyebrow="Projects"
         title={data.project?.name || "Meeting"}
-        description="Review the transcript analysis, resolve owners and destinations, and approve before Relay touches Notion or GitHub."
+        description="Review decisions, owners, and where each task should be saved before anything is created."
         action={<Status value={data.run.status} />}
       />
       <RelayLine

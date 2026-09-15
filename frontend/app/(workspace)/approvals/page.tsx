@@ -1,96 +1,101 @@
 "use client";
+
 import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { approvals } from "@/features/approvals/api";
-import { Approval } from "@/lib/schemas";
-import { useApprovals } from "@/hooks/queries";
-import {
-  Empty,
-  ErrorMessage,
-  Loading,
-  PageTitle,
-  Status,
-} from "@/components/ui";
+import { useDefinitions, usePendingApprovals, useRuns } from "@/hooks/queries";
+import { displayFor, runTitle } from "@/features/workflows/display";
+import { Empty, ErrorMessage, Loading, PageTitle } from "@/components/ui";
+
+const reviewCopy = {
+  learn: {
+    label: "Study notes",
+    reason: "Check the notes and choose where to save them.",
+    action: "Review notes",
+  },
+  plan: {
+    label: "Study plan",
+    reason: "Check the study sessions before adding them to your calendar.",
+    action: "Review plan",
+  },
+  collaborate: {
+    label: "Project tasks",
+    reason: "Confirm owners and destinations before creating tasks.",
+    action: "Review tasks",
+  },
+} as const;
+
 export default function Approvals() {
-  const query = useApprovals(),
-    cache = useQueryClient();
-  const resolve = useMutation({
-    mutationFn: ({
-      approval,
-      approve,
-    }: {
-      approval: Approval;
-      approve: boolean;
-    }) => approvals.resolve(approval, approve),
-    onSettled: async () => {
-      await Promise.all([
-        cache.invalidateQueries({ queryKey: ["approvals"] }),
-        cache.invalidateQueries({ queryKey: ["runs"] }),
-        cache.invalidateQueries({ queryKey: ["events"] }),
-      ]);
-    },
-  });
-  if (query.isPending) return <Loading />;
-  if (query.error) return <ErrorMessage error={query.error} />;
+  const approvals = usePendingApprovals();
+  const runs = useRuns();
+  const definitions = useDefinitions();
+
+  if (approvals.isPending || runs.isPending || definitions.isPending)
+    return <Loading />;
+  const error = approvals.error || runs.error || definitions.error;
+  if (error) return <ErrorMessage error={error} />;
+
+  const definitionsById = Object.fromEntries(
+    (definitions.data || []).map((item) => [item.id, item]),
+  );
+  const runsById = Object.fromEntries(
+    (runs.data || []).map((run) => [run.id, run]),
+  );
+
   return (
     <>
       <PageTitle
-        eyebrow="You are in control"
-        title="Approvals"
-        description="Review the exact proposed payload before making a decision. LEARN approvals can be edited in the review workspace before publishing to the local mock Notion connector."
+        eyebrow="Your action inbox"
+        title="Review"
+        description="Only work that needs your input appears here. Open an item to check the details and decide what gets saved."
       />
-      <ErrorMessage error={resolve.error} />
-      {!query.data.length ? (
-        <Empty title="Nothing needs your approval.">
-          Future workflow plans will appear here before anything changes in your
-          tools.
+      {!approvals.data?.length ? (
+        <Empty title="You are all caught up.">
+          Nothing needs your review right now.
         </Empty>
       ) : (
-        <div className="space-y-5">
-          {query.data.map((approval) => (
-            <article key={approval.id} className="panel">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <Link
-                  className="font-medium underline"
-                  href={`/workflows/learn/${approval.workflow_run_id}`}
-                >
-                  Open LEARN review
-                </Link>
-                <Status value={approval.status} />
-              </div>
-              <p className="mt-5 text-sm font-medium">
-                {approval.status === "APPROVED"
-                  ? "Approved payload"
-                  : "Proposed payload"}
-              </p>
-              <pre className="my-4 max-h-96 overflow-auto rounded-lg bg-background p-4 text-xs leading-6">
-                {JSON.stringify(
-                  approval.approved_payload || approval.original_payload,
-                  null,
-                  2,
-                )}
-              </pre>
-              {approval.status === "PENDING" && (
-                <div className="flex gap-3">
-                  <button
-                    className="button"
-                    disabled={resolve.isPending}
-                    onClick={() => resolve.mutate({ approval, approve: true })}
-                  >
-                    Approve exact payload
-                  </button>
-                  <button
-                    className="button secondary"
-                    disabled={resolve.isPending}
-                    onClick={() => resolve.mutate({ approval, approve: false })}
-                  >
-                    Reject
-                  </button>
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
+        <ul className="review-list">
+          {approvals.data.map((approval) => {
+            const run = runsById[approval.workflow_run_id];
+            const definition = run
+              ? definitionsById[run.workflow_definition_id]
+              : undefined;
+            const display = displayFor(definition?.key);
+            const copy = display ? reviewCopy[display.slug] : undefined;
+            const payloadTitle = approval.original_payload.title;
+            const title =
+              typeof payloadTitle === "string" && payloadTitle.trim()
+                ? payloadTitle
+                : run
+                  ? runTitle(run, display)
+                  : copy?.label || "Saved work";
+            const href = display
+              ? `/workflows/${display.slug}/${approval.workflow_run_id}`
+              : `/runs/${approval.workflow_run_id}`;
+
+            return (
+              <li key={approval.id}>
+                <article className="review-item">
+                  <div className="review-item-copy">
+                    <p className="eyebrow">
+                      {copy?.label || "Ready to review"}
+                    </p>
+                    <h2>{title}</h2>
+                    <p>
+                      {copy?.reason ||
+                        "Check the details before Relay saves anything."}
+                    </p>
+                    <time dateTime={approval.requested_at}>
+                      Requested{" "}
+                      {new Date(approval.requested_at).toLocaleDateString()}
+                    </time>
+                  </div>
+                  <Link className="button" href={href}>
+                    {copy?.action || "Open review"}
+                  </Link>
+                </article>
+              </li>
+            );
+          })}
+        </ul>
       )}
     </>
   );

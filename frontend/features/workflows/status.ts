@@ -20,73 +20,73 @@ export const workflowStatuses: Record<Run["status"], StatusPresentation> = {
     label: "Draft",
     tone: "neutral",
     symbol: "clock",
-    description: "Saved and ready for your next step.",
+    description: "Ready when you are.",
   },
   ANALYZING: {
     label: "Understanding",
     tone: "active",
     symbol: "activity",
-    description: "The input is being interpreted.",
+    description: "Relay is organizing your material.",
   },
   PLAN_READY: {
     label: "Plan ready",
     tone: "warning",
     symbol: "clock",
-    description: "A plan is ready to move into review.",
+    description: "Ready for you to review.",
   },
   AWAITING_APPROVAL: {
     label: "Needs review",
     tone: "warning",
     symbol: "clock",
-    description: "Your decision is needed before work moves forward.",
+    description: "Review this before Relay saves it.",
   },
   APPROVED: {
     label: "Approved",
     tone: "success",
     symbol: "check",
-    description: "Your decision is saved. Execution has not started.",
+    description: "Ready to save.",
   },
   QUEUED: {
     label: "Queued",
     tone: "neutral",
     symbol: "clock",
-    description: "Waiting to begin execution.",
+    description: "Waiting to save your changes.",
   },
   EXECUTING: {
-    label: "Running",
+    label: "Saving",
     tone: "active",
     symbol: "activity",
-    description: "Approved work is being carried out.",
+    description: "Your changes are being saved.",
   },
   COMPLETED: {
     label: "Completed",
     tone: "success",
     symbol: "check",
-    description: "This run is complete.",
+    description: "Your work is saved.",
   },
   PARTIALLY_COMPLETED: {
     label: "Partially completed",
     tone: "warning",
     symbol: "warning",
-    description: "Some actions completed. Review the recorded outcome.",
+    description: "Some items were saved. Check what still needs attention.",
   },
   FAILED: {
     label: "Failed",
     tone: "danger",
     symbol: "warning",
-    description: "This run stopped with an error. Review its activity.",
+    description: "Relay could not finish saving this work.",
   },
   REJECTED: {
     label: "Rejected",
     tone: "neutral",
     symbol: "stop",
-    description: "The proposal was rejected. No further action is authorized.",
+    description: "These changes were not saved.",
   },
   CANCELLED: {
     label: "Cancelled",
     tone: "neutral",
     symbol: "stop",
-    description: "This run was cancelled.",
+    description: "This work was cancelled.",
   },
 };
 const otherStatuses: Record<string, StatusPresentation> = {
@@ -112,7 +112,7 @@ const otherStatuses: Record<string, StatusPresentation> = {
     label: "Connected",
     tone: "success",
     symbol: "check",
-    description: "An account connection is recorded.",
+    description: "This tool is ready to use.",
   },
   ERROR: {
     label: "Connection error",
@@ -138,21 +138,21 @@ export function stagesFor(
 ): RelayStage[] {
   const index: Partial<Record<Run["status"], number>> = {
     DRAFT: 0,
-    ANALYZING: 1,
+    ANALYZING: 0,
     PLAN_READY: 1,
-    AWAITING_APPROVAL: 2,
+    AWAITING_APPROVAL: 1,
     APPROVED: 2,
-    QUEUED: 3,
-    EXECUTING: 3,
-    COMPLETED: 4,
-    PARTIALLY_COMPLETED: 3,
-    REJECTED: 2,
+    QUEUED: 2,
+    EXECUTING: 2,
+    COMPLETED: 3,
+    PARTIALLY_COMPLETED: 2,
+    REJECTED: 1,
   };
   const position =
     status === "FAILED" || status === "CANCELLED"
       ? index[failedFrom as Run["status"]]
       : index[status];
-  return ["Source", "Understand", "Review", "Destination"].map((label, i) => {
+  return ["Upload", "Review", "Save"].map((label, i) => {
     let state: StageState = "upcoming";
     if (position !== undefined && i < position) state = "complete";
     if (i === position) {
@@ -164,11 +164,10 @@ export function stagesFor(
               "AWAITING_APPROVAL",
               "QUEUED",
               "CANCELLED",
+              "APPROVED",
             ].includes(status)
           ? "waiting"
-          : status === "APPROVED"
-            ? "complete"
-            : "active";
+          : "active";
     }
     return { id: label.toLowerCase(), label, state };
   });

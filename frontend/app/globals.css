@@ -472,10 +472,8 @@ p {
   container-type: inline-size;
 }
 .relay-track {
-  display: grid;
-  grid-template-columns: minmax(100px, 1fr) minmax(0, 4fr) minmax(115px, 1fr);
-  align-items: center;
-  gap: 16px;
+  margin: 0 auto;
+  max-width: 720px;
 }
 .relay-endpoints .system-label {
   margin-bottom: 6px;
@@ -616,17 +614,7 @@ p {
   padding: 12px 0;
 }
 @container (max-width: 760px) {
-  .relay-track {
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
-  .relay-endpoints.destinations {
-    grid-column: 2;
-    grid-row: 1;
-  }
   .relay-stages {
-    grid-column: 1 / -1;
-    grid-row: 2;
     gap: 6px;
   }
   .relay-stage {
@@ -1084,7 +1072,7 @@ p {
   width: min(100%, 1560px);
   margin: 0 auto;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 18px;
   padding: 16px clamp(20px, 4vw, 48px);
@@ -1112,6 +1100,145 @@ p {
     background-color var(--motion-fast),
     color var(--motion-fast),
     transform var(--motion-fast);
+}
+.primary-nav {
+  display: flex;
+  gap: 2px;
+  min-width: 0;
+}
+.nav-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 19px;
+  height: 19px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+}
+.account-menu {
+  position: relative;
+  margin-left: auto;
+  flex: 0 0 auto;
+}
+.account-menu summary {
+  max-width: 180px;
+  overflow: hidden;
+  padding: 9px 0 9px 12px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.88rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.account-menu nav {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 30;
+  display: grid;
+  min-width: 190px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow-hover);
+  padding: 6px;
+}
+.account-menu nav a,
+.account-menu nav button {
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  padding: 10px 12px;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+}
+.account-menu nav a:hover,
+.account-menu nav button:hover,
+.account-menu nav a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.home-intro .page-header {
+  margin-bottom: 28px;
+}
+.home-action-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid var(--line);
+}
+.home-action {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 28px clamp(20px, 3vw, 38px);
+}
+.home-action + .home-action {
+  border-left: 1px solid var(--line);
+}
+.home-action h2,
+.review-callout h2,
+.review-item h2 {
+  margin-top: 14px;
+  font-size: clamp(1.25rem, 2vw, 1.65rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+.home-action > p:not(.eyebrow) {
+  flex: 1;
+  margin: 10px 0 24px;
+  color: var(--muted);
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+.review-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
+  background: var(--accent-soft);
+  padding: 24px 28px;
+}
+.review-callout p:not(.eyebrow),
+.review-item-copy > p:not(.eyebrow) {
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+.section-heading-row {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 18px;
+}
+.review-list {
+  display: grid;
+  gap: 14px;
+}
+.review-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  border-bottom: 1px solid var(--line);
+  padding: 22px 4px;
+}
+.review-item time {
+  display: block;
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 .nav-pill:hover {
   background: rgba(33, 95, 75, 0.08);
@@ -1238,13 +1365,54 @@ p {
   background: var(--danger-soft);
 }
 @media (max-width: 900px) {
-  .metric-grid {
+  .workspace-nav-inner {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .primary-nav {
+    order: 3;
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+  .primary-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .nav-pill {
+    flex: 0 0 auto;
+  }
+  .home-action-grid {
     grid-template-columns: 1fr;
+  }
+  .home-action + .home-action {
+    border-top: 1px solid var(--line);
+    border-left: 0;
   }
   .run-card {
     grid-template-columns: minmax(0, 1fr) auto;
   }
   .workspace-nav-inner {
+    align-items: flex-start;
+  }
+}
+@media (max-width: 560px) {
+  .workspace-logo {
+    margin-right: 0;
+  }
+  .account-menu summary {
+    max-width: 130px;
+  }
+  .review-callout,
+  .review-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .review-callout .button,
+  .review-item .button {
+    width: 100%;
+  }
+  .section-heading-row {
     align-items: flex-start;
   }
 }

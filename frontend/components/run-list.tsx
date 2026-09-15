@@ -3,35 +3,37 @@ import { statusFor } from "@/features/workflows/status";
 import Link from "next/link";
 import { Run } from "@/lib/schemas";
 import { Empty, Status } from "@/components/ui";
+import { displayFor, runContext, runTitle } from "@/features/workflows/display";
 
 export function RunList({
   runs,
-  names,
+  workflowKeys,
   detailed = false,
 }: {
   detailed?: boolean;
   runs: Run[];
-  names: Record<string, string>;
+  workflowKeys: Record<string, string>;
 }) {
   if (!runs.length)
     return (
       <Empty title="Your next step starts here.">
-        Create a draft from one of the workflow cards. Nothing will run
-        automatically.
+        Choose Notes, Planner, or Projects when you are ready to begin.
       </Empty>
     );
   return (
     <ul className={`run-list ${detailed ? "run-history" : ""}`}>
       {runs.map((run) => {
-        const workflowName =
-          names[run.workflow_definition_id] || "Workflow run";
+        const display = displayFor(workflowKeys[run.workflow_definition_id]);
+        const context = runContext(run);
         return (
           <li key={run.id}>
             <Link className="run-card" href={`/runs/${run.id}`}>
               <div>
-                <p className="run-card-title">{workflowName}</p>
+                <p className="run-card-title">{runTitle(run, display)}</p>
                 <p className="run-card-meta">
-                  Created {new Date(run.created_at).toLocaleString()}
+                  {context ? `${context} · ` : ""}
+                  {display?.title || "Work"} ·{" "}
+                  {new Date(run.created_at).toLocaleDateString()}
                 </p>
               </div>
               {detailed && (
@@ -50,7 +52,7 @@ export function RunList({
               </span>
               {detailed && (
                 <span className="run-open">
-                  Open relay <ArrowUpRight aria-hidden="true" />
+                  Open <ArrowUpRight aria-hidden="true" />
                 </span>
               )}
             </Link>

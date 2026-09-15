@@ -3,7 +3,47 @@ import Link from "next/link";
 import { useDefinitions, useEvents, useRun } from "@/hooks/queries";
 import { RelayLine } from "@/components/relay-line";
 import { Empty, ErrorMessage, Loading, PageTitle } from "@/components/ui";
-import { displayFor } from "@/features/workflows/display";
+import {
+  displayFor,
+  friendlyKey,
+  runTitle,
+} from "@/features/workflows/display";
+import { statusFor } from "@/features/workflows/status";
+
+function eventLabel(value: string): string {
+  const labels: Record<string, string> = {
+    WORKFLOW_RUN_CREATED: "Work started",
+    WORKFLOW_CREATED: "Work started",
+    WORKFLOW_STATE_CHANGED: "Progress updated",
+    DOCUMENT_UPLOADED: "Lecture material uploaded",
+    DOCUMENT_PARSED: "Lecture material organized",
+    SUMMARY_GENERATED: "Study notes created",
+    APPROVAL_REQUESTED: "Ready for review",
+    APPROVAL_APPROVED: "Changes confirmed",
+    APPROVAL_REJECTED: "Changes declined",
+    ACTION_APPROVED: "Changes confirmed",
+    ACTION_REJECTED: "Changes declined",
+    APPROVAL_EXPIRED: "Review no longer needed",
+    PROPOSED_ACTION_CREATED: "Review prepared",
+    ACTION_EDITED: "Notes updated",
+    ACTION_ITEM_EDITED: "Task updated",
+    EXECUTION_STARTED: "Saving started",
+    EXECUTION_SUBMITTED: "Ready to save",
+    EXTERNAL_EXECUTION_STARTED: "Saving started",
+    EXECUTION_COMPLETED: "Saved successfully",
+    WORKFLOW_RUN_COMPLETED: "Work completed",
+    WORKFLOW_COMPLETED: "Work completed",
+    PLAN_SETUP_SAVED: "Plan details saved",
+    PLAN_APPROVAL_REQUESTED: "Study plan ready for review",
+    SCHEDULING_STARTED: "Building your study plan",
+    SESSION_MOVED: "Study session moved",
+    NOTION_DESTINATION_SELECTED: "Notion location selected",
+    NOTION_PAGE_CREATE_STARTED: "Saving to Notion",
+    ANALYSIS_STARTED: "Organizing meeting notes",
+    MEETING_ANALYSIS_STARTED: "Finding decisions and tasks",
+  };
+  return labels[value] || friendlyKey(value);
+}
 
 export function RunDetail({ id }: { id: string }) {
   const run = useRun(id),
@@ -22,9 +62,9 @@ export function RunDetail({ id }: { id: string }) {
   return (
     <>
       <PageTitle
-        eyebrow="Workflow run"
-        title={`${name} / ${run.data.status.toLowerCase().replaceAll("_", " ")}`}
-        description="A clear record of your intent and every step that follows."
+        eyebrow={display?.title || "Activity"}
+        title={runTitle(run.data, display)}
+        description={statusFor(run.data.status).description}
       />
       <RelayLine
         tone={display?.tone}
@@ -38,16 +78,15 @@ export function RunDetail({ id }: { id: string }) {
             title={
               run.data.status === "DRAFT"
                 ? "Your draft is saved."
-                : `${display?.title || name} processing is available.`
+                : `${display?.title || name} is ready to continue.`
             }
             action={
               <Link className="button" href={workspaceHref}>
-                Open {display?.title || name} review
+                Continue {display?.title || name}
               </Link>
             }
           >
-            Continue review, approval, and execution from the dedicated{" "}
-            {display?.title || name} workspace.
+            Pick up where you left off and review the next step.
           </Empty>
         ) : (
           <Empty
@@ -57,15 +96,14 @@ export function RunDetail({ id }: { id: string }) {
                 : "Open the workflow."
             }
           >
-            This run belongs to a workflow that does not have a dedicated
-            workspace route in the current UI. Its activity log remains
+            This work does not have a dedicated editor. Its activity is
             available below.
           </Empty>
         )}
       </div>
       {run.data.status === "AWAITING_APPROVAL" && (
         <Link className="button mb-8" href={workspaceHref || "/approvals"}>
-          Review approval
+          Review now
         </Link>
       )}
       <section>
@@ -78,7 +116,7 @@ export function RunDetail({ id }: { id: string }) {
             {events.data?.map((event) => (
               <li className="border-l-2 border-accent pl-5" key={event.id}>
                 <p className="text-sm font-medium">
-                  {event.event_type.toLowerCase().replaceAll("_", " ")}
+                  {eventLabel(event.event_type)}
                   {event.event_metadata.simulated === true
                     ? " (simulated)"
                     : ""}
@@ -90,7 +128,7 @@ export function RunDetail({ id }: { id: string }) {
                   <p className="mt-1 text-xs">
                     {event.event_metadata.external_url.startsWith("mock://") ? (
                       <span className="text-muted">
-                        Simulated artifact: {event.event_metadata.external_url}
+                        Saved preview: {event.event_metadata.external_url}
                       </span>
                     ) : (
                       <a
@@ -99,7 +137,7 @@ export function RunDetail({ id }: { id: string }) {
                         target="_blank"
                         rel="noreferrer"
                       >
-                        Open artifact
+                        Open saved item
                       </a>
                     )}
                   </p>

@@ -37,7 +37,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByRole("button", { name: "Go to dashboard" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(
-    page.getByText("There are no actions waiting for your approval."),
+    page.getByRole("heading", { name: "Recent work" }),
   ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("dashboard-desktop.png"),
@@ -56,7 +56,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
     fullPage: true,
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole("link", { name: "Start plan", exact: true }).click();
+  await page.getByRole("link", { name: "Plan my week", exact: true }).click();
   await expect(page).toHaveURL(/\/workflows\/plan$/);
   await page.getByRole("button", { name: "Start a study plan" }).click();
   await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
@@ -65,6 +65,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
   await page.reload();
   await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
+  await page.locator(".account-menu summary").click();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Preferred session (minutes)")).toHaveValue(
     "45",
@@ -78,6 +79,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByLabel("Preferred session (minutes)").fill("40");
   await page.getByRole("button", { name: "Save preferences" }).click();
   await expect(page.getByRole("status")).toContainText("Preferences saved");
+  await page.locator(".account-menu summary").click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByLabel("Email", { exact: true }).fill(email);
@@ -87,7 +89,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(
-    page.getByRole("heading", { name: "Continue where you left off" }),
+    page.getByRole("heading", { name: "Recent work" }),
   ).toBeVisible();
 });
 
@@ -122,15 +124,15 @@ test("LEARN upload review approval and mock publish", async ({
       "# Linear Algebra\nA vector has magnitude and direction.\n## Eigenvalues\nEigenvalues describe scaling.",
     ),
   });
-  await page.getByRole("button", { name: "Create LEARN run" }).click();
+  await page.getByRole("button", { name: "Create study notes" }).click();
   await expect(page).toHaveURL(/\/workflows\/learn\/[a-f0-9-]+$/);
   await page.getByRole("button", { name: "Parse", exact: true }).click();
   await expect(page.getByText("2 sections parsed")).toBeVisible();
-  await expect(page.locator(".relay-stage")).toHaveCount(4);
+  await expect(page.locator(".relay-stage")).toHaveCount(3);
   await expect(
     page.getByRole("heading", { name: "Destination", exact: true }),
   ).toHaveCount(0);
-  await expect(page.locator(".relay-stage.complete")).toHaveCSS(
+  await expect(page.locator(".relay-stage").first()).toHaveCSS(
     "border-top-style",
     "solid",
   );

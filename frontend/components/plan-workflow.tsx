@@ -91,9 +91,9 @@ export function PlanEntry() {
   return (
     <>
       <PageTitle
-        eyebrow="PLAN"
+        eyebrow="Planner"
         title="Build a realistic study schedule."
-        description="Enter your study tasks, and Relay reads your Google Calendar availability, then a deterministic CP-SAT solver -- never a language model -- decides the actual times you study."
+        description="Add your tasks and deadlines, then build a realistic study week around your Google Calendar availability."
         action={<WorkflowBadge workflow={workflowDisplay.study_scheduler} />}
       />
       <RelayLine
@@ -156,13 +156,13 @@ export function PlanRun({ id }: { id: string }) {
   return (
     <>
       <PageTitle
-        eyebrow="PLAN run"
+        eyebrow="Planner"
         title={
           taskCount
             ? `Study plan for ${taskCount} task${taskCount === 1 ? "" : "s"}`
             : "Study plan"
         }
-        description="Review your tasks, calendar availability, generated schedule, and final calendar publish action for this PLAN workflow."
+        description="Review your tasks and study sessions before adding them to Google Calendar."
         action={<Status value={data.run.status} />}
       />
       <RelayLine

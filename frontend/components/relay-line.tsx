@@ -1,14 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
-import {
-  ArrowRight,
-  Check,
-  FileInput,
-  Sparkles,
-  ScanEye,
-  Send,
-  Clock3,
-  X,
-} from "lucide-react";
+import { Check, Upload, ScanEye, Send, Clock3, X } from "lucide-react";
 import type { Run } from "@/lib/schemas";
 import {
   stagesFor,
@@ -39,7 +30,7 @@ export function RelayLine({
   label = "Relay progress",
 }: RelayLineProps) {
   const progress = stages || stagesFor(status);
-  const icons = [FileInput, Sparkles, ScanEye, Send];
+  const icons = [Upload, ScanEye, Send];
   return (
     <figure
       className={`relay-line ${compact ? "compact" : ""}`}
@@ -47,27 +38,13 @@ export function RelayLine({
       aria-label={label}
     >
       <div className="relay-track">
-        <div className="relay-endpoints sources">
-          <p className="system-label">From</p>
-          <ul>
-            {sources.map((source) => (
-              <li key={source.label}>
-                {source.icon}
-                <span>
-                  {source.label}
-                  {source.description && <small>{source.description}</small>}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
         <ol
           style={{ "--stage-count": progress.length } as CSSProperties}
           className="relay-stages"
           aria-label="Workflow stages"
         >
           {progress.map((stage, index) => {
-            const Icon = icons[index] || Sparkles;
+            const Icon = icons[index] || Send;
             return (
               <li
                 key={stage.id}
@@ -107,28 +84,16 @@ export function RelayLine({
             );
           })}
         </ol>
-        <div className="relay-endpoints destinations">
-          <p className="system-label">To</p>
-          <ul>
-            {destinations.map((destination) => (
-              <li key={destination.label}>
-                <ArrowRight aria-hidden="true" />
-                {destination.icon}
-                <span>
-                  {destination.label}
-                  {destination.description && (
-                    <small>{destination.description}</small>
-                  )}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
       </div>
       {!compact && (
         <figcaption>
-          <span>{statusFor(status).label}</span>
-          <span>{statusFor(status).description}</span>
+          <span>
+            {sources.map((item) => item.label).join(", ")} &rarr;{" "}
+            {destinations.map((item) => item.label).join(", ")}
+          </span>
+          <span>
+            {statusFor(status).label} · {statusFor(status).description}
+          </span>
         </figcaption>
       )}
     </figure>

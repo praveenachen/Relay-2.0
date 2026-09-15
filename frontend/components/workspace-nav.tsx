@@ -1,28 +1,30 @@
 "use client";
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useUser } from "@/hooks/queries";
+import { usePendingApprovals, useUser } from "@/hooks/queries";
 import { auth } from "@/features/auth/api";
 import { ErrorMessage } from "@/components/ui";
-import { workflows } from "@/features/workflows/display";
 
 const primaryLinks = [
-  ["/dashboard", "Overview"],
-  ...workflows.map(
-    (workflow) => [`/workflows/${workflow.slug}`, workflow.title] as const,
-  ),
-  ["/approvals", "Approvals"],
-  ["/runs", "History"],
-];
+  ["/dashboard", "Home"],
+  ["/workflows/learn", "Notes"],
+  ["/workflows/plan", "Planner"],
+  ["/workflows/collaborate", "Projects"],
+  ["/approvals", "Review"],
+] as const;
+
 const secondaryLinks = [
+  ["/runs", "Activity"],
   ["/connections", "Connections"],
   ["/settings", "Settings"],
-];
+] as const;
 
 export function WorkspaceNav({ name }: { name: string }) {
   const path = usePathname();
   const user = useUser();
+  const pendingApprovals = usePendingApprovals();
   const router = useRouter();
   const cache = useQueryClient();
   const logout = useMutation({
@@ -33,20 +35,19 @@ export function WorkspaceNav({ name }: { name: string }) {
       router.refresh();
     },
   });
+
   return (
-    <header className="border-b border-line bg-surface">
-      <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-5 px-6 py-5">
-        <Link
-          href="/dashboard"
-          className="mr-5 text-2xl font-semibold tracking-tight"
-        >
-          ↗ relay
+    <header className="workspace-topbar">
+      <div className="workspace-nav-inner">
+        <Link href="/dashboard" className="workspace-logo">
+          <span className="workspace-logo-mark">↗</span> relay
         </Link>
-        <nav aria-label="Workspace" className="flex flex-wrap gap-1">
+        <nav aria-label="Workspace" className="primary-nav">
           {primaryLinks.map(([href, label]) => {
             const active =
               path === href ||
               (href !== "/dashboard" && path?.startsWith(`${href}/`));
+            const reviewCount = pendingApprovals.data?.length || 0;
             return (
               <Link
                 key={href}
@@ -55,35 +56,35 @@ export function WorkspaceNav({ name }: { name: string }) {
                 className={`nav-pill ${active ? "active" : ""}`}
               >
                 {label}
+                {href === "/approvals" && reviewCount > 0 && (
+                  <span
+                    className="nav-count"
+                    aria-label={`${reviewCount} items`}
+                  >
+                    {reviewCount}
+                  </span>
+                )}
               </Link>
             );
           })}
         </nav>
-        <nav
-          aria-label="Account and system"
-          className="flex flex-wrap gap-3 border-l border-line pl-5 text-xs"
-        >
-          {secondaryLinks.map(([href, label]) => (
-            <Link
-              key={href}
-              href={href}
-              aria-current={path === href ? "page" : undefined}
-              className={`nav-pill ${path === href ? "active" : ""}`}
-            >
-              {label}
-            </Link>
-          ))}
-        </nav>
-        <div className="ml-auto flex items-center gap-4 text-sm">
-          <span>{user.data?.name || name}</span>
-          <button
-            className="text-muted underline underline-offset-4"
-            disabled={logout.isPending}
-            onClick={() => logout.mutate()}
-          >
-            Sign out
-          </button>
-        </div>
+        <details className="account-menu">
+          <summary>{user.data?.name || name}</summary>
+          <nav aria-label="Account and settings">
+            {secondaryLinks.map(([href, label]) => (
+              <Link
+                key={href}
+                href={href}
+                aria-current={path === href ? "page" : undefined}
+              >
+                {label}
+              </Link>
+            ))}
+            <button disabled={logout.isPending} onClick={() => logout.mutate()}>
+              Sign out
+            </button>
+          </nav>
+        </details>
         <ErrorMessage error={logout.error} />
       </div>
     </header>

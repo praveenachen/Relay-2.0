@@ -23,7 +23,7 @@ export default function Settings() {
   });
   function resetRelayHistory() {
     const confirmed = window.confirm(
-      "Clear Relay history for this profile? This removes runs, approvals, projects, cached destinations, and saved study preferences. Connected accounts stay connected.",
+      "Clear Relay activity for this profile? This removes saved work, projects, destinations, and study preferences. Connected accounts stay connected.",
     );
     if (confirmed) resetHistory.mutate();
   }
@@ -82,9 +82,8 @@ export default function Settings() {
         <section className="panel">
           <h2 className="section-title">Refresh history</h2>
           <p className="text-sm text-muted">
-            Clear workflow runs, approvals, projects, cached destinations, and
-            saved study preferences for this profile. Your login and connected
-            tools stay connected.
+            Clear saved work, projects, destinations, and study preferences for
+            this profile. Your login and connected tools stay connected.
           </p>
           <ErrorMessage error={resetHistory.error} />
           {resetHistory.isSuccess && (

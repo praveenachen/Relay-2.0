@@ -15,18 +15,18 @@ export default function Connections() {
       <PageTitle
         eyebrow="Your tools, connected"
         title="Connections"
-        description="Manage the tools Relay can work with. Connecting a tool never gives Relay permission to act without your approval."
+        description="Manage where Relay can find and save your work. You still confirm changes before anything is created."
       />
       <ConnectionCards />
       <section className="mt-8 rounded-2xl border border-line bg-surface p-6">
         <div className="max-w-3xl">
           <p className="eyebrow">Ready to work</p>
-          <h2 className="mt-2 text-2xl font-semibold">Start from a workflow</h2>
+          <h2 className="mt-2 text-2xl font-semibold">
+            Put your connections to work
+          </h2>
           <p className="mt-3 text-sm leading-6 text-muted">
-            Connections give Relay access to read context and prepare drafts.
-            The actual work starts in Learn, Plan, or Collaborate, where Relay
-            creates a proposal for you to review before anything is written to
-            your tools.
+            Use Notes, Planner, or Projects to bring in your material. Relay
+            prepares the result for you to review before saving anything.
           </p>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
