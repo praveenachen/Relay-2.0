@@ -26,9 +26,7 @@ import {
   StudySession,
   plan,
 } from "@/features/plan/api";
-import { WorkflowBadge } from "@/components/workflow-badge";
 import { CompletionActions } from "@/components/completion-actions";
-import { RelayLine } from "@/components/relay-line";
 import {
   Empty,
   ErrorMessage,
@@ -36,7 +34,6 @@ import {
   PageTitle,
   Status,
 } from "@/components/ui";
-import { workflowDisplay } from "@/features/workflows/display";
 
 function localInputValue(iso: string): string {
   const date = new Date(iso);
@@ -94,27 +91,11 @@ export function PlanEntry() {
       <PageTitle
         eyebrow="Planner"
         title="Build a realistic study schedule."
-        description="Add your tasks and deadlines, then build a realistic study week around your Google Calendar availability."
-        action={<WorkflowBadge workflow={workflowDisplay.study_scheduler} />}
-      />
-      <RelayLine
-        tone="plan"
-        sources={[{ label: "Your tasks" }, { label: "Calendar" }]}
-        destinations={[
-          { label: "Google Calendar" },
-          { label: "Notion (optional)" },
-        ]}
-        status="DRAFT"
+        description="Add your tasks and deadlines, then fit focused study blocks around your existing Google Calendar."
       />
       <section className="planner-entry my-8">
-        <h2 className="section-title">From deadlines to a realistic week</h2>
-        <ol className="learn-steps">
-          <li>Add the tasks, deadlines, and effort you need to plan.</li>
-          <li>Fit focused study blocks around your existing calendar.</li>
-          <li>Adjust the week, then add it to Google Calendar.</li>
-        </ol>
         <button
-          className="button mt-6"
+          className="button"
           disabled={create.isPending}
           onClick={() => create.mutate()}
         >
@@ -157,15 +138,6 @@ export function PlanRun({ id }: { id: string }) {
         }
         description="Review your tasks and study sessions before adding them to Google Calendar."
         action={<Status value={data.run.status} />}
-      />
-      <RelayLine
-        tone="plan"
-        sources={[{ label: "Your tasks" }, { label: "Calendar" }]}
-        destinations={[
-          { label: "Google Calendar" },
-          { label: "Notion (optional)" },
-        ]}
-        status={data.run.status}
       />
       {data.run.error_message && (
         <div className="notice error my-6">

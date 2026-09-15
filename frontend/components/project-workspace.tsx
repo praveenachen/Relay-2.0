@@ -70,7 +70,7 @@ export function ProjectWorkspace() {
       <nav className="project-tabs" aria-label="Project sections">{tabs.map((value) => <button key={value} className={tab === value ? "active" : ""} aria-current={tab === value ? "page" : undefined} onClick={() => chooseTab(value)}>{value[0].toUpperCase() + value.slice(1)}</button>)}</nav>
       {tab === "overview" && <Overview description={item.description} tasks={tasks} deadline={item.deadline} onAdd={() => setAddingTask(true)} onTab={chooseTab} />}
       {tab === "tasks" && <TaskView tasks={tasks} update={persist} onAdd={() => setAddingTask(true)} />}
-      {tab === "plan" && <PlanView taskCount={tasks.filter((task) => task.status !== "DONE").length} />}
+      {tab === "plan" && <PlanView tasks={tasks} />}
       {tab === "sources" && <SourcesView project={item} />}
       {addingTask && <TaskModal projectId={id} close={() => setAddingTask(false)} save={(task) => { persist([...tasks, task]); setAddingTask(false); setTab("tasks"); }} />}
     </>
@@ -87,8 +87,24 @@ function TaskView({ tasks, update, onAdd }: { tasks: ProjectTask[]; update: (tas
   return <section className="project-surface task-surface"><div className="surface-heading"><div><p className="eyebrow">Simple and focused</p><h2>Tasks</h2></div><button className="button secondary" onClick={onAdd}><Plus /> Add task</button></div>{tasks.length ? <div className="task-groups">{(["TODO", "IN_PROGRESS", "DONE"] as const).map((status) => <section key={status} className="task-group"><div className="task-group-title"><h3>{statusLabels[status]}</h3><span>{tasks.filter((task) => task.status === status).length}</span></div>{tasks.filter((task) => task.status === status).map((task) => <article className="task-row" key={task.id}><button aria-label={`Move ${task.title} forward`} onClick={() => change(task.id, status === "TODO" ? "IN_PROGRESS" : status === "IN_PROGRESS" ? "DONE" : "TODO")}>{status === "DONE" ? <CheckCircle2 /> : <Circle />}</button><div><strong>{task.title}</strong><p><span className={`priority ${task.priority.toLowerCase()}`}>{task.priority.toLowerCase()}</span>{task.estimate && <span><Clock3 /> {task.estimate}m</span>}{task.dueDate && <span><CalendarDays /> {new Date(`${task.dueDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>}</p></div><MoreHorizontal /></article>)}</section>)}</div> : <Empty title="No tasks yet.">Add a first task to turn this project into a plan.</Empty>}</section>;
 }
 
-function PlanView({ taskCount }: { taskCount: number }) {
-  return <section className="project-surface feature-shell"><div className="feature-icon"><Sparkles /></div><p className="eyebrow">Plan</p><h2>Make time for what matters.</h2><p>{taskCount ? `You have ${taskCount} open ${taskCount === 1 ? "task" : "tasks"} ready to plan.` : "Add a few tasks, then shape them into a realistic study week."}</p><Link className="button" href="/workflows/plan">Open planner</Link><small>Your existing scheduling workflow remains available and unchanged.</small></section>;
+function PlanView({ tasks }: { tasks: ProjectTask[] }) {
+  const open = tasks.filter((task) => task.status !== "DONE");
+  return (
+    <section className="plan-panel">
+      <div className="plan-panel-intro"><p className="eyebrow">Plan</p><h2>Plan your project</h2><p>Turn your project tasks into focused time blocks around your existing schedule.</p></div>
+      <div className="plan-panel-grid">
+        <section className="project-surface plan-tasks">
+          <div className="surface-heading"><div><p className="eyebrow">This project</p><h2>Tasks to schedule</h2></div><span className="count-chip">{open.length}</span></div>
+          {open.length ? <ul className="mini-task-list">{open.slice(0, 6).map((task) => <li key={task.id}><span /><strong>{task.title}</strong>{task.estimate ? <time>{task.estimate}m</time> : task.dueDate ? <time>{new Date(`${task.dueDate}T12:00:00`).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</time> : null}</li>)}</ul> : <p className="surface-empty">Add a few tasks and they’ll show up here, ready to schedule.</p>}
+        </section>
+        <section className="project-surface plan-week">
+          <div className="surface-heading"><div><p className="eyebrow">This week</p><h2>Weekly plan</h2></div></div>
+          <div className="calendar-shell"><div><span>9 AM</span><i /></div><div><span>12 PM</span><i /></div><div><span>3 PM</span><i /></div><p>Your scheduled work will appear here.</p></div>
+          <button className="button secondary plan-week-cta" disabled title="Coming soon"><Sparkles /> Plan my week</button>
+        </section>
+      </div>
+    </section>
+  );
 }
 
 function SourcesView({ project }: { project: { notion_database_id: string | null; github_repository_owner: string | null; github_repository_name: string | null } }) {
