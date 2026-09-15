@@ -3,9 +3,11 @@ import Link from "next/link";
 export function CompletionActions({
   workflow,
   destinations,
+  actionLabel = "View Completed Actions",
 }: {
   workflow: "learn" | "plan" | "collaborate";
   destinations: (string | null | undefined)[];
+  actionLabel?: string;
 }) {
   const urls = [
     ...new Set(
@@ -24,12 +26,12 @@ export function CompletionActions({
     <div className="mt-5 flex flex-wrap items-start gap-3">
       {urls.length === 1 && (
         <a className="button" href={urls[0]} target="_blank" rel="noreferrer">
-          View Completed Actions
+          {actionLabel}
         </a>
       )}
       {urls.length > 1 && (
         <details className="completion-destinations">
-          <summary className="button">View Completed Actions</summary>
+          <summary className="button">{actionLabel}</summary>
           <ul className="mt-3 space-y-2">
             {urls.map((url, index) => (
               <li key={url}>

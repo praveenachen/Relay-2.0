@@ -23,8 +23,9 @@ import { learn, LectureSummary } from "@/features/learn/api";
 import { WorkflowBadge } from "@/components/workflow-badge";
 import { CompletionActions } from "@/components/completion-actions";
 import { RelayLine } from "@/components/relay-line";
-import { ErrorMessage, Loading, PageTitle, Status } from "@/components/ui";
-import { workflowDisplay } from "@/features/workflows/display";
+import { Empty, ErrorMessage, Loading, PageTitle, Status } from "@/components/ui";
+import { runTitle, workflowDisplay } from "@/features/workflows/display";
+import { useDefinitions, useRuns } from "@/hooks/queries";
 
 function refsLabel(
   refs: { section_id: string; page: number | null }[] | undefined,
@@ -46,6 +47,17 @@ export function LearnEntry() {
     queryKey: ["learn", "config"],
     queryFn: learn.config,
   });
+  const definitions = useDefinitions();
+  const runs = useRuns();
+  const lectureDefinitionId = definitions.data?.find(
+    (item) => item.key === "lecture_to_notion",
+  )?.id;
+  const notes = (runs.data || [])
+    .filter((run) => run.workflow_definition_id === lectureDefinitionId)
+    .sort(
+      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+    )
+    .slice(0, 5);
   const [file, setFile] = useState<File | null>(null);
   const [pasted, setPasted] = useState("");
   const create = useMutation({
@@ -132,6 +144,36 @@ export function LearnEntry() {
           </ol>
         </div>
       </section>
+      {!runs.isPending && !definitions.isPending && !runs.error && !definitions.error && (
+        <section className="mt-12">
+          <h2 className="section-title">Your notes</h2>
+          {notes.length === 0 ? (
+            <Empty title="Your notes will show up here.">
+              Upload a lecture above to create your first set of study notes.
+            </Empty>
+          ) : (
+            <ul className="run-list">
+              {notes.map((run) => (
+                <li key={run.id}>
+                  <Link className="run-card" href={`/workflows/learn/${run.id}`}>
+                    <div>
+                      <p className="run-card-title">
+                        {runTitle(run, workflowDisplay.lecture_to_notion)}
+                      </p>
+                      <p className="run-card-meta">
+                        Updated {new Date(run.updated_at).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <span className="run-card-status">
+                      <Status value={run.status} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </>
   );
 }
@@ -416,6 +458,7 @@ export function LearnRun({ id }: { id: string }) {
           <CompletionActions
             workflow="learn"
             destinations={[artifact.data?.external_url]}
+            actionLabel="Open in Notion"
           />
           {data.summary && (
             <details className="learn-disclosure mt-6">
@@ -436,54 +479,50 @@ function learnNextStep(
 ) {
   if (busy || detail.stage === "summarizing") {
     return {
-      title: "Relay is working on this step.",
+      title: "Creating your notes...",
       description:
         detail.stage === "summarizing"
-          ? "OpenAI is generating your study-page draft. This can take a minute for longer PDFs."
+          ? "Organizing the key concepts from your lecture. This can take a minute for longer files."
           : "Wait for the current action to finish before moving on.",
     };
   }
   if (canUpload || (detail.run.status === "DRAFT" && !detail.source)) {
     return {
-      title: "Next: upload lecture notes.",
+      title: "Next: upload lecture material.",
       description:
         "Use the Source card below to upload a file or paste text into this draft.",
     };
   }
   if (detail.run.status === "DRAFT" && detail.source) {
     return {
-      title: "Next: parse the source.",
+      title: "Next: organize your document.",
       description:
-        "Relay will read the uploaded document and break it into page-aware sections.",
+        "Relay will read the uploaded document and organize it into sections you can review.",
     };
   }
   if (detail.run.status === "ANALYZING" && detail.source?.status === "PARSED") {
     return {
-      title: "Next: summarize the parsed source.",
+      title: "Next: create your notes.",
       description:
-        detail.provider === "fake"
-          ? "Local fake mode creates a demo draft from parsed text, so it may repeat headings instead of writing polished notes."
-          : "Relay will generate a sourced study-page draft for review.",
+        "Relay will turn your document into a study-page draft for you to review.",
     };
   }
   if (detail.approval?.status === "PENDING") {
     return {
-      title: "Next: review and approve the study page.",
+      title: "Next: review your notes.",
       description:
-        "Edit anything that looks wrong, save changes if needed, then approve the exact payload before publishing.",
+        "Edit anything that looks wrong, save changes if needed, then approve before saving to Notion.",
     };
   }
   if (detail.run.status === "APPROVED") {
     return {
-      title: "Next: publish to Notion.",
-      description:
-        "The payload is approved and ready to send to your selected Notion destination.",
+      title: "Next: save to Notion.",
+      description: "Your notes are approved and ready to save to Notion.",
     };
   }
   return {
-    title: "Workflow status updated.",
-    description:
-      "Relay will show the next available action as the run progresses.",
+    title: "Notes status updated.",
+    description: "Relay will show the next step as your notes progress.",
   };
 }
 
@@ -500,14 +539,14 @@ function PublishedNotice({
       <Check aria-hidden="true" />
       <div>
         <p className="font-medium">
-          {isMock ? "Workflow complete." : "Published to Notion."}
+          {isMock ? "Notes saved." : "Saved to Notion."}
         </p>
         <p className="mt-1">
           {loading
-            ? "Relay is loading the published page details."
+            ? "Relay is loading your saved notes."
             : isMock
-              ? "Relay recorded a mock Notion artifact for this completed run."
-              : "Your approved study page has been created in the selected Notion destination."}
+              ? "Relay recorded a mock Notion save for these notes."
+              : "Your approved notes have been saved to Notion."}
         </p>
       </div>
     </div>
@@ -521,7 +560,7 @@ function NextStepNotice({
   title: string;
   description: string;
 }) {
-  const working = title.startsWith("Relay is working");
+  const working = title.startsWith("Creating your notes");
   return (
     <div className={`notice next-step my-6 ${working ? "working" : ""}`}>
       <div>
@@ -683,9 +722,7 @@ function ProcessingPanel({
   return (
     <article className="panel">
       <h2 className="section-title">
-        {detail.run.status === "DRAFT"
-          ? "Source document"
-          : "Understand your source"}
+        {detail.run.status === "DRAFT" ? "Source document" : "Creating your notes"}
       </h2>
       <p className="text-sm">{detail.source?.filename}</p>
       {detail.source && (
@@ -693,10 +730,6 @@ function ProcessingPanel({
           {detail.source.sections.length} sections parsed
         </p>
       )}
-      <p className="text-sm text-muted">
-        Provider: {detail.provider}
-        {detail.stage ? ` | ${detail.stage}` : ""}
-      </p>
       <div className="mt-5 flex flex-wrap gap-3">
         <button
           className={canParse && !busy ? "button" : "button secondary"}
@@ -715,6 +748,11 @@ function ProcessingPanel({
           Summarize
         </button>
       </div>
+      {summarizing && (
+        <p className="text-sm text-muted mt-4">
+          Creating your notes... organizing the key concepts from your lecture.
+        </p>
+      )}
     </article>
   );
 }
@@ -812,7 +850,7 @@ function ApprovalPanel({
           )}
         </div>
       )}
-      <h2 className="section-title mt-8">Approval</h2>
+      <h2 className="section-title mt-8">Review</h2>
       <div className="approval-action-row">
         <div>
           {detail.approval ? <Status value={detail.approval.status} /> : null}
