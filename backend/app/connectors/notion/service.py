@@ -116,10 +116,7 @@ class NotionDestinationService:
         await self.session.commit()
         return await self._cached_list(owner)
 
-    async def list(self, owner: UUID) -> list[NotionDestination]:
-        return await self.refresh(owner)
-
-    async def _cached_list(self, owner: UUID) -> "list[NotionDestination]":
+    async def _cached_list(self, owner: UUID) -> list[NotionDestination]:
         connection = await self.connection(owner)
         records = (
             await self.session.scalars(
@@ -135,6 +132,9 @@ class NotionDestinationService:
             NotionDestination(id=item.provider_page_id, title=item.title, icon_url=item.icon_url)
             for item in records
         ]
+
+    async def list(self, owner: UUID) -> list[NotionDestination]:
+        return await self.refresh(owner)
 
     async def select(self, owner: UUID, destination_id: str) -> NotionDestination:
         await self.refresh(owner)
