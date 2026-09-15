@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { auth } from "@/features/auth/api";
-import { BookOpen, CalendarDays, Users } from "lucide-react";
 import { Brand } from "@/components/brand";
 import { ErrorMessage } from "@/components/ui";
 
@@ -58,21 +57,21 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
     mutation.mutate(parsed.data);
   }
   return (
-    <main className="auth-layout">
-      <section className="auth-primary">
+    <main className="product-shell auth-shell">
+      <section className="panel auth-card">
         <Brand />
-        <div className="mt-12">
-          <p className="eyebrow">Your academic workspace</p>
-          <h1 className="mt-3 text-3xl font-semibold">
-            {signup ? "Make room for what matters." : "Welcome back."}
+        <div className="mt-8">
+          <p className="eyebrow">{signup ? "Get started" : "Welcome back"}</p>
+          <h1 className="mt-2 text-2xl font-semibold">
+            {signup ? "Create your Relay account." : "Pick up where you left off."}
           </h1>
-          <p className="mt-4 leading-7 text-muted">
+          <p className="mt-3 leading-6 text-muted">
             {signup
-              ? "Create your Relay account. Connect your tools whenever you are ready."
-              : "Sign in to pick up where you left off."}
+              ? "Organize school, work, and personal projects in one place."
+              : "Sign in to get back to your projects and tasks."}
           </p>
         </div>
-        <form onSubmit={submit} className="mt-8 space-y-5">
+        <form onSubmit={submit} className="mt-7 space-y-5">
           {signup && (
             <label className="field">
               Name
@@ -111,7 +110,7 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
                 : "Sign in"}
           </button>
         </form>
-        <p className="mt-7 text-sm text-muted">
+        <p className="mt-6 text-sm text-muted">
           {signup ? "Already have an account?" : "New to Relay?"}{" "}
           <Link
             className="font-medium text-accent underline"
@@ -121,42 +120,6 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
           </Link>
         </p>
       </section>
-      <aside className="auth-context" aria-label="How Relay works">
-        <p className="eyebrow">A little less busywork</p>
-        <h2>
-          Your next step,
-          <br />a little clearer.
-        </h2>
-        <p className="text-muted">
-          Bring your material. Make a plan. Review what happens next.
-        </p>
-        <ul className="auth-workflows">
-          <li data-workflow="learn">
-            <BookOpen aria-hidden="true" />
-            <div>
-              <h3>Learn</h3>
-              <p>Lecture material to study notes in Notion.</p>
-            </div>
-          </li>
-          <li data-workflow="plan">
-            <CalendarDays aria-hidden="true" />
-            <div>
-              <h3>Plan</h3>
-              <p>Study tasks to a schedule that fits your calendar.</p>
-            </div>
-          </li>
-          <li data-workflow="collaborate">
-            <Users aria-hidden="true" />
-            <div>
-              <h3>Collaborate</h3>
-              <p>
-                Meeting transcripts to project actions in Notion and GitHub.
-              </p>
-            </div>
-          </li>
-        </ul>
-        <p className="auth-review">You review. Relay carries it forward.</p>
-      </aside>
     </main>
   );
 }
