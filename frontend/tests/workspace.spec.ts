@@ -50,9 +50,13 @@ test("Inbox bulk accept uses the confirmed card drafts", async ({ page }) => {
   await expect(card).toBeVisible();
   const initialCount = await cards.count();
   const taskTitle = (await card.getByRole("heading").textContent())!;
-  await card.locator('input[type="checkbox"]').check();
   const confirmations = card.locator(".confirmation-list button");
-  while ((await confirmations.count()) > 0) await confirmations.first().click();
+  while ((await confirmations.count()) > 0) {
+    const count = await confirmations.count();
+    await confirmations.first().click();
+    await expect(confirmations).toHaveCount(count - 1);
+  }
+  await card.locator('input[type="checkbox"]').check();
   const acceptSelected = page.getByRole("button", {
     name: "Accept selected (1)",
   });

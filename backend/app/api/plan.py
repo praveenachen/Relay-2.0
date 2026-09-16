@@ -10,7 +10,7 @@ from app.connectors.google.service import GoogleCalendarService
 from app.connectors.notion.service import NotionDestinationService
 from app.core.config import get_settings
 from app.domain.enums import ApprovalStatus, WorkflowStatus
-from app.infrastructure.credentials import credential_store
+from app.infrastructure.credentials import deferred_credential_store
 from app.runtime.client import RuntimeClient
 from app.runtime.factory import runtime_client as build_runtime_client
 from app.scheduling.models import StudySession
@@ -34,7 +34,7 @@ def google_service(repo: Repository) -> GoogleCalendarService:
     settings = get_settings()
     return GoogleCalendarService(
         repo,
-        credential_store(),
+        deferred_credential_store(),
         oauth=google_oauth(),
         api_base_url=settings.google_calendar_api_base_url,
         timeout=settings.google_timeout_seconds,
@@ -45,7 +45,7 @@ def notion_service(repo: Repository) -> NotionDestinationService:
     settings = get_settings()
     return NotionDestinationService(
         repo,
-        credential_store(),
+        deferred_credential_store(),
         api_base_url=settings.notion_api_base_url,
         timeout=settings.notion_timeout_seconds,
     )

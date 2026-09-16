@@ -5,6 +5,7 @@ from conftest import login, register
 from cryptography.fernet import Fernet
 from sqlalchemy import select
 
+from app.core.config import get_settings
 from app.domain.enums import ConnectionStatus, Provider
 from app.domain.errors import (
     ConnectedAccountAlreadyExists,
@@ -12,7 +13,7 @@ from app.domain.errors import (
     OAuthNotConfigured,
 )
 from app.domain.ports import OAuthCredentials
-from app.infrastructure.credentials import FernetCredentialStore
+from app.infrastructure.credentials import DeferredCredentialStore, FernetCredentialStore
 from app.models.entities import AuditEvent, ConnectedAccount
 from app.repositories.relay import RelayRepository
 from app.services.connections import ConnectionService
@@ -31,6 +32,17 @@ def test_authenticated_encryption():
         store.decrypt(encrypted[:-5] + "abcde")
     with pytest.raises(CredentialStorageUnavailable):
         FernetCredentialStore([])
+
+
+def test_deferred_store_only_requires_configuration_when_used(monkeypatch):
+    monkeypatch.setattr(
+        get_settings(),
+        "token_encryption_key",
+        type("Secret", (), {"get_secret_value": lambda self: ""})(),
+    )
+    store = DeferredCredentialStore()
+    with pytest.raises(CredentialStorageUnavailable):
+        store.decrypt("not-accessed-until-now")
 
 
 async def test_connection_lifecycle_and_isolation(client, account, session_factory):

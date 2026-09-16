@@ -24,6 +24,20 @@ class FernetCredentialStore:
             raise CredentialStorageUnavailable() from None
 
 
+class DeferredCredentialStore:
+    """Resolve encryption configuration only when credentials are accessed."""
+
+    def encrypt(self, value: str) -> str:
+        return credential_store().encrypt(value)
+
+    def decrypt(self, value: str) -> str:
+        return credential_store().decrypt(value)
+
+
 def credential_store() -> CredentialStore:
     key = get_settings().token_encryption_key.get_secret_value()
     return FernetCredentialStore([part.strip() for part in key.split(",") if part.strip()])
+
+
+def deferred_credential_store() -> CredentialStore:
+    return DeferredCredentialStore()
