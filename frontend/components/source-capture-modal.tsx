@@ -6,7 +6,7 @@ import { FileUp, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   sources,
-  type ProjectSource,
+  taskProposals,
   type SourceType,
 } from "@/features/sources/api";
 import { ErrorMessage, Spinner } from "@/components/ui";
@@ -34,6 +34,7 @@ export function SourceCaptureModal({
   const [content, setContent] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [created, setCreated] = useState(false);
+  const [proposalCount, setProposalCount] = useState<number | null>(null);
   const cache = useQueryClient();
   const create = useMutation({
     mutationFn: () =>
@@ -43,13 +44,22 @@ export function SourceCaptureModal({
         content,
         file,
       }),
-    onSuccess: (source) => {
-      cache.setQueryData<ProjectSource[]>(
-        ["projects", projectId, "sources"],
-        (items = []) => [source, ...items],
-      );
-      cache.invalidateQueries({ queryKey: ["task-proposals"] });
+    onSuccess: async (source) => {
+      await cache.invalidateQueries({
+        queryKey: ["projects", projectId, "sources"],
+      });
       setCreated(true);
+      try {
+        const proposals = await taskProposals.list();
+        cache.setQueryData(["task-proposals"], proposals);
+        setProposalCount(
+          proposals.filter(
+            (item) => item.source_id === source.id && item.status === "PENDING",
+          ).length,
+        );
+      } catch {
+        setProposalCount(null);
+      }
     },
   });
   return (
@@ -78,18 +88,29 @@ export function SourceCaptureModal({
         {created ? (
           <div className="source-success">
             <Sparkles />
-            <h3>Proposals are ready.</h3>
+            <h3>
+              {proposalCount === null
+                ? "Source saved."
+                : proposalCount
+                  ? `${proposalCount} task ${proposalCount === 1 ? "proposal is" : "proposals are"} ready.`
+                  : "Source saved."}
+            </h3>
             <p>
-              Relay interpreted the source. Nothing has been created until you
-              review and accept it.
+              {proposalCount === null
+                ? "Check Inbox for task proposals from this source."
+                : proposalCount
+                  ? "Review the proposals in Inbox before any tasks are created."
+                  : "Relay found no actionable tasks in this source. You can add another source or create a task yourself."}
             </p>
             <div>
               <button className="button secondary" onClick={close}>
                 Stay here
               </button>
-              <Link className="button" href="/inbox">
-                Review in Inbox
-              </Link>
+              {proposalCount !== 0 && (
+                <Link className="button" href="/inbox">
+                  Review in Inbox
+                </Link>
+              )}
             </div>
           </div>
         ) : (

@@ -35,6 +35,8 @@ function ProposalCard({
   const cache = useQueryClient();
   const finish = () => {
     cache.invalidateQueries({ queryKey: ["task-proposals"] });
+    cache.invalidateQueries({ queryKey: ["tasks"] });
+    cache.invalidateQueries({ queryKey: ["approvals"] });
     cache.invalidateQueries({
       queryKey: ["projects", item.project_id, "tasks"],
     });
@@ -311,6 +313,7 @@ export default function Inbox() {
     onSettled: () => {
       cache.invalidateQueries({ queryKey: ["task-proposals"] });
       cache.invalidateQueries({ queryKey: ["tasks"] });
+      cache.invalidateQueries({ queryKey: ["approvals"] });
       for (const { item } of selectedItems)
         cache.invalidateQueries({
           queryKey: ["projects", item.project_id, "tasks"],

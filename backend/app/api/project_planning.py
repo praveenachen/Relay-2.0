@@ -74,7 +74,9 @@ async def confirm_notion_project(
     runtime: NotionRuntime,
 ) -> RunRead:
     await repo.project(project_id, user.id)
-    return await ProjectNotionPublishService(repo, runtime).confirm(run_id, approval_id, user.id)
+    return await ProjectNotionPublishService(repo, runtime).confirm(
+        run_id, approval_id, user.id, project_id
+    )
 
 
 @router.post("/projects/{project_id}/plan", status_code=201)
@@ -125,4 +127,6 @@ async def confirm_github_issue(
     runtime: GitHubRuntime,
 ) -> RunRead:
     await repo.task(project_id, task_id, user.id)
-    return await ProjectGitHubIssueService(repo, runtime).confirm(run_id, approval_id, user.id)
+    return await ProjectGitHubIssueService(repo, runtime).confirm(
+        run_id, approval_id, user.id, project_id, task_id
+    )

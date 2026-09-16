@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { workflows } from "@/features/workflows/display";
 import { auth } from "@/features/auth/api";
 import { ConnectionCards } from "@/components/connection-cards";
 import { PreferencesForm } from "@/components/preferences-form";
@@ -46,11 +45,15 @@ export default function Onboarding() {
             description="Turn information into understanding, a plan, and actions you approve. Let us set up your workspace."
           />
           <div className="mb-8 grid gap-5 md:grid-cols-3">
-            {workflows.map((workflow) => (
-              <article className="panel" key={workflow.key}>
-                <h2 className="text-xl font-semibold">{workflow.pillar}</h2>
+            {[
+              ["School", "Keep courses and assignments together."],
+              ["Work", "Turn meeting notes into project tasks."],
+              ["Personal", "Plan goals and next steps in one place."],
+            ].map(([title, description]) => (
+              <article className="panel" key={title}>
+                <h2 className="text-xl font-semibold">{title}</h2>
                 <p className="mt-3 text-sm leading-6 text-muted">
-                  {workflow.description}
+                  {description}
                 </p>
               </article>
             ))}
@@ -101,7 +104,7 @@ export default function Onboarding() {
           <PageTitle
             eyebrow="Ready when you are"
             title="Your workspace is ready."
-            description="Your preferences are saved. Create your first draft, explore your workspace, or connect tools whenever you are ready."
+            description="Your preferences are saved. Create a project in School, Work, or Personal to get started."
           />
           <button
             className="button"

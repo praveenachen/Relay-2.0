@@ -67,9 +67,21 @@ export default function Approvals() {
                 : run
                   ? runTitle(run, display)
                   : copy?.label || "Saved work";
-            const href = display
-              ? `/workflows/${display.slug}/${approval.workflow_run_id}`
-              : `/runs/${approval.workflow_run_id}`;
+            const kind = run?.input_payload.kind;
+            const href =
+              definition?.key === "source_to_tasks"
+                ? "/inbox"
+                : run?.project_workspace_id &&
+                    kind === "project_task_github_issue"
+                  ? `/projects/${run.project_workspace_id}?tab=tasks`
+                  : run?.project_workspace_id &&
+                      kind === "publish_notion_project"
+                    ? `/projects/${run.project_workspace_id}`
+                    : run?.project_workspace_id && display?.slug === "plan"
+                      ? `/projects/${run.project_workspace_id}?tab=plan`
+                      : display
+                        ? `/workflows/${display.slug}/${approval.workflow_run_id}`
+                        : `/runs/${approval.workflow_run_id}`;
 
             return (
               <li key={approval.id}>

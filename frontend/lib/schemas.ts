@@ -35,6 +35,7 @@ export const definitionSchema = z.object({
 export const runSchema = z.object({
   id: z.guid(),
   workflow_definition_id: z.guid(),
+  project_workspace_id: z.guid().nullable(),
   status: workflowStatus,
   input_payload: payloadSchema,
   plan_payload: payloadSchema.nullable(),

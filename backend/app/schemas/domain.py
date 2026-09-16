@@ -67,6 +67,7 @@ class RunInput(InputModel):
 class RunRead(ReadModel):
     id: UUID
     workflow_definition_id: UUID
+    project_workspace_id: UUID | None
     status: WorkflowStatus
     input_payload: dict[str, JsonValue]
     plan_payload: dict[str, JsonValue] | None

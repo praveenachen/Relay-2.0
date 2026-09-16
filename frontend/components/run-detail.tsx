@@ -56,9 +56,20 @@ export function RunDetail({ id }: { id: string }) {
   );
   const display = displayFor(definition?.key);
   const name = definition?.name || "Relay";
-  const workspaceHref = display
-    ? `/workflows/${display.slug}/${run.data.id}`
-    : undefined;
+  const kind = run.data.input_payload.kind;
+  const projectId = run.data.project_workspace_id;
+  const workspaceHref =
+    projectId && kind === "project_task_github_issue"
+      ? `/projects/${projectId}?tab=tasks`
+      : projectId && kind === "publish_notion_project"
+        ? `/projects/${projectId}`
+        : projectId && display?.slug === "plan"
+          ? `/projects/${projectId}?tab=plan`
+          : definition?.key === "source_to_tasks"
+            ? "/inbox"
+            : display
+              ? `/workflows/${display.slug}/${run.data.id}`
+              : undefined;
   return (
     <>
       <PageTitle
@@ -93,7 +104,7 @@ export function RunDetail({ id }: { id: string }) {
             title={
               run.data.status === "DRAFT"
                 ? "Your draft is saved."
-                : "Open the workflow."
+                : "Open this work."
             }
           >
             This work does not have a dedicated editor. Its activity is

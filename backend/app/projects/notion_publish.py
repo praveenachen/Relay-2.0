@@ -400,12 +400,17 @@ class ProjectNotionPublishService:
             destination_title=metadata.get("default_destination_title"),
         )
 
-    async def confirm(self, run_id: UUID, approval_id: UUID, owner: UUID) -> RunRead:
+    async def confirm(
+        self, run_id: UUID, approval_id: UUID, owner: UUID, project_id: UUID
+    ) -> RunRead:
         if self.runtime is None:
             raise NotionNotConnected()
         run = await self.repo.run(run_id, owner)
         approval = await self.repo.approval(approval_id, owner)
-        if approval.workflow_run_id != run.id:
+        if approval.workflow_run_id != run.id or run.project_workspace_id != project_id:
+            raise NotionDestinationNotFound()
+        action = await self.session.get(ProposedAction, approval.proposed_action_id)
+        if action is None or action.payload.get("project_id") != str(project_id):
             raise NotionDestinationNotFound()
         if approval.status.value == "PENDING":
             await ApprovalService(self.repo).resolve(

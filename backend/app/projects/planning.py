@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.domain.enums import WorkflowStatus
-from app.models.entities import WorkflowRun
+from app.models.entities import ExternalArtifact, WorkflowRun
 from app.projects.schemas import ProjectPlanInput, ScheduledBlockRead
 from app.repositories.relay import RelayRepository
 from app.scheduling.project_adapter import project_task_to_scheduler_input
@@ -69,7 +69,22 @@ class ProjectPlanningService:
                 continue
             project = await self.repo.project(run.project_workspace_id, owner)
             tasks = {str(task.id): task for task in await self.repo.tasks(project.id, owner)}
-            for raw in (run.input_payload or {}).get("sessions", []):
+            artifacts = (
+                await self.repo.session.scalars(
+                    select(ExternalArtifact).where(
+                        ExternalArtifact.workflow_run_id == run.id,
+                        ExternalArtifact.artifact_type == "calendar_study_block",
+                    )
+                )
+            ).all()
+            exported_indexes = {
+                int(artifact.idempotency_key.rsplit(":", 1)[-1])
+                for artifact in artifacts
+                if artifact.idempotency_key.rsplit(":", 1)[-1].isdigit()
+            }
+            for index, raw in enumerate((run.input_payload or {}).get("sessions", [])):
+                if index not in exported_indexes:
+                    continue
                 task = tasks.get(str(raw.get("task_id")))
                 if task is None:
                     continue

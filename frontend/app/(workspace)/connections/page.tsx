@@ -1,13 +1,6 @@
 import Link from "next/link";
 import { ConnectionCards } from "@/components/connection-cards";
 import { PageTitle } from "@/components/ui";
-import { workflows } from "@/features/workflows/display";
-
-const workflowRequirements = {
-  learn: "Best after Notion is connected and a notes destination is selected.",
-  plan: "Best after Google Calendar is connected and a calendar is selected.",
-  collaborate: "Best after Notion and GitHub are connected.",
-} as const;
 
 export default function Connections() {
   return (
@@ -25,29 +18,24 @@ export default function Connections() {
             Put your connections to work
           </h2>
           <p className="mt-3 text-sm leading-6 text-muted">
-            Use Notes, Planner, or Projects to bring in your material. Relay
-            prepares the result for you to review before saving anything.
+            Add sources and tasks to a project, plan your week, and review
+            external changes before saving them.
           </p>
         </div>
         <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {workflows.map((workflow) => (
+          {(["school", "work", "personal"] as const).map((space) => (
             <article
-              key={workflow.key}
+              key={space}
               className="rounded-xl border border-line bg-background p-5"
             >
-              <p className="eyebrow">{workflow.pillar}</p>
-              <h3 className="mt-3 text-lg font-semibold">{workflow.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-muted">
-                {workflow.description}
-              </p>
-              <p className="mt-4 text-xs leading-5 text-muted">
-                {workflowRequirements[workflow.slug]}
-              </p>
+              <h3 className="text-lg font-semibold">
+                {space[0].toUpperCase() + space.slice(1)}
+              </h3>
               <Link
                 className="button mt-5 inline-flex"
-                href={`/workflows/${workflow.slug}`}
+                href={`/spaces/${space}`}
               >
-                Open {workflow.pillar.toLowerCase()}
+                Open {space}
               </Link>
             </article>
           ))}

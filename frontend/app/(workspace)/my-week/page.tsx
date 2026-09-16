@@ -10,11 +10,7 @@ import {
 } from "lucide-react";
 import { useAllServerTasks, useProjects } from "@/hooks/queries";
 import { ErrorMessage, Loading } from "@/components/ui";
-import {
-  projectTaskFromServer,
-  useProjectTasks,
-  writeTasks,
-} from "@/lib/project-tasks";
+import { projectTaskFromServer, taskDeadlineValue } from "@/lib/project-tasks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { relaySchedule } from "@/features/plan/api";
 import { sources } from "@/features/sources/api";
@@ -29,8 +25,13 @@ function weekKeys(from: Date) {
   return Array.from({ length: 7 }, (_, index) => {
     const day = new Date(from);
     day.setDate(from.getDate() + index);
-    return day.toISOString().slice(0, 10);
+    return localDay(day);
   });
+}
+
+function localDay(date: Date) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 }
 
 export default function MyWeek() {
@@ -41,28 +42,29 @@ export default function MyWeek() {
     queryKey: ["schedule"],
     queryFn: relaySchedule.list,
   });
-  const localTasks = useProjectTasks();
-  const tasks = [
-    ...(serverTasks.data || []).map(projectTaskFromServer),
-    ...localTasks,
-  ];
+  const tasks = (serverTasks.data || []).map(projectTaskFromServer);
   const updateServerTask = useMutation({
     mutationFn: (task: (typeof tasks)[number]) =>
       sources.updateTask(task.projectId, task.id, {
         title: task.title,
         description: task.description,
-        due_date: task.dueDate ? `${task.dueDate}T23:59:00Z` : null,
+        due_date: taskDeadlineValue(task),
         estimate_minutes: task.estimate,
         priority: task.priority,
         status: task.status,
       }),
-    onSuccess: () => cache.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: (_task, changed) => {
+      cache.invalidateQueries({ queryKey: ["tasks"] });
+      cache.invalidateQueries({
+        queryKey: ["projects", changed.projectId, "tasks"],
+      });
+    },
   });
   if (projects.isPending || serverTasks.isPending) return <Loading />;
   if (projects.error || serverTasks.error)
     return <ErrorMessage error={projects.error || serverTasks.error} />;
   const today = new Date();
-  const key = today.toISOString().slice(0, 10);
+  const key = localDay(today);
   const weekStart = startOfWeek(today);
   const days = weekKeys(weekStart);
   const weekEnd = days[days.length - 1];
@@ -82,23 +84,12 @@ export default function MyWeek() {
   );
   const toggle = (id: string) => {
     const current = tasks.find((task) => task.id === id);
-    if (current?.server) {
+    if (current) {
       updateServerTask.mutate({
         ...current,
         status: current.status === "DONE" ? "TODO" : "DONE",
       });
-      return;
     }
-    const next = tasks.map((task) =>
-      task.id === id
-        ? {
-            ...task,
-            status:
-              task.status === "DONE" ? ("TODO" as const) : ("DONE" as const),
-          }
-        : task,
-    );
-    writeTasks(next.filter((task) => !task.server));
   };
   const projectName = (id: string) =>
     projects.data?.find((project) => project.id === id)?.name || "Project";
@@ -180,7 +171,7 @@ export default function MyWeek() {
           <div className="week-schedule-shell">
             {days.map((day) => {
               const blocksForDay = (schedule.data || []).filter(
-                (block) => block.start.slice(0, 10) === day,
+                (block) => localDay(new Date(block.start)) === day,
               );
               const dueForDay = dueThisWeek.filter(
                 (task) => task.dueDate === day,
@@ -220,7 +211,7 @@ export default function MyWeek() {
             })}
             {!schedule.isPending &&
               !(schedule.data || []).some((block) =>
-                days.includes(block.start.slice(0, 10)),
+                days.includes(localDay(new Date(block.start))),
               ) &&
               !dueThisWeek.length && (
                 <p className="week-schedule-empty">

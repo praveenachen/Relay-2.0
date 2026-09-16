@@ -19,7 +19,7 @@ import {
 import { ErrorMessage, Loading } from "@/components/ui";
 import { ProjectCard } from "@/components/project-card";
 import { NewProjectButton } from "@/components/project-library";
-import { projectTaskFromServer, useProjectTasks } from "@/lib/project-tasks";
+import { projectTaskFromServer } from "@/lib/project-tasks";
 
 const spaces = [
   { slug: "school", name: "School", icon: GraduationCap },
@@ -31,12 +31,8 @@ export default function Dashboard() {
   const user = useUser();
   const projects = useProjects();
   const approvals = usePendingApprovals();
-  const localTasks = useProjectTasks();
   const serverTasks = useAllServerTasks();
-  const tasks = [
-    ...(serverTasks.data || []).map(projectTaskFromServer),
-    ...localTasks,
-  ];
+  const tasks = (serverTasks.data || []).map(projectTaskFromServer);
   if (
     user.isPending ||
     projects.isPending ||

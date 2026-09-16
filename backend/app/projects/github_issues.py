@@ -128,10 +128,15 @@ class ProjectGitHubIssueService:
             repository=f"{project.github_repository_owner}/{project.github_repository_name}",
         )
 
-    async def confirm(self, run_id: UUID, approval_id: UUID, owner: UUID) -> RunRead:
+    async def confirm(
+        self, run_id: UUID, approval_id: UUID, owner: UUID, project_id: UUID, task_id: UUID
+    ) -> RunRead:
         run = await self.repo.run(run_id, owner)
         approval = await self.repo.approval(approval_id, owner)
-        if approval.workflow_run_id != run.id:
+        if approval.workflow_run_id != run.id or run.project_workspace_id != project_id:
+            raise GitHubRepositoryNotFound()
+        action = await self.session.get(ProposedAction, approval.proposed_action_id)
+        if action is None or action.payload.get("task_id") != str(task_id):
             raise GitHubRepositoryNotFound()
         if approval.status.value == "PENDING":
             await ApprovalService(self.repo).resolve(

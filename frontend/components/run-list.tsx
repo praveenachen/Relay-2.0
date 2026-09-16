@@ -17,7 +17,7 @@ export function RunList({
   if (!runs.length)
     return (
       <Empty title="Your next step starts here.">
-        Choose Notes, Planner, or Projects when you are ready to begin.
+        Create a project in School, Work, or Personal to get started.
       </Empty>
     );
   return (

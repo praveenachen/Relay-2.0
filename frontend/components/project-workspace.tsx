@@ -21,10 +21,8 @@ import {
 import { useConnections, usePreferences, useProject } from "@/hooks/queries";
 import { Empty, ErrorMessage, Loading, Spinner } from "@/components/ui";
 import {
-  readTasks,
   projectTaskFromServer,
-  useProjectTasks,
-  writeTasks,
+  taskDeadlineValue,
   type ProjectTask,
 } from "@/lib/project-tasks";
 import { SourceCaptureModal } from "@/components/source-capture-modal";
@@ -397,15 +395,11 @@ export function ProjectWorkspace() {
   const [tab, setTab] = useState<Tab>(
     tabs.includes(requestedTab as Tab) ? (requestedTab as Tab) : "overview",
   );
-  const allTasks = useProjectTasks();
   const serverTasks = useServerTasks(id);
   const remoteTasks: ProjectTask[] = (serverTasks.data || []).map(
     projectTaskFromServer,
   );
-  const tasks = [
-    ...remoteTasks,
-    ...allTasks.filter((task) => task.projectId === id),
-  ];
+  const tasks = remoteTasks;
   const [addingTask, setAddingTask] = useState(false);
   const [addingSource, setAddingSource] = useState<SourceType | null>(null);
   const [editingTask, setEditingTask] = useState<ProjectTask | null>(null);
@@ -414,16 +408,14 @@ export function ProjectWorkspace() {
     setTab(next);
     router.replace(`/projects/${id}?tab=${next}`, { scroll: false });
   };
-  const persist = (nextProjectTasks: ProjectTask[]) => {
-    const all = readTasks().filter((task) => task.projectId !== id);
-    writeTasks([...all, ...nextProjectTasks.filter((task) => !task.server)]);
-  };
   const deleteProject = useMutation({
     mutationFn: () => projects.delete(id),
     onSuccess: () => {
       cache.setQueryData<Project[]>(["projects"], (current = []) =>
         current.filter((p) => p.id !== id),
       );
+      cache.invalidateQueries({ queryKey: ["tasks"] });
+      cache.invalidateQueries({ queryKey: ["schedule"] });
       router.replace(
         `/spaces/${(project.data?.space || "personal").toLowerCase()}`,
       );
@@ -433,7 +425,7 @@ export function ProjectWorkspace() {
     mutationFn: (task: ProjectTask) =>
       sources.createTask(id, {
         title: task.title,
-        due_date: task.dueDate ? `${task.dueDate}T23:59:00Z` : null,
+        due_date: taskDeadlineValue(task),
         estimate_minutes: task.estimate,
         priority: task.priority,
         status: task.status,
@@ -450,7 +442,7 @@ export function ProjectWorkspace() {
       sources.updateTask(id, task.id, {
         title: task.title,
         description: task.description,
-        due_date: task.dueDate ? `${task.dueDate}T23:59:00Z` : null,
+        due_date: taskDeadlineValue(task),
         estimate_minutes: task.estimate,
         priority: task.priority,
         status: task.status,
@@ -552,7 +544,6 @@ export function ProjectWorkspace() {
       {tab === "tasks" && (
         <TaskView
           tasks={tasks}
-          update={persist}
           updateServer={(task) =>
             updateTask.mutateAsync(task).then(() => undefined)
           }
@@ -595,12 +586,7 @@ export function ProjectWorkspace() {
           task={editingTask}
           close={() => setEditingTask(null)}
           save={async (edited) => {
-            if (edited.server)
-              await updateTask.mutateAsync(edited).then(() => undefined);
-            else
-              persist(
-                tasks.map((task) => (task.id === edited.id ? edited : task)),
-              );
+            await updateTask.mutateAsync(edited).then(() => undefined);
             setEditingTask(null);
           }}
         />
@@ -947,14 +933,12 @@ function NotionPublishCard({ project }: { project: Project }) {
 
 function TaskView({
   tasks,
-  update,
   updateServer,
   project,
   onAdd,
   onEdit,
 }: {
   tasks: ProjectTask[];
-  update: (tasks: ProjectTask[]) => void;
   updateServer: (task: ProjectTask) => Promise<void>;
   project: Project;
   onAdd: () => void;
@@ -963,11 +947,7 @@ function TaskView({
   const [issueTask, setIssueTask] = useState<ProjectTask | null>(null);
   const change = (id: string, status: ProjectTask["status"]) => {
     const current = tasks.find((task) => task.id === id);
-    if (current?.server) {
-      void updateServer({ ...current, status });
-      return;
-    }
-    update(tasks.map((task) => (task.id === id ? { ...task, status } : task)));
+    if (current) void updateServer({ ...current, status });
   };
   return (
     <section className="project-surface task-surface">
@@ -1126,13 +1106,21 @@ function GitHubIssueModal({
     onSuccess: setPreview,
   });
   const confirm = useMutation({
-    mutationFn: () =>
-      projectActions.confirmGitHubIssue(
+    mutationFn: async () => {
+      const run = await projectActions.confirmGitHubIssue(
         project.id,
         task.id,
         preview!.run_id,
         preview!.approval_id,
-      ),
+      );
+      if (run.status !== "COMPLETED") {
+        throw new Error(
+          run.error_message ||
+            "The GitHub issue was not created. Check Activity before retrying.",
+        );
+      }
+      return run;
+    },
     onSuccess: async () => {
       await cache.invalidateQueries({
         queryKey: ["projects", project.id, "tasks"],
@@ -1422,9 +1410,16 @@ function PlanView({
   });
   const addToCalendar = useMutation({
     mutationFn: async () => {
-      await plan.requestApproval(result!.run.id);
-      return plan.approveAndExecute(result!.run.id);
+      const run = await plan.approveAndExecute(result!.run.id);
+      if (run.status !== "COMPLETED") {
+        throw new Error(
+          run.error_message ||
+            "Some time blocks were not added to Google Calendar. Check Activity before retrying.",
+        );
+      }
+      return run;
     },
+    onSettled: () => cache.invalidateQueries({ queryKey: ["schedule"] }),
   });
   const selectCalendar = useMutation({
     mutationFn: () => connections.selectGoogleCalendar(calendarChoice),
@@ -1708,9 +1703,6 @@ function PlanView({
               addToCalendar.error
                 ? "Google Calendar couldn’t be updated."
                 : "Google Calendar needs attention."
-            }
-            retry={
-              addToCalendar.error ? () => addToCalendar.mutate() : undefined
             }
           />
           {addToCalendar.isSuccess && (

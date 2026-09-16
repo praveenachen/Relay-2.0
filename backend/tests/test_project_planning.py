@@ -1,12 +1,25 @@
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
 
 from sqlalchemy import func, select
 
 from app.connectors.notion.errors import MockNotionFailure
 from app.connectors.notion.mock import MockNotionConnector
 from app.core.config import get_settings
-from app.domain.enums import ConnectionStatus, Provider
-from app.models.entities import ConnectedAccount, ExternalArtifact, NotionDestinationRecord
+from app.domain.enums import (
+    ActionProvider,
+    ActionStatus,
+    ConnectionStatus,
+    Provider,
+    WorkflowStatus,
+)
+from app.models.entities import (
+    ConnectedAccount,
+    ExternalArtifact,
+    NotionDestinationRecord,
+    ProposedAction,
+    WorkflowRun,
+)
 
 
 async def _project(client, **extra):
@@ -61,6 +74,57 @@ async def test_project_tasks_feed_week_plan_without_duplicate_task_store(client,
     assert approval.status_code == 409
     assert approval.json()["code"] == "CALENDAR_DESTINATION_REQUIRED"
     assert "select a calendar" in approval.json()["message"].lower()
+
+
+async def test_my_week_only_lists_calendar_blocks_with_recorded_artifacts(
+    client, account, session_factory
+):
+    project = await _project(client)
+    task = await _task(client, project["id"], "Write launch notes", 3, 120)
+    start = datetime.now(UTC).replace(hour=0, minute=0, second=0, microsecond=0)
+    planned = await client.post(
+        f"/projects/{project['id']}/plan",
+        json={
+            "task_ids": [task["id"]],
+            "start": start.isoformat(),
+            "end": (start + timedelta(days=7)).isoformat(),
+            "calendar_id": None,
+        },
+    )
+    assert planned.status_code == 201, planned.text
+    run_id = planned.json()["run"]["id"]
+    sessions = planned.json()["result"]["sessions"]
+    assert len(sessions) >= 2
+    async with session_factory() as session:
+        run = await session.get(WorkflowRun, UUID(run_id))
+        assert run is not None
+        run.status = WorkflowStatus.PARTIALLY_COMPLETED
+        action = ProposedAction(
+            workflow_run_id=run.id,
+            provider=ActionProvider.GOOGLE_CALENDAR,
+            action_type="create_calendar_study_plan",
+            payload={},
+            status=ActionStatus.FAILED,
+        )
+        session.add(action)
+        await session.flush()
+        session.add(
+            ExternalArtifact(
+                workflow_run_id=run.id,
+                proposed_action_id=action.id,
+                connected_account_id=None,
+                provider=ActionProvider.GOOGLE_CALENDAR,
+                artifact_type="calendar_study_block",
+                external_id="event-1",
+                external_url="https://calendar.google.com/event-1",
+                idempotency_key=f"plan:{run.id}:approval:0",
+            )
+        )
+        await session.commit()
+    schedule = await client.get("/schedule")
+    assert schedule.status_code == 200, schedule.text
+    assert len(schedule.json()) == 1
+    assert schedule.json()[0]["start"] == sessions[0]["start"]
 
 
 async def test_task_without_due_date_or_estimate_is_not_schedulable(client, account):

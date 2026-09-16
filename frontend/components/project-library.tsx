@@ -7,7 +7,7 @@ import { useAllServerTasks, useProjects } from "@/hooks/queries";
 import { projects, type Project } from "@/features/projects/api";
 import { ErrorMessage, Loading, Spinner } from "@/components/ui";
 import { ProjectCard } from "@/components/project-card";
-import { projectTaskFromServer, useProjectTasks } from "@/lib/project-tasks";
+import { projectTaskFromServer } from "@/lib/project-tasks";
 
 export type Space = "SCHOOL" | "WORK" | "PERSONAL";
 
@@ -161,12 +161,8 @@ const emptyStateCopy: Record<Space, { title: string; description: string }> = {
 
 export function ProjectLibrary({ space }: { space: Space }) {
   const query = useProjects();
-  const localTasks = useProjectTasks();
   const serverTasks = useAllServerTasks();
-  const tasks = [
-    ...(serverTasks.data || []).map(projectTaskFromServer),
-    ...localTasks,
-  ];
+  const tasks = (serverTasks.data || []).map(projectTaskFromServer);
   if (query.isPending || serverTasks.isPending)
     return <Loading label="Loading projects" />;
   if (query.error || serverTasks.error)
