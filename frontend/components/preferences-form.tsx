@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { preferences } from "@/features/preferences/api";
 import { usePreferences } from "@/hooks/queries";
 import { Preferences, preferenceInput } from "@/lib/schemas";
-import { ErrorMessage, Loading } from "@/components/ui";
+import { ErrorMessage, Loading, Spinner } from "@/components/ui";
 
 export function PreferencesForm({
   onSaved,
@@ -152,6 +152,7 @@ function PreferenceFields({
         </p>
       )}
       <button className="button" disabled={mutation.isPending}>
+        {mutation.isPending && <Spinner label="Saving preferences" />}
         {mutation.isPending ? "Saving..." : label}
       </button>
     </form>

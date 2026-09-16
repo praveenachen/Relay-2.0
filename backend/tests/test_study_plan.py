@@ -235,6 +235,8 @@ async def test_remove_session(client, account, session_factory, encryption_key, 
     removed = await client.delete(path + f"/sessions/{session_id}")
     assert removed.status_code == 200, removed.text
     assert all(s["id"] != session_id for s in removed.json()["setup"]["sessions"])
+    assert removed.json()["result"]["metrics"]["unscheduled_minutes"] > 0
+    assert removed.json()["result"]["conflicts"][0]["code"] == "UNSCHEDULED_WORK"
 
 
 async def test_approve_and_execute_condenses_plan_approval_flow(

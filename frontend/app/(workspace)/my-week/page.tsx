@@ -177,7 +177,7 @@ export default function MyWeek() {
             </div>
             <CalendarDays />
           </div>
-          <div className="calendar-shell">
+          <div className="week-schedule-shell">
             {days.map((day) => {
               const blocksForDay = (schedule.data || []).filter(
                 (block) => block.start.slice(0, 10) === day,
@@ -223,7 +223,9 @@ export default function MyWeek() {
                 days.includes(block.start.slice(0, 10)),
               ) &&
               !dueThisWeek.length && (
-                <p>No Relay time blocks scheduled this week.</p>
+                <p className="week-schedule-empty">
+                  No Relay time blocks scheduled this week.
+                </p>
               )}
           </div>
         </aside>

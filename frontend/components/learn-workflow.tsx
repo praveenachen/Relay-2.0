@@ -28,6 +28,7 @@ import {
   ErrorMessage,
   Loading,
   PageTitle,
+  Spinner,
   Status,
 } from "@/components/ui";
 import { runTitle, workflowDisplay } from "@/features/workflows/display";
@@ -136,7 +137,11 @@ export function LearnEntry() {
               disabled={!canStart}
               onClick={() => create.mutate()}
             >
-              <Play aria-hidden="true" />
+              {create.isPending ? (
+                <Spinner label="Creating study notes" />
+              ) : (
+                <Play aria-hidden="true" />
+              )}
               {create.isPending ? "Creating..." : "Create study notes"}
             </button>
           </div>
@@ -733,6 +738,7 @@ function ProcessingPanel({
     detail.run.status === "ANALYZING" &&
     detail.source?.status === "PARSED" &&
     !summarizing;
+  const generating = summarizing || (canSummarize && busy);
   return (
     <article className="panel">
       <h2 className="section-title">
@@ -760,12 +766,17 @@ function ProcessingPanel({
           disabled={!canSummarize || busy}
           onClick={summarize}
         >
-          <RotateCcw aria-hidden="true" />
+          {generating ? (
+            <Spinner label="Generating study notes" />
+          ) : (
+            <RotateCcw aria-hidden="true" />
+          )}
           Summarize
         </button>
       </div>
-      {summarizing && (
-        <p className="text-sm text-muted mt-4">
+      {generating && (
+        <p className="text-sm text-muted mt-4 generation-status" role="status">
+          <Spinner label="Generating study notes" />
           Creating your notes... organizing the key concepts from your lecture.
         </p>
       )}

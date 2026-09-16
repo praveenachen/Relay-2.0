@@ -27,9 +27,11 @@ from app.connectors.notion.schemas import (
     NotionConnector,
     NotionDestination,
     NotionOAuthToken,
+    NotionRichText,
     NotionStudyPageContent,
     NotionTaskDatabaseResult,
     NotionTaskResult,
+    PublishNotionProjectAction,
 )
 from app.connectors.notion.service import NotionDestinationService
 
@@ -55,11 +57,13 @@ __all__ = [
     "NotionPermissionDenied",
     "NotionPublishFailed",
     "NotionRateLimited",
+    "NotionRichText",
     "NotionRequestTimeout",
     "NotionStudyPageContent",
     "NotionStudyPageMapper",
     "NotionTaskDatabaseResult",
     "NotionTaskResult",
+    "PublishNotionProjectAction",
     "NotionUnavailable",
     "NotionValidationFailed",
     "RealNotionConnector",

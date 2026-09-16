@@ -1043,12 +1043,17 @@
   min-height: 255px;
   background: linear-gradient(135deg, white 55%, #f1f0ff);
 }
-.overview-main h2 {
-  max-width: 580px;
+.overview-main .project-goal {
+  display: -webkit-box;
+  max-width: 760px;
   margin: 14px 0 9px;
-  font-size: clamp(1.35rem, 2.2vw, 2rem);
+  overflow: hidden;
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem);
   font-weight: 700;
-  letter-spacing: -0.035em;
+  line-height: 1.48;
+  letter-spacing: -0.02em;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
 }
 .overview-main > p:not(.eyebrow) {
   max-width: 570px;
@@ -1081,6 +1086,117 @@
 }
 .next-tasks {
   grid-column: 1 / -1;
+}
+.notion-publish-card {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 16px;
+  border-color: #dedcf5;
+  background: linear-gradient(135deg, #fff 70%, #f5f3ff);
+}
+.notion-publish-card .surface-heading {
+  margin-bottom: 0;
+}
+.notion-publish-card .text-link svg {
+  width: 14px;
+  height: 14px;
+}
+.notion-publish-copy,
+.notion-connect-state p {
+  max-width: 680px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.notion-connect-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.notion-publish-card > .button {
+  justify-self: start;
+}
+.notion-change-destination {
+  justify-self: start;
+  font-size: 0.72rem;
+}
+.notion-destination-picker {
+  display: grid;
+  gap: 12px;
+  max-width: 760px;
+  border: 1px solid #dcdaef;
+  border-radius: 14px;
+  background: #faf9ff;
+  padding: 15px;
+  animation: relay-reveal 160ms ease-out;
+}
+.notion-destination-picker strong {
+  font-size: 0.82rem;
+}
+.notion-destination-picker p {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.notion-destination-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+}
+.notion-destination-controls select {
+  min-width: 0;
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  padding: 0.5rem 0.7rem;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.76rem;
+}
+.notion-destination-controls .button {
+  min-height: 40px;
+  padding: 0.5rem 0.85rem;
+}
+.notion-destination-empty {
+  border-left: 3px solid #aaa5e9;
+  background: white;
+  padding: 9px 11px;
+}
+.notion-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 16px;
+  border: 1px solid #dcdaef;
+  border-radius: 14px;
+  background: #faf9ff;
+  animation: relay-reveal 160ms ease-out;
+}
+.notion-preview h3 {
+  margin: 3px 0 5px;
+  font-size: 1rem;
+}
+.notion-preview p:not(.eyebrow) {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+}
+.notion-preview-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+@keyframes relay-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 .next-tasks ul {
   display: grid;
@@ -1389,6 +1505,193 @@
   gap: 0.65rem;
   margin-bottom: 1rem;
 }
+.calendar-help {
+  margin: -0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.project-week-calendar-scroll {
+  overflow-x: auto;
+  border: 1px solid #e2e3ed;
+  border-radius: 14px;
+  background: white;
+  scrollbar-width: thin;
+}
+.project-week-calendar {
+  min-width: 780px;
+}
+.project-week-calendar-header {
+  display: grid;
+  grid-template-columns: 54px repeat(7, minmax(100px, 1fr));
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  border-bottom: 1px solid #e7e8ef;
+  background: #fafafe;
+}
+.project-week-calendar-header > div {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-left: 1px solid #ececf2;
+  padding: 9px 5px;
+  color: #858a98;
+  font-size: 0.67rem;
+}
+.project-week-calendar-header strong {
+  color: var(--foreground);
+  font-size: 0.75rem;
+}
+.project-week-calendar-body {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr);
+  min-height: 320px;
+  transition: opacity 140ms ease;
+}
+.project-week-calendar-body.saving {
+  pointer-events: none;
+  opacity: 0.58;
+}
+.project-week-time-rail {
+  position: relative;
+  background: #fbfbfd;
+}
+.project-week-time-rail time {
+  position: absolute;
+  right: 8px;
+  transform: translateY(-50%);
+  color: #969aa6;
+  font-size: 0.58rem;
+  white-space: nowrap;
+}
+.project-week-day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(100px, 1fr));
+  min-width: 0;
+}
+.project-week-day-column {
+  position: relative;
+  border-left: 1px solid #ececf2;
+  transition: background 120ms ease;
+}
+.project-week-day-column.invalid-drop {
+  background: rgba(205, 72, 72, 0.08);
+  box-shadow: inset 0 0 0 2px rgba(205, 72, 72, 0.35);
+}
+.project-week-day-column > i {
+  display: block;
+  height: 64px;
+  border-bottom: 1px solid #eff0f4;
+  pointer-events: none;
+}
+.project-week-session-block {
+  position: absolute;
+  right: 4px;
+  left: 4px;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) 12px;
+  align-items: start;
+  gap: 3px;
+  overflow: hidden;
+  cursor: grab;
+  border: 1px solid #cfcdf2;
+  border-left: 3px solid #615bdd;
+  border-radius: 8px;
+  background: #eeedff;
+  padding: 5px 4px;
+  color: #292744;
+  text-align: left;
+  box-shadow: 0 3px 9px rgba(61, 56, 137, 0.08);
+  transition:
+    transform 120ms ease,
+    box-shadow 120ms ease,
+    border-color 120ms ease;
+}
+.project-week-busy-block {
+  position: absolute;
+  right: 4px;
+  left: 4px;
+  z-index: 1;
+  overflow: hidden;
+  pointer-events: none;
+  border: 1px solid #d9dce4;
+  border-left: 3px solid #9a9fab;
+  border-radius: 7px;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f1f2f5,
+    #f1f2f5 6px,
+    #e8e9ee 6px,
+    #e8e9ee 12px
+  );
+  padding: 5px 6px;
+  color: #555b68;
+}
+.project-week-busy-block strong,
+.project-week-busy-block small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-week-busy-block strong {
+  font-size: 0.62rem;
+}
+.project-week-busy-block small {
+  margin-top: 2px;
+  font-size: 0.55rem;
+}
+.calendar-drop-error {
+  margin: 0;
+  color: #b74141;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+.project-week-session-block:hover,
+.project-week-session-block:focus-visible {
+  z-index: 3;
+  border-color: #928deb;
+  outline: none;
+  box-shadow: 0 6px 14px rgba(61, 56, 137, 0.16);
+  transform: translateY(-1px);
+}
+.project-week-session-block:active {
+  cursor: grabbing;
+}
+.project-week-session-block > svg {
+  width: 12px;
+  height: 12px;
+  color: #7771d4;
+}
+.project-week-session-block > svg:last-child {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.project-week-session-block:hover > svg:last-child,
+.project-week-session-block:focus-visible > svg:last-child {
+  opacity: 1;
+}
+.project-week-session-block span,
+.project-week-session-block strong,
+.project-week-session-block small {
+  display: block;
+  min-width: 0;
+}
+.project-week-session-block strong {
+  overflow: hidden;
+  font-size: 0.62rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.project-week-session-block small {
+  margin-top: 2px;
+  color: #686482;
+  font-size: 0.56rem;
+  white-space: nowrap;
+}
 
 .weekly-blocks article {
   display: flex;
@@ -1406,27 +1709,43 @@
   font-weight: 700;
 }
 
-.day-calendar .calendar-shell article {
+.day-calendar .week-schedule-shell article {
   display: grid;
-  grid-template-columns: 1fr auto;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.2rem 1rem;
   padding: 0.75rem;
   border-radius: 12px;
   background: var(--surface-soft);
 }
 
-.day-calendar .calendar-shell article small {
+.day-calendar .week-schedule-shell article strong,
+.day-calendar .week-schedule-shell article small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.day-calendar .week-schedule-shell article strong {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.day-calendar .week-schedule-shell article small {
   color: var(--text-muted);
 }
 
-.day-calendar .calendar-shell article time {
+.day-calendar .week-schedule-shell article time {
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: center;
+  white-space: nowrap;
 }
 
 .week-day-group {
   display: grid;
+  min-width: 0;
   gap: 0.5rem;
   padding-bottom: 1rem;
   margin-bottom: 1rem;
@@ -1484,12 +1803,32 @@
 }
 .day-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(270px, 0.65fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr);
+  align-items: stretch;
   gap: 16px;
+}
+.day-layout > * {
+  min-width: 0;
 }
 .day-focus,
 .day-calendar {
-  min-height: 380px;
+  display: flex;
+  flex-direction: column;
+  height: clamp(420px, 60vh, 680px);
+  min-height: 0;
+  overflow: hidden;
+}
+.day-focus .surface-heading,
+.day-calendar .surface-heading {
+  flex: 0 0 auto;
+}
+.day-focus .day-task-list {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 6px;
+  scrollbar-gutter: stable;
 }
 .day-task-list li {
   display: grid;
@@ -1531,7 +1870,11 @@
   font-weight: 700;
 }
 .day-empty {
-  padding: 65px 20px;
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  place-content: center;
+  padding: 32px 20px;
   color: #9095a1;
   text-align: center;
 }
@@ -1549,9 +1892,23 @@
 .day-empty p {
   font-size: 0.78rem;
 }
-.calendar-shell {
-  position: relative;
-  padding-top: 10px;
+.week-schedule-shell {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  align-content: start;
+  gap: 1rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px 6px 4px 0;
+  scrollbar-gutter: stable;
+}
+.week-schedule-empty {
+  display: grid;
+  min-height: 220px;
+  place-content: center;
+  color: var(--text-muted);
+  text-align: center;
 }
 .plan-week-placeholder p {
   border-left: 3px solid #6b74cf;
@@ -1779,6 +2136,21 @@
   }
   .plan-week .plan-actions > * {
     flex: 1 1 auto;
+  }
+  .notion-connect-state,
+  .notion-preview {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .notion-preview-actions .button,
+  .notion-connect-state .button {
+    flex: 1;
+  }
+  .notion-destination-controls {
+    grid-template-columns: 1fr;
+  }
+  .notion-destination-controls .button {
+    width: 100%;
   }
 }
 @media (max-width: 520px) {
@@ -3709,6 +4081,54 @@ details[open] > :not(summary),
 .planner-build-button {
   width: 100%;
 }
+.loading-spinner {
+  flex: 0 0 auto;
+  animation: relay-spin 800ms linear infinite;
+}
+.global-action-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  position: fixed;
+  top: 16px;
+  right: 18px;
+  z-index: 1000;
+  border: 1px solid rgba(99, 91, 221, 0.28);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 8px 12px;
+  color: #413aa9;
+  font-size: 0.72rem;
+  font-weight: 700;
+  box-shadow: 0 8px 28px rgba(38, 34, 91, 0.14);
+  backdrop-filter: blur(10px);
+}
+.global-action-progress .loading-spinner {
+  width: 16px;
+  height: 16px;
+}
+.generation-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.generation-status .loading-spinner {
+  width: 16px;
+  height: 16px;
+}
+.plan-selection-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+.plan-generate-button {
+  box-shadow: 0 8px 22px rgba(79, 70, 229, 0.24);
+}
+@keyframes relay-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .planner-task-list {
   display: grid;
   gap: 2px;
@@ -3825,6 +4245,18 @@ details[open] > :not(summary),
   border-radius: 8px;
   background: var(--sky-soft);
   padding: 12px;
+}
+.calendar-busy-block {
+  pointer-events: none;
+  border-color: #d9dce4;
+  background: repeating-linear-gradient(
+    -45deg,
+    #f4f5f7,
+    #f4f5f7 7px,
+    #eceef2 7px,
+    #eceef2 14px
+  );
+  color: #555b68;
 }
 .calendar-block-actions {
   display: flex;

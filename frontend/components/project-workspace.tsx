@@ -10,6 +10,7 @@ import {
   Circle,
   Clock3,
   FileText,
+  ExternalLink,
   ListTodo,
   MoreHorizontal,
   Plus,
@@ -17,8 +18,8 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useConnections, useProject } from "@/hooks/queries";
-import { Empty, ErrorMessage, Loading } from "@/components/ui";
+import { useConnections, usePreferences, useProject } from "@/hooks/queries";
+import { Empty, ErrorMessage, Loading, Spinner } from "@/components/ui";
 import {
   readTasks,
   projectTaskFromServer,
@@ -35,9 +36,17 @@ import {
   plan,
   projectActions,
   type GitHubIssuePreview,
+  type NotionProjectPreview,
   type PlanDetail,
+  type StudySession,
 } from "@/features/plan/api";
 import { useProjectSources, useServerTasks } from "@/hooks/queries";
+import {
+  ScheduleBlockModal,
+  sessionKey,
+  validateSessionPlacement,
+  WeeklyCalendar,
+} from "@/components/weekly-calendar";
 
 const tabs = ["overview", "tasks", "plan", "sources"] as const;
 type Tab = (typeof tabs)[number];
@@ -532,6 +541,7 @@ export function ProjectWorkspace() {
       </nav>
       {tab === "overview" && (
         <Overview
+          project={item}
           description={item.description}
           tasks={tasks}
           deadline={item.deadline}
@@ -600,12 +610,14 @@ export function ProjectWorkspace() {
 }
 
 function Overview({
+  project,
   description,
   tasks,
   deadline,
   onAdd,
   onTab,
 }: {
+  project: Project;
   description: string | null;
   tasks: ProjectTask[];
   deadline: string | null;
@@ -617,7 +629,9 @@ function Overview({
     <div className="overview-grid">
       <section className="project-surface overview-main">
         <p className="eyebrow">Project goal</p>
-        <h2>{description || "Give this project a clear next step."}</h2>
+        <h2 className="project-goal" title={description || undefined}>
+          {description || "Give this project a clear next step."}
+        </h2>
         <p>
           {description
             ? "Keep momentum by choosing the next useful task."
@@ -688,7 +702,246 @@ function Overview({
           </p>
         )}
       </section>
+      <NotionPublishCard project={project} />
     </div>
+  );
+}
+
+function NotionPublishCard({ project }: { project: Project }) {
+  const cache = useQueryClient();
+  const [choosingDestination, setChoosingDestination] = useState(false);
+  const [destinationChoice, setDestinationChoice] = useState("");
+  const status = useQuery({
+    queryKey: ["projects", project.id, "notion"],
+    queryFn: () => projectActions.notionStatus(project.id),
+  });
+  const destinations = useQuery({
+    queryKey: ["connections", "notion-destinations"],
+    queryFn: async () => {
+      const cached = await connections.notionDestinations();
+      return cached.length ? cached : connections.refreshNotionDestinations();
+    },
+    enabled: choosingDestination,
+  });
+  const refreshDestinations = useMutation({
+    mutationFn: connections.refreshNotionDestinations,
+    onSuccess: (items) => {
+      cache.setQueryData(["connections", "notion-destinations"], items);
+      if (!items.some((item) => item.id === destinationChoice)) {
+        setDestinationChoice("");
+      }
+    },
+  });
+  const selectDestination = useMutation({
+    mutationFn: () => connections.selectNotionDestination(destinationChoice),
+    onSuccess: async () => {
+      setChoosingDestination(false);
+      setDestinationChoice("");
+      setPreview(null);
+      await cache.invalidateQueries({
+        queryKey: ["projects", project.id, "notion"],
+      });
+    },
+  });
+  const [preview, setPreview] = useState<NotionProjectPreview | null>(null);
+  const prepare = useMutation({
+    mutationFn: () => projectActions.previewNotionProject(project.id),
+    onSuccess: setPreview,
+  });
+  const publish = useMutation({
+    mutationFn: async () => {
+      const run = await projectActions.confirmNotionProject(
+        project.id,
+        preview!.run_id,
+        preview!.approval_id,
+      );
+      if (run.status !== "COMPLETED") {
+        throw new Error(
+          "Notion couldn’t update this project. Your Relay project is unchanged; try again.",
+        );
+      }
+      return run;
+    },
+    onSuccess: async () => {
+      setPreview(null);
+      await cache.invalidateQueries({
+        queryKey: ["projects", project.id, "notion"],
+      });
+    },
+    onError: () => setPreview(null),
+  });
+  const info = status.data;
+  return (
+    <section className="project-surface notion-publish-card">
+      <div className="surface-heading">
+        <div>
+          <p className="eyebrow">Notion</p>
+          <h2>
+            {info?.page_id ? "Project published" : "Publish this project"}
+          </h2>
+        </div>
+        {info?.page_url && (
+          <a
+            className="text-link"
+            href={info.page_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open in Notion <ExternalLink />
+          </a>
+        )}
+      </div>
+      {status.isPending ? (
+        <p className="surface-empty">Checking your Notion connection…</p>
+      ) : !info?.connected ? (
+        <div className="notion-connect-state">
+          <p>Connect Notion to publish a clean project page.</p>
+          <Link className="button secondary" href="/connections">
+            Connect Notion
+          </Link>
+        </div>
+      ) : !info.destination_configured ? (
+        <div className="notion-connect-state">
+          <p>Select the Notion page where Relay should publish projects.</p>
+          <button
+            className="button secondary"
+            onClick={() => setChoosingDestination(true)}
+          >
+            Choose destination
+          </button>
+        </div>
+      ) : (
+        <>
+          <p className="notion-publish-copy">
+            {info.page_id
+              ? "Refresh the same Notion page with your latest progress, tasks, plan, and sources."
+              : `Create a focused project page inside ${info.destination_title || "your selected destination"}.`}
+          </p>
+          <button
+            className="button"
+            onClick={() => prepare.mutate()}
+            disabled={prepare.isPending || publish.isPending}
+          >
+            {prepare.isPending && <Spinner label="Preparing Notion project" />}
+            {prepare.isPending
+              ? "Preparing…"
+              : info.page_id
+                ? "Update Notion"
+                : "Publish to Notion"}
+          </button>
+          <button
+            className="text-link notion-change-destination"
+            onClick={() => setChoosingDestination((current) => !current)}
+          >
+            Change destination
+          </button>
+        </>
+      )}
+      {choosingDestination && info?.connected && (
+        <div className="notion-destination-picker">
+          <div>
+            <strong>Choose a Notion page</strong>
+            <p>Relay will create the project page inside this destination.</p>
+          </div>
+          {destinations.isPending ? (
+            <p className="surface-empty">Loading pages from Notion…</p>
+          ) : (
+            <div className="notion-destination-controls">
+              <select
+                aria-label="Notion project destination"
+                value={destinationChoice}
+                onChange={(event) => setDestinationChoice(event.target.value)}
+              >
+                <option value="">Select a page</option>
+                {(refreshDestinations.data || destinations.data || []).map(
+                  (destination) => (
+                    <option key={destination.id} value={destination.id}>
+                      {destination.title}
+                    </option>
+                  ),
+                )}
+              </select>
+              <button
+                className="button"
+                disabled={!destinationChoice || selectDestination.isPending}
+                onClick={() => selectDestination.mutate()}
+              >
+                {selectDestination.isPending ? "Saving…" : "Use this page"}
+              </button>
+              <button
+                className="text-link"
+                disabled={refreshDestinations.isPending}
+                onClick={() => refreshDestinations.mutate()}
+              >
+                {refreshDestinations.isPending
+                  ? "Refreshing…"
+                  : "Refresh pages"}
+              </button>
+            </div>
+          )}
+          {!destinations.isPending &&
+            !(refreshDestinations.data || destinations.data || []).length && (
+              <p className="notion-destination-empty">
+                No pages are available. In Notion, share a page with the Relay
+                integration, then refresh.
+              </p>
+            )}
+          <ErrorMessage
+            error={
+              destinations.error ||
+              refreshDestinations.error ||
+              selectDestination.error
+            }
+            title="Couldn’t load Notion pages"
+          />
+        </div>
+      )}
+      <ErrorMessage
+        error={status.error || prepare.error || publish.error}
+        title="Couldn’t publish this project"
+      />
+      {preview && (
+        <div
+          className="notion-preview"
+          role="dialog"
+          aria-label="Confirm Notion publish"
+        >
+          <div>
+            <p className="eyebrow">Preview</p>
+            <h3>{preview.title}</h3>
+            <p>
+              {preview.progress}% complete · {preview.task_count} tasks ·{" "}
+              {preview.source_count} sources
+            </p>
+            {preview.deadline && (
+              <p>Deadline {new Date(preview.deadline).toLocaleDateString()}</p>
+            )}
+          </div>
+          <div className="notion-preview-actions">
+            <button
+              className="button secondary"
+              onClick={() => setPreview(null)}
+            >
+              Cancel
+            </button>
+            <button
+              className="button"
+              onClick={() => publish.mutate()}
+              disabled={publish.isPending}
+            >
+              {publish.isPending && (
+                <Spinner label="Publishing Notion project" />
+              )}
+              {publish.isPending
+                ? "Publishing…"
+                : preview.is_update
+                  ? "Confirm update"
+                  : "Confirm publish"}
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -863,6 +1116,7 @@ function GitHubIssueModal({
     owner: string;
     name: string;
   } | null>(null);
+  const connectionQuery = useConnections();
   const createPreview = useMutation({
     mutationFn: () =>
       projectActions.previewGitHubIssue(project.id, task.id, {
@@ -889,10 +1143,19 @@ function GitHubIssueModal({
   const repoOwner = connectedRepo?.owner || project.github_repository_owner;
   const repoName = connectedRepo?.name || project.github_repository_name;
   const hasRepository = Boolean(repoOwner && repoName);
+  const hasGitHubConnection = (connectionQuery.data || []).some(
+    (item) => item.provider === "GITHUB" && item.status === "CONNECTED",
+  );
   const repositories = useQuery({
     queryKey: ["connections", "github-repositories"],
     queryFn: connections.githubRepositories,
-    enabled: !hasRepository,
+    enabled: !hasRepository && hasGitHubConnection,
+  });
+  const refreshRepositories = useMutation({
+    mutationFn: connections.githubRepositories,
+    onSuccess: (items) => {
+      cache.setQueryData(["connections", "github-repositories"], items);
+    },
   });
   const selectRepository = useMutation({
     mutationFn: () => {
@@ -943,7 +1206,12 @@ function GitHubIssueModal({
             <p>
               Select a repository for this project before creating an issue.
             </p>
-            {repositories.data?.length ? (
+            {repositories.isPending ? (
+              <p className="generation-status surface-empty" role="status">
+                <Spinner label="Loading repositories" />
+                Loading repositories…
+              </p>
+            ) : repositories.data?.length ? (
               <>
                 <label className="field">
                   Repository
@@ -971,13 +1239,48 @@ function GitHubIssueModal({
                   disabled={!repository || selectRepository.isPending}
                   onClick={() => selectRepository.mutate()}
                 >
+                  {selectRepository.isPending && (
+                    <Spinner label="Selecting repository" />
+                  )}
                   Select repository
+                </button>
+                <button
+                  className="button secondary"
+                  disabled={refreshRepositories.isPending}
+                  onClick={() => refreshRepositories.mutate()}
+                >
+                  {refreshRepositories.isPending && (
+                    <Spinner label="Refreshing repositories" />
+                  )}
+                  Refresh repositories
                 </button>
               </>
             ) : (
-              <Link className="button secondary" href="/connections">
-                Connect GitHub
-              </Link>
+              <div className="modal-stack">
+                {hasGitHubConnection ? (
+                  <button
+                    className="button secondary"
+                    disabled={refreshRepositories.isPending}
+                    onClick={() => refreshRepositories.mutate()}
+                  >
+                    {refreshRepositories.isPending && (
+                      <Spinner label="Refreshing repositories" />
+                    )}
+                    Refresh repositories
+                  </button>
+                ) : connectionQuery.isPending ? (
+                  <p className="surface-empty">Checking GitHub connection…</p>
+                ) : (
+                  <Link className="button secondary" href="/connections">
+                    Connect GitHub
+                  </Link>
+                )}
+                <ErrorMessage
+                  error={repositories.error || refreshRepositories.error}
+                  retry={() => refreshRepositories.mutate()}
+                  title="Repositories couldn’t be loaded."
+                />
+              </div>
             )}
           </div>
         ) : (
@@ -1021,6 +1324,9 @@ function GitHubIssueModal({
                   disabled={!title.trim() || createPreview.isPending}
                   onClick={() => createPreview.mutate()}
                 >
+                  {createPreview.isPending && (
+                    <Spinner label="Generating GitHub issue preview" />
+                  )}
                   {createPreview.isPending ? "Preparing…" : "Preview issue"}
                 </button>
               ) : (
@@ -1029,6 +1335,9 @@ function GitHubIssueModal({
                   disabled={confirm.isPending}
                   onClick={() => confirm.mutate()}
                 >
+                  {confirm.isPending && (
+                    <Spinner label="Creating GitHub issue" />
+                  )}
                   {confirm.isPending ? "Adding…" : "Add to GitHub repo"}
                 </button>
               )}
@@ -1055,8 +1364,13 @@ function PlanView({
   );
   const [selected, setSelected] = useState<string[]>([]);
   const [result, setResult] = useState<PlanDetail | null>(null);
+  const [editingSession, setEditingSession] = useState<StudySession | null>(
+    null,
+  );
+  const [placementError, setPlacementError] = useState<string | null>(null);
   const [calendarChoice, setCalendarChoice] = useState("");
   const cache = useQueryClient();
+  const preferencesQuery = usePreferences();
   const connectionQuery = useConnections();
   const googleConnection = (connectionQuery.data || []).find(
     (item) => item.provider === "GOOGLE" && item.status === "CONNECTED",
@@ -1098,6 +1412,14 @@ function PlanView({
     },
     onSuccess: setResult,
   });
+  const adjustSessions = useMutation({
+    mutationFn: (sessions: StudySession[]) =>
+      plan.adjustSessions(result!.run.id, sessions),
+    onSuccess: (next) => {
+      setResult(next);
+      setEditingSession(null);
+    },
+  });
   const addToCalendar = useMutation({
     mutationFn: async () => {
       await plan.requestApproval(result!.run.id);
@@ -1115,6 +1437,58 @@ function PlanView({
   });
   const taskTitle = (id: string) =>
     tasks.find((task) => task.id === id)?.title || "Project task";
+  const updateSession = (key: string, start: Date, duration?: number) => {
+    if (!result?.result) return;
+    const current = result.result.sessions.find(
+      (session) => sessionKey(session) === key,
+    );
+    if (!current) return;
+    const minutes =
+      duration ??
+      Math.round(
+        (new Date(current.end).getTime() - new Date(current.start).getTime()) /
+          60000,
+      );
+    const setupTask = result.setup?.tasks.find(
+      (task) => task.id === current.task_id,
+    );
+    const userPreferences = preferencesQuery.data;
+    if (userPreferences && result.setup) {
+      const message = validateSessionPlacement({
+        key,
+        taskId: current.task_id,
+        start,
+        duration: minutes,
+        sessions: result.result.sessions,
+        busyIntervals: result.setup.busy_intervals,
+        windowStart: result.setup.window.start,
+        windowEnd: result.setup.window.end,
+        preferences: {
+          earliest: userPreferences.earliest_study_time,
+          latest: userPreferences.latest_study_time,
+          maximumSessionMinutes: userPreferences.maximum_session_minutes,
+          minimumBreakMinutes: userPreferences.minimum_break_minutes,
+        },
+        deadline: setupTask?.deadline,
+        estimatedMinutes: setupTask?.estimated_minutes,
+      });
+      if (message) {
+        setPlacementError(message);
+        return;
+      }
+    }
+    setPlacementError(null);
+    const sessions = result.result.sessions.map((session) => {
+      if (sessionKey(session) !== key) return session;
+      return {
+        ...session,
+        start: start.toISOString(),
+        end: new Date(start.getTime() + minutes * 60000).toISOString(),
+        locked: true,
+      };
+    });
+    adjustSessions.mutate(sessions);
+  };
   return (
     <section className="plan-panel">
       <div className="plan-panel-intro">
@@ -1205,34 +1579,46 @@ function PlanView({
             </div>
           </div>
           {result?.result?.sessions.length ? (
-            <div className="weekly-blocks">
-              {result.result.sessions.map((session) => (
-                <article
-                  key={session.id || `${session.task_id}-${session.start}`}
-                >
-                  <div>
-                    <strong>{taskTitle(session.task_id)}</strong>
-                    <small>{project.name}</small>
-                  </div>
-                  <time>
-                    {new Date(session.start).toLocaleDateString(undefined, {
-                      weekday: "short",
-                    })}{" "}
-                    {new Date(session.start).toLocaleTimeString(undefined, {
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}{" "}
-                    ·{" "}
-                    {Math.round(
-                      (new Date(session.end).getTime() -
-                        new Date(session.start).getTime()) /
-                        60000,
-                    )}
-                    m
-                  </time>
-                </article>
-              ))}
-            </div>
+            <>
+              <p className="calendar-help">
+                Drag a block to move it, or select it to edit its date, time,
+                and duration.
+              </p>
+              <WeeklyCalendar
+                sessions={result.result.sessions}
+                busyIntervals={result.setup!.busy_intervals}
+                tasks={tasks}
+                taskDeadlines={Object.fromEntries(
+                  result.setup!.tasks.map((task) => [task.id, task.deadline]),
+                )}
+                taskEstimates={Object.fromEntries(
+                  result.setup!.tasks.map((task) => [
+                    task.id,
+                    task.estimated_minutes,
+                  ]),
+                )}
+                windowStart={result.setup!.window.start}
+                windowEnd={result.setup!.window.end}
+                preferences={{
+                  earliest:
+                    preferencesQuery.data?.earliest_study_time || "08:00",
+                  latest: preferencesQuery.data?.latest_study_time || "22:00",
+                  maximumSessionMinutes:
+                    preferencesQuery.data?.maximum_session_minutes || 90,
+                  minimumBreakMinutes:
+                    preferencesQuery.data?.minimum_break_minutes || 0,
+                }}
+                saving={adjustSessions.isPending}
+                onMove={(key, start) => updateSession(key, start)}
+                onEdit={setEditingSession}
+                onInvalid={setPlacementError}
+              />
+              {placementError && (
+                <p className="calendar-drop-error" role="alert">
+                  {placementError}
+                </p>
+              )}
+            </>
           ) : (
             <div className="plan-week-placeholder">
               <p>
@@ -1242,8 +1628,12 @@ function PlanView({
             </div>
           )}
           <ErrorMessage
-            error={generate.error}
-            title="We couldn’t build this plan."
+            error={generate.error || adjustSessions.error}
+            title={
+              adjustSessions.error
+                ? "We couldn’t update that time block."
+                : "We couldn’t build this plan."
+            }
           />
           <div
             className={`calendar-readiness ${calendarId ? "ready" : "setup"}`}
@@ -1326,12 +1716,17 @@ function PlanView({
           {addToCalendar.isSuccess && (
             <p className="success-message">Added to Google Calendar</p>
           )}
+          <p className="plan-selection-hint">
+            {selected.length
+              ? `${selected.length} ${selected.length === 1 ? "task" : "tasks"} selected for this schedule.`
+              : "Select one or more tasks on the left to create a schedule."}
+          </p>
           <div className="plan-actions">
             <Link className="button secondary" href="/settings">
               Adjust preferences
             </Link>
             <button
-              className="button secondary"
+              className="button plan-generate-button"
               disabled={
                 !selected.length ||
                 !calendarId ||
@@ -1352,7 +1747,18 @@ function PlanView({
                 generate.mutate();
               }}
             >
-              <Sparkles /> {result ? "Rebuild plan" : "Plan my week"}
+              {generate.isPending ? (
+                <Spinner label="Generating project schedule" />
+              ) : (
+                <Sparkles />
+              )}
+              {generate.isPending
+                ? "Creating schedule…"
+                : !selected.length
+                  ? "Select tasks to create schedule"
+                  : result
+                    ? `Rebuild schedule (${selected.length})`
+                    : `Create schedule (${selected.length})`}
             </button>
             {result?.result?.sessions.length ? (
               <button
@@ -1363,13 +1769,35 @@ function PlanView({
                   addToCalendar.isSuccess
                 }
                 onClick={() => addToCalendar.mutate()}
+                aria-busy={addToCalendar.isPending}
               >
-                <CalendarDays /> Add to Google Calendar
+                {addToCalendar.isPending ? (
+                  <Spinner label="Adding schedule to Google Calendar" />
+                ) : (
+                  <CalendarDays />
+                )}
+                {addToCalendar.isPending
+                  ? "Adding to Google Calendar…"
+                  : "Add to Google Calendar"}
               </button>
             ) : null}
           </div>
         </section>
       </div>
+      {editingSession && (
+        <ScheduleBlockModal
+          key={sessionKey(editingSession)}
+          session={editingSession}
+          title={taskTitle(editingSession.task_id)}
+          windowStart={result!.setup!.window.start}
+          windowEnd={result!.setup!.window.end}
+          pending={adjustSessions.isPending}
+          close={() => setEditingSession(null)}
+          save={(start, duration) =>
+            updateSession(sessionKey(editingSession), start, duration)
+          }
+        />
+      )}
     </section>
   );
 }

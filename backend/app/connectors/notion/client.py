@@ -20,8 +20,10 @@ from app.connectors.notion.schemas import (
     ExternalArtifactResult,
     NotionBlock,
     NotionDestination,
+    NotionRichText,
     NotionTaskDatabaseResult,
     NotionTaskResult,
+    PublishNotionProjectAction,
 )
 
 # Newer Notion API versions split databases into data sources; keep this
@@ -66,17 +68,48 @@ def title_from_result(result: dict[str, Any]) -> str:
 
 
 def notion_rich_text(text: str) -> list[dict[str, Any]]:
-    return [{"type": "text", "text": {"content": text}}]
+    return notion_rich_text_items([NotionRichText(text=text)])
+
+
+def notion_rich_text_items(items: list[NotionRichText]) -> list[dict[str, Any]]:
+    return [
+        {
+            "type": "text",
+            "text": {
+                "content": item.text,
+                "link": {"url": item.href} if item.href else None,
+            },
+            "annotations": {
+                "bold": item.bold,
+                "italic": item.italic,
+                "strikethrough": False,
+                "underline": False,
+                "code": False,
+                "color": item.color,
+            },
+        }
+        for item in items
+    ]
 
 
 def notion_block(block: NotionBlock) -> dict[str, Any]:
     if block.kind == "equation":
         return {"object": "block", "type": "equation", "equation": {"expression": block.text}}
+    if block.kind == "divider":
+        return {"object": "block", "type": "divider", "divider": {}}
+    rich_text = (
+        notion_rich_text_items(block.rich_text) if block.rich_text else notion_rich_text(block.text)
+    )
     payload: dict[str, Any] = {
         "object": "block",
         "type": block.kind,
-        block.kind: {"rich_text": notion_rich_text(block.text)},
+        block.kind: {"rich_text": rich_text, "color": block.color},
     }
+    if block.kind == "callout":
+        payload[block.kind]["icon"] = {
+            "type": "emoji",
+            "emoji": block.icon_emoji or "📌",
+        }
     if block.children:
         payload[block.kind]["children"] = [notion_block(child) for child in block.children]
     return payload
@@ -179,17 +212,112 @@ class NotionApiClient:
                 return results
 
     async def create_page(
-        self, parent_page_id: str, title: str, blocks: list[NotionBlock]
+        self,
+        parent_page_id: str,
+        title: str,
+        blocks: list[NotionBlock],
+        *,
+        icon_emoji: str | None = None,
     ) -> dict[str, Any]:
-        return await self.request(
-            "POST",
-            "/v1/pages",
-            {
-                "parent": {"page_id": parent_page_id},
-                "properties": {"title": {"title": notion_rich_text(title[:1900])}},
-                "children": [notion_block(block) for block in blocks],
-            },
+        payload: dict[str, Any] = {
+            "parent": {"page_id": parent_page_id},
+            "properties": {"title": {"title": notion_rich_text(title[:1900])}},
+            "children": [notion_block(block) for block in blocks],
+        }
+        if icon_emoji:
+            payload["icon"] = {"type": "emoji", "emoji": icon_emoji}
+        return await self.request("POST", "/v1/pages", payload)
+
+    async def block_children(self, block_id: str) -> list[dict[str, Any]]:
+        cursor: str | None = None
+        children: list[dict[str, Any]] = []
+        while True:
+            suffix = f"?page_size=100&start_cursor={cursor}" if cursor else "?page_size=100"
+            data = await self.request("GET", f"/v1/blocks/{block_id}/children{suffix}")
+            children.extend(item for item in data.get("results", []) if isinstance(item, dict))
+            cursor = data.get("next_cursor") if data.get("has_more") else None
+            if not cursor:
+                return children
+
+    @staticmethod
+    def block_text(block: dict[str, Any]) -> str:
+        value = block.get(str(block.get("type")), {})
+        return "".join(
+            str(part.get("plain_text") or part.get("text", {}).get("content") or "")
+            for part in value.get("rich_text", [])
+            if isinstance(part, dict)
         )
+
+    async def replace_page(
+        self,
+        page_id: str,
+        title: str,
+        blocks: list[NotionBlock],
+        *,
+        icon_emoji: str | None = None,
+        legacy_blocks: tuple[NotionBlock, ...] = (),
+    ) -> dict[str, Any]:
+        page_payload: dict[str, Any] = {
+            "properties": {"title": {"title": notion_rich_text(title[:1900])}}
+        }
+        if icon_emoji:
+            page_payload["icon"] = {"type": "emoji", "emoji": icon_emoji}
+        page = await self.request(
+            "PATCH",
+            f"/v1/pages/{page_id}",
+            page_payload,
+        )
+        children = await self.block_children(page_id)
+        managed = next(
+            (
+                child
+                for child in children
+                if child.get("type") == "callout"
+                and self.block_text(child).startswith("Relay snapshot ·")
+            ),
+            None,
+        )
+        if managed is not None and blocks and blocks[0].kind == "callout":
+            managed_id = managed.get("id")
+            if isinstance(managed_id, str):
+                replacement = notion_block(blocks[0])["callout"]
+                nested = replacement.pop("children", [])
+                await self.request("PATCH", f"/v1/blocks/{managed_id}", {"callout": replacement})
+                for child in await self.block_children(managed_id):
+                    child_id = child.get("id")
+                    if isinstance(child_id, str):
+                        await self.request("DELETE", f"/v1/blocks/{child_id}")
+                if nested:
+                    await self.request(
+                        "PATCH",
+                        f"/v1/blocks/{managed_id}/children",
+                        {"children": nested},
+                    )
+                return page
+
+        # Migrate pages produced by the original Relay publisher without
+        # deleting user-authored additions. Remove the internal marker and
+        # only blocks that still exactly match the previously approved Relay
+        # snapshot; edited or unrelated blocks remain outside the new managed
+        # callout.
+        expected: list[tuple[str, str]] = [(block.kind, block.text) for block in legacy_blocks]
+        for child in children:
+            child_id = child.get("id")
+            signature = (str(child.get("type")), self.block_text(child))
+            generated = signature in expected
+            if generated:
+                expected.remove(signature)
+            if isinstance(child_id, str) and (
+                self.block_text(child).startswith("Relay action:") or generated
+            ):
+                await self.request("DELETE", f"/v1/blocks/{child_id}")
+        if blocks:
+            await self.request(
+                "PATCH",
+                f"/v1/blocks/{page_id}/children",
+                {"children": [notion_block(block) for block in blocks]},
+            )
+        return page
 
     async def get_database(self, database_id: str) -> dict[str, Any]:
         return await self.request("GET", f"/v1/databases/{database_id}")
@@ -276,6 +404,42 @@ class RealNotionConnector:
         if not isinstance(page_id, str) or not isinstance(page_url, str):
             raise NotionPublishFailed()
         return NotionTaskResult(external_id=page_id, external_url=page_url, title=action.title)
+
+    async def publish_project(
+        self,
+        action: PublishNotionProjectAction,
+        idempotency_key: str,
+    ) -> ExternalArtifactResult:
+        blocks = list(action.blocks[:NOTION_MAX_PAGE_CHILDREN])
+        if action.existing_page_id:
+            result = await self.client.replace_page(
+                action.existing_page_id,
+                action.title,
+                blocks,
+                icon_emoji=action.icon_emoji,
+                legacy_blocks=action.legacy_blocks,
+            )
+            page_id_result: object = action.existing_page_id
+            page_url_result: object = result.get("url") or action.existing_page_url
+        else:
+            result = await self.client.create_page(
+                action.parent_destination_id,
+                action.title,
+                blocks,
+                icon_emoji=action.icon_emoji,
+            )
+            page_id_result = result.get("id")
+            page_url_result = result.get("url")
+        if not isinstance(page_id_result, str) or not isinstance(page_url_result, str):
+            raise NotionPublishFailed()
+        return ExternalArtifactResult(
+            external_id=page_id_result,
+            external_url=page_url_result,
+            title=action.title,
+            destination_id=action.parent_destination_id,
+            destination_title=action.parent_destination_title,
+            blocks=list(action.blocks),
+        )
 
     async def create_task_database(
         self,

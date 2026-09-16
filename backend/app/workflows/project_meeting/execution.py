@@ -24,6 +24,7 @@ _ARTIFACT_TYPES = {
     "create_notion_task": "notion_task",
     "create_github_issue": "github_issue",
     "request_github_pr_review": "github_review_request",
+    "publish_notion_project": "notion_project_page",
 }
 
 
@@ -267,6 +268,17 @@ class CollaborateExecutionService:
         artifact_type = _ARTIFACT_TYPES.get(action.action_type, action.action_type)
         if result.get("simulated"):
             artifact_type = f"mock_{artifact_type}"
+        same_external = await self.session.scalar(
+            select(ExternalArtifact).where(
+                ExternalArtifact.connected_account_id
+                == (UUID(connection_id) if connection_id else None),
+                ExternalArtifact.artifact_type == artifact_type,
+                ExternalArtifact.external_id == external_id,
+            )
+        )
+        if same_external is not None:
+            same_external.external_url = external_url
+            return same_external
         artifact = ExternalArtifact(
             workflow_run_id=run_id,
             proposed_action_id=action.id,

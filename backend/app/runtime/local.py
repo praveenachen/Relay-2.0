@@ -25,6 +25,7 @@ from app.connectors.notion import (
     NotionConnector,
     NotionNotConnected,
     NotionTaskResult,
+    PublishNotionProjectAction,
     RealNotionConnector,
 )
 from app.domain.enums import ConnectionStatus, Provider
@@ -40,12 +41,10 @@ from app.workflows.project_meeting.actions import (
     NOTION_TASK_OPERATION,
     REQUEST_GITHUB_PR_REVIEW_OPERATION,
 )
-from app.workflows.study_plan.actions import (
-    OPERATION as PLAN_OPERATION,
-)
-from app.workflows.study_plan.actions import (
-    CreateCalendarStudyPlanAction,
-)
+from app.workflows.study_plan.actions import OPERATION as PLAN_OPERATION
+from app.workflows.study_plan.actions import CreateCalendarStudyPlanAction
+
+PUBLISH_NOTION_PROJECT_OPERATION = "publish_notion_project"
 
 
 class LocalRuntimeClient:
@@ -140,6 +139,15 @@ class LocalRuntimeClient:
                 task_action = CreateNotionTaskAction.model_validate(request.payload)
                 task_result = await self.connector.create_task(task_action, request.idempotency_key)
                 snapshot.result = task_result.model_dump(mode="json")
+                snapshot.status = ExecutionStatus.SUCCEEDED
+            elif request.operation == PUBLISH_NOTION_PROJECT_OPERATION:
+                if self.connector is None:
+                    raise ValueError("Notion connector is not configured")
+                project_action = PublishNotionProjectAction.model_validate(request.payload)
+                project_result = await self.connector.publish_project(
+                    project_action, request.idempotency_key
+                )
+                snapshot.result = project_result.model_dump(mode="json")
                 snapshot.status = ExecutionStatus.SUCCEEDED
             elif request.operation == CREATE_GITHUB_ISSUE_OPERATION:
                 if self.github_connector is None:
@@ -256,6 +264,32 @@ class DatabaseNotionConnector:
             return await RealNotionConnector(
                 NotionApiClient(token, base_url=self.api_base_url, timeout=self.timeout)
             ).create_task(action, idempotency_key)
+        except NotionAuthorizationFailed:
+            connection.status = ConnectionStatus.REVOKED
+            connection.access_token_encrypted = None
+            connection.refresh_token_encrypted = None
+            raise
+
+    async def publish_project(
+        self,
+        action: PublishNotionProjectAction,
+        idempotency_key: str,
+    ) -> ExternalArtifactResult:
+        if not action.connection_id:
+            raise NotionNotConnected()
+        connection = await self.session.get(ConnectedAccount, UUID(action.connection_id))
+        if (
+            connection is None
+            or connection.provider != Provider.NOTION
+            or connection.status != ConnectionStatus.CONNECTED
+            or connection.access_token_encrypted is None
+        ):
+            raise NotionNotConnected()
+        token = self.store.decrypt(connection.access_token_encrypted)
+        try:
+            return await RealNotionConnector(
+                NotionApiClient(token, base_url=self.api_base_url, timeout=self.timeout)
+            ).publish_project(action, idempotency_key)
         except NotionAuthorizationFailed:
             connection.status = ConnectionStatus.REVOKED
             connection.access_token_encrypted = None

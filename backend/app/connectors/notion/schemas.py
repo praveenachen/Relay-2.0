@@ -28,9 +28,33 @@ class NotionBlock(StrictModel):
         "numbered_list_item",
         "equation",
         "toggle",
+        "callout",
+        "divider",
+        "quote",
     ]
-    text: str
+    text: str = ""
+    rich_text: list["NotionRichText"] = Field(default_factory=list)
+    color: Literal[
+        "default",
+        "gray",
+        "gray_background",
+        "green",
+        "green_background",
+        "purple",
+        "purple_background",
+        "red",
+        "red_background",
+    ] = "default"
+    icon_emoji: str | None = None
     children: list["NotionBlock"] = Field(default_factory=list)
+
+
+class NotionRichText(StrictModel):
+    text: str
+    bold: bool = False
+    italic: bool = False
+    color: Literal["default", "gray", "green", "purple", "red"] = "default"
+    href: str | None = None
 
 
 class ExternalArtifactResult(StrictModel):
@@ -81,6 +105,19 @@ class NotionTaskResult(StrictModel):
     simulated: bool = False
 
 
+class PublishNotionProjectAction(StrictModel):
+    project_id: str
+    title: str = Field(min_length=1, max_length=255)
+    blocks: tuple[NotionBlock, ...]
+    connection_id: str
+    parent_destination_id: str
+    parent_destination_title: str | None = None
+    existing_page_id: str | None = None
+    existing_page_url: str | None = None
+    icon_emoji: str = "📌"
+    legacy_blocks: tuple[NotionBlock, ...] = ()
+
+
 class CreateNotionTaskDatabaseAction(StrictModel):
     title: str
     parent_page_id: str
@@ -114,3 +151,9 @@ class NotionConnector(Protocol):
         action: CreateNotionTaskAction,
         idempotency_key: str,
     ) -> NotionTaskResult: ...
+
+    async def publish_project(
+        self,
+        action: PublishNotionProjectAction,
+        idempotency_key: str,
+    ) -> ExternalArtifactResult: ...

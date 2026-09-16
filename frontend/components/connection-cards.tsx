@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useConnections } from "@/hooks/queries";
 import { connections } from "@/features/connections/api";
 import { Provider } from "@/lib/schemas";
-import { ErrorMessage, Loading, Status } from "@/components/ui";
+import { ErrorMessage, Loading, Spinner, Status } from "@/components/ui";
 
 const tools: {
   provider: Provider;
@@ -100,6 +100,9 @@ export function ConnectionCards() {
                           disabled={disconnect.isPending}
                           onClick={() => disconnect.mutate(tool.provider)}
                         >
+                          {disconnect.isPending && (
+                            <Spinner label={`Disconnecting ${tool.name}`} />
+                          )}
                           Confirm disconnect
                         </button>
                         <button
@@ -130,6 +133,9 @@ export function ConnectionCards() {
                       })
                     }
                   >
+                    {connecting && (
+                      <Spinner label={`Connecting ${tool.name}`} />
+                    )}
                     {connecting ? "Connecting..." : "Connect"}
                   </button>
                 )}

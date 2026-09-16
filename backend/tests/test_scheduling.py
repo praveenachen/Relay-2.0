@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from app.scheduling.constraints import validate_session_adjustments
 from app.scheduling.models import (
     AcademicTask,
     AvailabilityWindow,
@@ -250,6 +251,10 @@ def test_decomposition_never_exceeds_preferred_or_maximum() -> None:
         assert chunk <= 75
 
 
+def test_short_final_chunk_is_rebalanced_without_exceeding_maximum() -> None:
+    assert decompose_minutes(65, preferred=60, maximum=60) == (50, 15)
+
+
 def test_priority_breaks_ties_between_equal_deadlines() -> None:
     result = solve(
         problem(
@@ -265,24 +270,7 @@ def test_priority_breaks_ties_between_equal_deadlines() -> None:
 
 
 def test_daily_balance_weight_spreads_large_task_across_days() -> None:
-    """Small real experiment (see docs/experiments/daily-balance-weight.md):
-    does raising the daily_balance weight actually spread a large task's
-    sessions across more of the available days, instead of clustering them
-    on whichever single day the deadline-urgency term scores highest?
-
-    Setup: one 240-minute task, a 5-day window with generous daily study
-    hours, and 60-minute preferred/maximum sessions (so the task always
-    decomposes into four fixed 60-minute fragments regardless of weight;
-    only which days the solver assigns them to can change).
-
-    Result, from an actual weight sweep against this scenario (0, 4, 20,
-    50, 100, 200, 500, 1000): distinct days used were 1, 1, 2, 3, 4, 4, 4,
-    4. The shipped default (4) does not move the outcome at all here --
-    deadline urgency dominates it -- and the effect only saturates at 4
-    distinct days once the weight reaches 100 (Jan 5 stays unused at any
-    weight because it falls outside the 7-day urgency lookback and never
-    gets picked over closer days).
-    """
+    """The balance objective should use more days than an unbalanced solve."""
     big_task = (task("project", dt(1, 12, 17), 240),)
     windows = tuple(
         AvailabilityWindow(start=dt(1, day, 8), end=dt(1, day, 22)) for day in range(5, 10)
@@ -299,6 +287,58 @@ def test_daily_balance_weight_spreads_large_task_across_days() -> None:
 
     assert len(days_used(unbalanced)) < len(days_used(balanced))
     assert len(days_used(balanced)) == 4
+
+
+def test_three_same_task_sessions_are_spread_when_days_are_available() -> None:
+    result = solve(
+        problem(
+            (task("project", dt(1, 9, 17), 180),),
+            tuple(
+                AvailabilityWindow(start=dt(1, day, 9), end=dt(1, day, 13)) for day in range(5, 8)
+            ),
+            preference=prefs(preferred_session_minutes=60, maximum_session_minutes=60),
+        )
+    )
+
+    assert result.metrics.tasks_fully_scheduled == 1
+    assert len({session.start.date() for session in result.sessions}) == 3
+
+
+def test_urgent_task_can_use_three_sessions_on_same_day() -> None:
+    result = solve(
+        problem(
+            (task("urgent", dt(1, 5, 14), 180),),
+            (AvailabilityWindow(start=dt(1, 5, 8), end=dt(1, 5, 14)),),
+            now=dt(1, 5, 7),
+            preference=prefs(preferred_session_minutes=60, maximum_session_minutes=60),
+        )
+    )
+
+    assert result.metrics.tasks_fully_scheduled == 1
+    assert len(result.sessions) == 3
+    assert {session.start.date() for session in result.sessions} == {dt(1, 5, 8).date()}
+
+
+def test_manual_move_rejects_busy_time_and_accepts_clear_time() -> None:
+    scheduling_problem = problem(
+        (task("essay", dt(1, 7, 17), 60),),
+        (AvailabilityWindow(start=dt(1, 5, 8), end=dt(1, 6, 22)),),
+        busy=(BusyInterval(start=dt(1, 5, 10), end=dt(1, 5, 11), source_event_id="private"),),
+    )
+    blocked = StudySession(
+        id="essay-1",
+        task_id="essay",
+        start=dt(1, 5, 10),
+        end=dt(1, 5, 11),
+    )
+    clear = blocked.model_copy(update={"start": dt(1, 6, 10), "end": dt(1, 6, 11)})
+
+    blocked_report = validate_session_adjustments(scheduling_problem, (blocked,))
+    clear_report = validate_session_adjustments(scheduling_problem, (clear,))
+
+    assert not blocked_report.valid
+    assert blocked_report.message == "That time overlaps a Busy calendar interval."
+    assert clear_report.valid
 
 
 def test_month_long_window_with_wide_study_hours_solves_quickly() -> None:

@@ -5,7 +5,7 @@ import { Plus, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAllServerTasks, useProjects } from "@/hooks/queries";
 import { projects, type Project } from "@/features/projects/api";
-import { ErrorMessage, Loading } from "@/components/ui";
+import { ErrorMessage, Loading, Spinner } from "@/components/ui";
 import { ProjectCard } from "@/components/project-card";
 import { projectTaskFromServer, useProjectTasks } from "@/lib/project-tasks";
 
@@ -129,6 +129,7 @@ export function NewProjectButton({ initialSpace }: { initialSpace: Space }) {
                   className="button"
                   disabled={!name.trim() || create.isPending}
                 >
+                  {create.isPending && <Spinner label="Creating project" />}
                   {create.isPending ? "Creating…" : "Create project"}
                 </button>
               </div>

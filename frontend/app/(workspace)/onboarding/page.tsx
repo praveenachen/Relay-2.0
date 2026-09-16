@@ -6,7 +6,7 @@ import { workflows } from "@/features/workflows/display";
 import { auth } from "@/features/auth/api";
 import { ConnectionCards } from "@/components/connection-cards";
 import { PreferencesForm } from "@/components/preferences-form";
-import { ErrorMessage, PageTitle } from "@/components/ui";
+import { ErrorMessage, PageTitle, Spinner } from "@/components/ui";
 export default function Onboarding() {
   const [step, setStep] = useState(0);
   const router = useRouter(),
@@ -108,6 +108,7 @@ export default function Onboarding() {
             disabled={finish.isPending}
             onClick={() => finish.mutate()}
           >
+            {finish.isPending && <Spinner label="Finishing onboarding" />}
             {finish.isPending ? "Finishing..." : "Go to dashboard"}
           </button>
           <ErrorMessage error={finish.error} />

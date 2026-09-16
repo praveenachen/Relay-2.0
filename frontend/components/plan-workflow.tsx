@@ -22,6 +22,7 @@ import { preferences } from "@/features/preferences/api";
 import { useConnections, usePreferences } from "@/hooks/queries";
 import {
   AcademicTask,
+  BusyInterval,
   PlanDetail,
   StudySession,
   plan,
@@ -32,6 +33,7 @@ import {
   ErrorMessage,
   Loading,
   PageTitle,
+  Spinner,
   Status,
 } from "@/components/ui";
 import {
@@ -90,7 +92,11 @@ export function PlanEntry() {
           disabled={create.isPending}
           onClick={() => create.mutate()}
         >
-          <Play aria-hidden="true" />
+          {create.isPending ? (
+            <Spinner label="Starting planner" />
+          ) : (
+            <Play aria-hidden="true" />
+          )}
           {create.isPending ? "Starting…" : "Build a study plan"}
         </button>
         <ErrorMessage error={create.error} />
@@ -477,6 +483,9 @@ function SetupWizard({
               disabled={busy || needsTaskSource || needsCalendar}
               onClick={() => generatePlan.mutate()}
             >
+              {generatePlan.isPending && (
+                <Spinner label="Generating study plan" />
+              )}
               {generatePlan.isPending
                 ? "Building your study plan…"
                 : "Build my plan"}
@@ -505,6 +514,9 @@ function SetupWizard({
             disabled={busy}
             onClick={() => generatePlan.mutate()}
           >
+            {generatePlan.isPending && (
+              <Spinner label="Generating study plan" />
+            )}
             {generatePlan.isPending
               ? "Building your study plan…"
               : "Build my plan"}
@@ -751,6 +763,7 @@ function ReviewAndApprove({
           <SchedulePanel
             result={result}
             tasks={setup?.tasks || []}
+            busyIntervals={setup?.busy_intervals || []}
             editable={canRegenerate}
             busy={busy}
             onLock={(sessionId, locked) => lock.mutate({ sessionId, locked })}
@@ -1012,6 +1025,7 @@ function NotionExportPanel({
 function SchedulePanel({
   result,
   tasks,
+  busyIntervals,
   editable,
   busy,
   onLock,
@@ -1019,6 +1033,7 @@ function SchedulePanel({
 }: {
   result: PlanDetail["result"];
   tasks: AcademicTask[];
+  busyIntervals: BusyInterval[];
   editable: boolean;
   busy: boolean;
   onLock: (sessionId: string, locked: boolean) => void;
@@ -1030,12 +1045,20 @@ function SchedulePanel({
   const courseFor = (taskId: string) =>
     tasks.find((task) => task.id === taskId)?.course;
   const byDay = new Map<string, StudySession[]>();
+  const busyByDay = new Map<string, BusyInterval[]>();
   for (const session of [...result.sessions].sort((a, b) =>
     a.start.localeCompare(b.start),
   )) {
     const day = localDateValue(session.start);
     byDay.set(day, [...(byDay.get(day) || []), session]);
   }
+  for (const interval of busyIntervals) {
+    const day = localDateValue(interval.start);
+    busyByDay.set(day, [...(busyByDay.get(day) || []), interval]);
+  }
+  const calendarDays = [
+    ...new Set([...byDay.keys(), ...busyByDay.keys()]),
+  ].sort();
   return (
     <div className="planner-result">
       <div className="planner-result-heading">
@@ -1079,7 +1102,7 @@ function SchedulePanel({
           </ul>
         </aside>
         <div className="week-calendar" aria-label="Weekly study schedule">
-          {[...byDay.entries()].map(([day, sessions]) => (
+          {calendarDays.map((day) => (
             <section className="calendar-day" key={day}>
               <header>
                 <span>
@@ -1095,7 +1118,31 @@ function SchedulePanel({
                 </strong>
               </header>
               <div className="calendar-day-blocks">
-                {sessions.map((session) => (
+                {(busyByDay.get(day) || []).map((interval, index) => (
+                  <div
+                    className="calendar-block calendar-busy-block"
+                    key={`${interval.start}-${interval.end}-${index}`}
+                  >
+                    <div>
+                      <p className="font-medium">Busy</p>
+                      <p className="text-sm text-muted">
+                        {new Date(interval.start).toLocaleTimeString(
+                          undefined,
+                          {
+                            hour: "numeric",
+                            minute: "2-digit",
+                          },
+                        )}{" "}
+                        –{" "}
+                        {new Date(interval.end).toLocaleTimeString(undefined, {
+                          hour: "numeric",
+                          minute: "2-digit",
+                        })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {(byDay.get(day) || []).map((session) => (
                   <div
                     key={session.id}
                     className={`session-card calendar-block ${session.locked ? "locked" : ""}`}

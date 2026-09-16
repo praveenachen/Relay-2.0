@@ -30,6 +30,7 @@ import {
   ErrorMessage,
   Loading,
   PageTitle,
+  Spinner,
   Status,
 } from "@/components/ui";
 import { workflowDisplay } from "@/features/workflows/display";
@@ -144,13 +145,27 @@ function ProjectSetupForm({
 }) {
   const cache = useQueryClient();
   const connectionsQuery = useConnections();
+  const hasNotion = (connectionsQuery.data || []).some(
+    (item) => item.provider === "NOTION" && item.status === "CONNECTED",
+  );
+  const hasGithub = (connectionsQuery.data || []).some(
+    (item) => item.provider === "GITHUB" && item.status === "CONNECTED",
+  );
   const notionDatabases = useQuery({
     queryKey: ["connections", "notion-task-databases"],
     queryFn: connections.notionTaskDatabases,
+    enabled: hasNotion,
   });
   const githubRepos = useQuery({
     queryKey: ["connections", "github-repositories"],
     queryFn: connections.githubRepositories,
+    enabled: hasGithub,
+  });
+  const refreshGithubRepos = useMutation({
+    mutationFn: connections.githubRepositories,
+    onSuccess: (items) => {
+      cache.setQueryData(["connections", "github-repositories"], items);
+    },
   });
   const [name, setName] = useState("");
   const [course, setCourse] = useState("");
@@ -163,12 +178,6 @@ function ProjectSetupForm({
   const [repoFullName, setRepoFullName] = useState("");
   const [manualRepoFullName, setManualRepoFullName] = useState("");
 
-  const hasNotion = (connectionsQuery.data || []).some(
-    (item) => item.provider === "NOTION" && item.status === "CONNECTED",
-  );
-  const hasGithub = (connectionsQuery.data || []).some(
-    (item) => item.provider === "GITHUB" && item.status === "CONNECTED",
-  );
   const manualRepoMatch = manualRepoFullName
     .trim()
     .match(/^([^/\s]+)\/([^/\s]+)$/);
@@ -276,7 +285,7 @@ function ProjectSetupForm({
               <select
                 value={repoFullName}
                 onChange={(event) => setRepoFullName(event.target.value)}
-                disabled={githubRepos.isPending}
+                disabled={githubRepos.isPending || refreshGithubRepos.isPending}
               >
                 <option value="">
                   {githubRepos.isPending ? "Loading repositories..." : "None"}
@@ -288,6 +297,17 @@ function ProjectSetupForm({
                 ))}
                 <option value="__manual__">Enter repository manually</option>
               </select>
+              <button
+                type="button"
+                className="button secondary"
+                disabled={refreshGithubRepos.isPending}
+                onClick={() => refreshGithubRepos.mutate()}
+              >
+                {refreshGithubRepos.isPending && (
+                  <Spinner label="Refreshing repositories" />
+                )}
+                Refresh repositories
+              </button>
               {repoFullName === "__manual__" && (
                 <input
                   value={manualRepoFullName}
@@ -298,10 +318,10 @@ function ProjectSetupForm({
                   aria-label="GitHub repository full name"
                 />
               )}
-              {githubRepos.error && (
+              {(githubRepos.error || refreshGithubRepos.error) && (
                 <span className="text-sm text-danger">
-                  Relay could not load GitHub repositories. Reconnect GitHub if
-                  this keeps happening.
+                  Relay could not load GitHub repositories. Refresh to try the
+                  current connection again.
                 </span>
               )}
               {!githubRepos.isPending &&
@@ -633,8 +653,12 @@ function TranscriptStage({
             disabled={busy || data.stage === "analyzing"}
             onClick={() => analyze.mutate()}
           >
-            <Play aria-hidden="true" />
-            {data.stage === "analyzing"
+            {analyze.isPending || data.stage === "analyzing" ? (
+              <Spinner label="Generating meeting actions" />
+            ) : (
+              <Play aria-hidden="true" />
+            )}
+            {analyze.isPending || data.stage === "analyzing"
               ? "Processing your meeting…"
               : "Process meeting"}
           </button>

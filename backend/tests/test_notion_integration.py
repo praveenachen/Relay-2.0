@@ -10,11 +10,15 @@ from app.connectors.notion import (
     MockNotionConnector,
     NotionApiClient,
     NotionAuthorizationFailed,
+    NotionBlock,
     NotionDestinationService,
     NotionOAuthClient,
     NotionOAuthService,
+    NotionRichText,
     NotionStudyPageMapper,
     NotionValidationFailed,
+    PublishNotionProjectAction,
+    RealNotionConnector,
 )
 from app.connectors.notion.mapper import chunks
 from app.domain.enums import Provider
@@ -178,6 +182,150 @@ async def test_real_connector_maps_provider_errors():
 
     with pytest.raises(NotionValidationFailed):
         await RealNotionConnector(FailingClient("token")).create_study_page(action(), "relay:1")
+
+
+def project_publish_action(existing_page_id=None) -> PublishNotionProjectAction:
+    return PublishNotionProjectAction(
+        project_id="project-1",
+        title="SYDE 223 Midterm",
+        connection_id=str(UUID(int=7)),
+        parent_destination_id="parent-1",
+        existing_page_id=existing_page_id,
+        existing_page_url="https://notion.so/project" if existing_page_id else None,
+        icon_emoji="🎓",
+        blocks=(
+            NotionBlock(
+                kind="callout",
+                text="Relay snapshot · 14% complete",
+                icon_emoji="🎓",
+                color="purple_background",
+                children=[
+                    NotionBlock(
+                        kind="bulleted_list_item",
+                        rich_text=[
+                            NotionRichText(text="Implement BFS", bold=True),
+                            NotionRichText(text="\nDue September 21", color="gray"),
+                        ],
+                    )
+                ],
+            ),
+        ),
+    )
+
+
+async def test_project_publish_uses_managed_snapshot_and_page_icon():
+    calls = []
+
+    class Client(NotionApiClient):
+        async def request(self, method, path, json=None):
+            calls.append((method, path, json))
+            return {"id": "page-1", "url": "https://notion.so/page-1"}
+
+    result = await RealNotionConnector(Client("token")).publish_project(
+        project_publish_action(), "internal-key"
+    )
+
+    assert result.external_id == "page-1"
+    body = calls[0][2]
+    assert body["icon"] == {"type": "emoji", "emoji": "🎓"}
+    assert body["children"][0]["type"] == "callout"
+    assert body["children"][0]["callout"]["color"] == "purple_background"
+    assert (
+        body["children"][0]["callout"]["children"][0]["bulleted_list_item"]["rich_text"][0][
+            "annotations"
+        ]["bold"]
+        is True
+    )
+    assert "internal-key" not in str(body)
+
+
+async def test_project_update_preserves_blocks_outside_managed_snapshot():
+    calls = []
+
+    class Client(NotionApiClient):
+        async def request(self, method, path, json=None):
+            calls.append((method, path, json))
+            if method == "PATCH" and path == "/v1/pages/page-1":
+                return {"id": "page-1", "url": "https://notion.so/page-1"}
+            if method == "GET" and path == "/v1/blocks/page-1/children?page_size=100":
+                return {
+                    "results": [
+                        {
+                            "id": "managed-1",
+                            "type": "callout",
+                            "callout": {
+                                "rich_text": [{"plain_text": "Relay snapshot · 10% complete"}]
+                            },
+                        },
+                        {
+                            "id": "user-note",
+                            "type": "paragraph",
+                            "paragraph": {"rich_text": [{"plain_text": "My notes"}]},
+                        },
+                    ],
+                    "has_more": False,
+                }
+            if method == "GET" and path == "/v1/blocks/managed-1/children?page_size=100":
+                return {"results": [{"id": "old-relay-child"}], "has_more": False}
+            return {}
+
+    result = await RealNotionConnector(Client("token")).publish_project(
+        project_publish_action("page-1"), "same-key"
+    )
+
+    assert result.external_id == "page-1"
+    deleted = [path for method, path, _ in calls if method == "DELETE"]
+    assert deleted == ["/v1/blocks/old-relay-child"]
+    assert "/v1/blocks/user-note" not in deleted
+    assert any(
+        method == "PATCH" and path == "/v1/blocks/managed-1/children" for method, path, _ in calls
+    )
+
+
+async def test_project_update_migrates_legacy_snapshot_without_deleting_user_blocks():
+    calls = []
+
+    class Client(NotionApiClient):
+        async def request(self, method, path, json=None):
+            calls.append((method, path, json))
+            if method == "PATCH" and path == "/v1/pages/page-1":
+                return {"id": "page-1", "url": "https://notion.so/page-1"}
+            if method == "GET" and path == "/v1/blocks/page-1/children?page_size=100":
+                return {
+                    "results": [
+                        {
+                            "id": "legacy-marker",
+                            "type": "paragraph",
+                            "paragraph": {
+                                "rich_text": [{"plain_text": "Relay action: internal-key"}]
+                            },
+                        },
+                        {
+                            "id": "legacy-heading",
+                            "type": "heading_2",
+                            "heading_2": {"rich_text": [{"plain_text": "Tasks"}]},
+                        },
+                        {
+                            "id": "user-note",
+                            "type": "paragraph",
+                            "paragraph": {"rich_text": [{"plain_text": "My notes"}]},
+                        },
+                    ],
+                    "has_more": False,
+                }
+            return {}
+
+    action = project_publish_action("page-1").model_copy(
+        update={"legacy_blocks": (NotionBlock(kind="heading_2", text="Tasks"),)}
+    )
+    await RealNotionConnector(Client("token")).publish_project(action, "same-key")
+
+    deleted = [path for method, path, _ in calls if method == "DELETE"]
+    assert deleted == ["/v1/blocks/legacy-marker", "/v1/blocks/legacy-heading"]
+    assert "/v1/blocks/user-note" not in deleted
+    assert any(
+        method == "PATCH" and path == "/v1/blocks/page-1/children" for method, path, _ in calls
+    )
 
 
 async def test_oauth_state_exchange_encrypts_tokens(client, account, session_factory):

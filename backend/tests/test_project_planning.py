@@ -1,8 +1,12 @@
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import func, select
+
+from app.connectors.notion.errors import MockNotionFailure
+from app.connectors.notion.mock import MockNotionConnector
 from app.core.config import get_settings
 from app.domain.enums import ConnectionStatus, Provider
-from app.models.entities import ConnectedAccount
+from app.models.entities import ConnectedAccount, ExternalArtifact, NotionDestinationRecord
 
 
 async def _project(client, **extra):
@@ -170,3 +174,130 @@ async def test_github_issue_preview_confirm_and_deduplicate(
     tasks = (await client.get(f"/projects/{project['id']}/tasks")).json()
     assert len(tasks[0]["external_references"]) == 1
     assert tasks[0]["external_references"][0]["label"].startswith("GitHub #")
+
+
+async def _connect_notion(session_factory, account):
+    async with session_factory() as session:
+        connection = ConnectedAccount(
+            user_id=account["id"],
+            provider=Provider.NOTION,
+            external_account_id="notion-user",
+            display_name="Relay workspace",
+            access_token_encrypted="mock-token",
+            refresh_token_encrypted=None,
+            token_expires_at=None,
+            scopes=[],
+            provider_metadata={
+                "default_destination_id": "parent-page",
+                "default_destination_title": "Projects",
+            },
+            status=ConnectionStatus.CONNECTED,
+        )
+        session.add(connection)
+        await session.flush()
+        session.add(
+            NotionDestinationRecord(
+                user_id=account["id"],
+                connection_id=connection.id,
+                provider_page_id="parent-page",
+                title="Projects",
+                icon_url=None,
+                selected=True,
+            )
+        )
+        await session.commit()
+
+
+async def test_project_publish_and_update_reuse_same_notion_page(
+    client, account, session_factory, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "notion_publish_mode", "mock")
+    project = await _project(client, description="Launch the new experience")
+    task = await _task(client, project["id"], "Polish launch", 2, 45)
+    assert (await client.get(f"/projects/{project['id']}/notion")).json()["connected"] is False
+    await _connect_notion(session_factory, account)
+
+    preview_response = await client.post(f"/projects/{project['id']}/notion/preview")
+    assert preview_response.status_code == 201, preview_response.text
+    preview = preview_response.json()
+    assert preview["is_update"] is False
+    duplicate_preview = (await client.post(f"/projects/{project['id']}/notion/preview")).json()
+    assert duplicate_preview["run_id"] == preview["run_id"]
+    assert (await client.get(f"/projects/{project['id']}/notion")).json()["page_id"] is None
+    published = await client.post(
+        f"/projects/{project['id']}/notion/{preview['run_id']}/{preview['approval_id']}/confirm"
+    )
+    assert published.status_code == 200, published.text
+    assert published.json()["status"] == "COMPLETED"
+    first_status = (await client.get(f"/projects/{project['id']}/notion")).json()
+    assert first_status["page_url"].startswith("mock://notion/page/")
+
+    await client.put(
+        f"/projects/{project['id']}/tasks/{task['id']}",
+        json={
+            "title": "Polish launch",
+            "description": None,
+            "due_date": task["due_date"],
+            "estimate_minutes": 45,
+            "priority": "HIGH",
+            "status": "DONE",
+        },
+    )
+    update = (await client.post(f"/projects/{project['id']}/notion/preview")).json()
+    assert update["is_update"] is True
+    updated = await client.post(
+        f"/projects/{project['id']}/notion/{update['run_id']}/{update['approval_id']}/confirm"
+    )
+    assert updated.json()["status"] == "COMPLETED"
+    second_status = (await client.get(f"/projects/{project['id']}/notion")).json()
+    assert second_status["page_id"] == first_status["page_id"]
+    retried = await client.post(
+        f"/projects/{project['id']}/notion/{update['run_id']}/{update['approval_id']}/confirm"
+    )
+    assert retried.json()["status"] == "COMPLETED"
+    async with session_factory() as session:
+        count = await session.scalar(
+            select(func.count())
+            .select_from(ExternalArtifact)
+            .where(ExternalArtifact.external_id == first_status["page_id"])
+        )
+        assert count == 1
+
+
+async def test_project_notion_publish_failure_is_user_safe(
+    client, account, session_factory, monkeypatch
+):
+    monkeypatch.setattr(get_settings(), "notion_publish_mode", "mock")
+    project = await _project(client)
+    await _task(client, project["id"], "Ship release")
+    await _connect_notion(session_factory, account)
+    preview = (await client.post(f"/projects/{project['id']}/notion/preview")).json()
+    first_publish = await client.post(
+        f"/projects/{project['id']}/notion/{preview['run_id']}/{preview['approval_id']}/confirm"
+    )
+    assert first_publish.json()["status"] == "COMPLETED"
+    published_status = (await client.get(f"/projects/{project['id']}/notion")).json()
+    update = (await client.post(f"/projects/{project['id']}/notion/preview")).json()
+    original_publish = MockNotionConnector.publish_project
+
+    async def fail(self, action, idempotency_key):
+        raise MockNotionFailure()
+
+    monkeypatch.setattr(MockNotionConnector, "publish_project", fail)
+    result = await client.post(
+        f"/projects/{project['id']}/notion/{update['run_id']}/{update['approval_id']}/confirm"
+    )
+    assert result.status_code == 200
+    assert result.json()["status"] == "FAILED"
+    failed_status = (await client.get(f"/projects/{project['id']}/notion")).json()
+    assert failed_status["page_id"] == published_status["page_id"]
+    assert failed_status["page_url"] == published_status["page_url"]
+
+    monkeypatch.setattr(MockNotionConnector, "publish_project", original_publish)
+    retry = (await client.post(f"/projects/{project['id']}/notion/preview")).json()
+    retried = await client.post(
+        f"/projects/{project['id']}/notion/{retry['run_id']}/{retry['approval_id']}/confirm"
+    )
+    assert retried.json()["status"] == "COMPLETED"
+    retry_status = (await client.get(f"/projects/{project['id']}/notion")).json()
+    assert retry_status["page_id"] == published_status["page_id"]

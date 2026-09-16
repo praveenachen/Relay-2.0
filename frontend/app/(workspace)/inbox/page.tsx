@@ -9,7 +9,7 @@ import {
   type ProposalPayload,
   type TaskProposal,
 } from "@/features/sources/api";
-import { ErrorMessage, Loading } from "@/components/ui";
+import { ErrorMessage, Loading, Spinner } from "@/components/ui";
 import { localInputValue } from "@/lib/datetime";
 
 const confirmationLabels = {
@@ -228,6 +228,7 @@ function ProposalCard({
               onClick={() => edit.mutate()}
               disabled={!draft.title.trim() || edit.isPending}
             >
+              {edit.isPending && <Spinner label="Saving proposal edits" />}
               Save edits
             </button>
           </>
@@ -247,14 +248,20 @@ function ProposalCard({
               onClick={() => reject.mutate()}
               disabled={reject.isPending}
             >
-              <X /> {draft.possible_duplicate ? "Skip" : "Reject"}
+              {reject.isPending ? (
+                <Spinner label="Rejecting proposal" />
+              ) : (
+                <X />
+              )}
+              {draft.possible_duplicate ? "Skip" : "Reject"}
             </button>
             <button
               className="button"
               onClick={() => accept.mutate()}
               disabled={draft.needs_confirmation.length > 0 || accept.isPending}
             >
-              <Check /> {draft.possible_duplicate ? "Create anyway" : "Accept"}
+              {accept.isPending ? <Spinner label="Creating task" /> : <Check />}
+              {draft.possible_duplicate ? "Create anyway" : "Accept"}
             </button>
           </>
         )}
@@ -351,7 +358,11 @@ export default function Inbox() {
             disabled={!selectedItems.length || acceptSelected.isPending}
             onClick={() => acceptSelected.mutate()}
           >
-            <Check />
+            {acceptSelected.isPending ? (
+              <Spinner label="Creating selected tasks" />
+            ) : (
+              <Check />
+            )}
             Accept selected ({selectedItems.length})
           </button>
         </div>

@@ -18,6 +18,7 @@ export const busyIntervalSchema = z.object({
   end: z.string(),
   source_event_id: z.string().nullable(),
 });
+export type BusyInterval = z.infer<typeof busyIntervalSchema>;
 
 export const studySessionSchema = z.object({
   id: z.string().nullable(),
@@ -173,7 +174,48 @@ export const githubIssuePreviewSchema = z.object({
 });
 export type GitHubIssuePreview = z.infer<typeof githubIssuePreviewSchema>;
 
+export const notionProjectStatusSchema = z.object({
+  connected: z.boolean(),
+  destination_configured: z.boolean(),
+  destination_title: z.string().nullable(),
+  page_id: z.string().nullable(),
+  page_url: z.string().nullable(),
+  last_published_at: z.string().nullable(),
+});
+export type NotionProjectStatus = z.infer<typeof notionProjectStatusSchema>;
+
+export const notionProjectPreviewSchema = z.object({
+  run_id: z.guid(),
+  approval_id: z.guid(),
+  title: z.string(),
+  is_update: z.boolean(),
+  progress: z.number(),
+  task_count: z.number(),
+  source_count: z.number(),
+  deadline: z.string().nullable(),
+  destination_title: z.string().nullable(),
+});
+export type NotionProjectPreview = z.infer<typeof notionProjectPreviewSchema>;
+
 export const projectActions = {
+  notionStatus: (projectId: string) =>
+    request(`/projects/${projectId}/notion`, notionProjectStatusSchema),
+  previewNotionProject: (projectId: string) =>
+    request(
+      `/projects/${projectId}/notion/preview`,
+      notionProjectPreviewSchema,
+      { method: "POST" },
+    ),
+  confirmNotionProject: (
+    projectId: string,
+    runId: string,
+    approvalId: string,
+  ) =>
+    request(
+      `/projects/${projectId}/notion/${runId}/${approvalId}/confirm`,
+      runSchema,
+      { method: "POST" },
+    ),
   previewGitHubIssue: (
     projectId: string,
     taskId: string,

@@ -79,7 +79,7 @@ test("Inbox bulk accept uses the confirmed card drafts", async ({ page }) => {
   await expect(taskRow.getByLabel(`Select ${taskTitle}`)).toBeEnabled();
   await taskRow.getByLabel(`Select ${taskTitle}`).check();
   await expect(
-    page.getByRole("button", { name: "Plan my week" }),
+    page.getByRole("button", { name: "Create schedule (1)" }),
   ).toBeDisabled();
   await expect(page.getByText("Google Calendar isn’t connected")).toBeVisible();
   await expect(

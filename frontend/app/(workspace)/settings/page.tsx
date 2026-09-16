@@ -6,7 +6,7 @@ import { z } from "zod";
 import { useUser } from "@/hooks/queries";
 import { auth } from "@/features/auth/api";
 import { PreferencesForm } from "@/components/preferences-form";
-import { ErrorMessage, Loading, PageTitle } from "@/components/ui";
+import { ErrorMessage, Loading, PageTitle, Spinner } from "@/components/ui";
 import { clearProjectTasks } from "@/lib/project-tasks";
 export default function Settings() {
   const user = useUser(),
@@ -63,6 +63,7 @@ export default function Settings() {
               </p>
             )}
             <button className="button" disabled={profile.isPending}>
+              {profile.isPending && <Spinner label="Saving profile" />}
               Save profile
             </button>
           </form>
@@ -98,6 +99,9 @@ export default function Settings() {
             disabled={resetHistory.isPending}
             onClick={resetRelayHistory}
           >
+            {resetHistory.isPending && (
+              <Spinner label="Clearing Relay history" />
+            )}
             {resetHistory.isPending ? "Clearing..." : "Clear Relay history"}
           </button>
         </section>

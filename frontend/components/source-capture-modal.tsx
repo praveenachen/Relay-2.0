@@ -9,7 +9,7 @@ import {
   type ProjectSource,
   type SourceType,
 } from "@/features/sources/api";
-import { ErrorMessage } from "@/components/ui";
+import { ErrorMessage, Spinner } from "@/components/ui";
 
 const labels: Record<SourceType, string> = {
   ASSIGNMENT_BRIEF: "Assignment / brief",
@@ -151,6 +151,9 @@ export function SourceCaptureModal({
                   create.isPending
                 }
               >
+                {create.isPending && (
+                  <Spinner label="Generating task proposals" />
+                )}
                 {create.isPending
                   ? "Finding useful tasks…"
                   : "Create proposals"}

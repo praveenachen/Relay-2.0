@@ -6,7 +6,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 import { auth } from "@/features/auth/api";
 import { Brand } from "@/components/brand";
-import { ErrorMessage } from "@/components/ui";
+import { ErrorMessage, Spinner } from "@/components/ui";
 
 export function AuthForm({ signup = false }: { signup?: boolean }) {
   const [validation, setValidation] = useState<string | null>(null);
@@ -105,6 +105,9 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
             error={validation ? new Error(validation) : mutation.error}
           />
           <button className="button w-full" disabled={mutation.isPending}>
+            {mutation.isPending && (
+              <Spinner label={signup ? "Creating account" : "Signing in"} />
+            )}
             {mutation.isPending
               ? "Please wait..."
               : signup

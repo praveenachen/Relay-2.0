@@ -9,6 +9,7 @@ from app.connectors.notion.schemas import (
     ExternalArtifactResult,
     NotionTaskDatabaseResult,
     NotionTaskResult,
+    PublishNotionProjectAction,
 )
 
 
@@ -49,6 +50,26 @@ class MockNotionConnector:
             external_url=f"mock://notion/page/{identifier}",
             title=action.title,
             simulated=True,
+        )
+
+    async def publish_project(
+        self,
+        action: PublishNotionProjectAction,
+        idempotency_key: str,
+    ) -> ExternalArtifactResult:
+        if self.fail:
+            raise MockNotionFailure()
+        identifier = action.existing_page_id or (
+            "mock-" + uuid5(NAMESPACE_URL, f"project:{action.project_id}").hex
+        )
+        return ExternalArtifactResult(
+            external_id=identifier,
+            external_url=action.existing_page_url or f"mock://notion/page/{identifier}",
+            title=action.title,
+            destination_id=action.parent_destination_id,
+            destination_title=action.parent_destination_title,
+            simulated=True,
+            blocks=list(action.blocks),
         )
 
     async def create_task_database(

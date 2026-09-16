@@ -35,3 +35,24 @@ class ScheduledBlockRead(StrictModel):
     task_title: str
     start: datetime
     end: datetime
+
+
+class NotionProjectStatus(StrictModel):
+    connected: bool
+    destination_configured: bool
+    destination_title: str | None = None
+    page_id: str | None = None
+    page_url: str | None = None
+    last_published_at: datetime | None = None
+
+
+class NotionProjectPreview(StrictModel):
+    run_id: UUID
+    approval_id: UUID
+    title: str
+    is_update: bool
+    progress: int
+    task_count: int
+    source_count: int
+    deadline: datetime | None = None
+    destination_title: str | None = None

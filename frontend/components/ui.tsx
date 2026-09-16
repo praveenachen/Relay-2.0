@@ -6,9 +6,19 @@ import {
   CircleSlash,
   Clock3,
   CornerDownRight,
+  LoaderCircle,
 } from "lucide-react";
 import { ApiError } from "@/lib/api";
 import { statusFor } from "@/features/workflows/status";
+
+export function Spinner({ label = "Working" }: { label?: string }) {
+  return (
+    <>
+      <LoaderCircle className="loading-spinner" aria-hidden="true" />
+      <span className="sr-only">{label}</span>
+    </>
+  );
+}
 
 export function PageTitle({
   eyebrow,

@@ -6,7 +6,7 @@ import { runs as runApi } from "@/features/workflow-runs/api";
 import type { WorkflowDisplay } from "@/features/workflows/display";
 import { RelayLine } from "@/components/relay-line";
 import { WorkflowBadge } from "@/components/workflow-badge";
-import { ErrorMessage, Loading, PageTitle } from "@/components/ui";
+import { ErrorMessage, Loading, PageTitle, Spinner } from "@/components/ui";
 
 export function WorkflowEntry({ display }: { display: WorkflowDisplay }) {
   const definitions = useDefinitions();
@@ -67,6 +67,7 @@ export function WorkflowEntry({ display }: { display: WorkflowDisplay }) {
           disabled={!definition?.enabled || create.isPending}
           onClick={() => definition && create.mutate(definition.id)}
         >
+          {create.isPending && <Spinner label="Creating workflow draft" />}
           {!definition?.enabled
             ? "Unavailable"
             : create.isPending

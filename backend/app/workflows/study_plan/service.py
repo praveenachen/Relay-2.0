@@ -27,10 +27,13 @@ from app.domain.enums import WorkflowStatus as S
 from app.domain.errors import UnauthorizedResourceAccess
 from app.models.entities import ProposedAction, WorkflowDefinition, WorkflowRun
 from app.repositories.relay import RelayRepository
+from app.scheduling.constraints import validate_session_adjustments
 from app.scheduling.models import (
     AcademicTask,
     AvailabilityWindow,
     BusyInterval,
+    SchedulingConflict,
+    SchedulingMetrics,
     SchedulingProblem,
     SchedulingResult,
     SchedulingStatus,
@@ -44,6 +47,7 @@ from app.workflows.study_plan.actions import OPERATION, CreateCalendarStudyPlanA
 from app.workflows.study_plan.errors import (
     CalendarDestinationRequired,
     PlanWorkflowInvalidState,
+    ScheduleAdjustmentInvalid,
     SchedulingInputInvalid,
 )
 from app.workflows.study_plan.schemas import PlanSetupInput
@@ -202,6 +206,21 @@ class StudyPlanWorkflowService:
         if run.status != S.PLAN_READY:
             raise PlanWorkflowInvalidState()
         payload = dict(run.input_payload or {})
+        preference = self.scheduler.preference_from_user(await self.repo.preferences(owner))
+        start = datetime.fromisoformat(payload["window"]["start"])
+        end = datetime.fromisoformat(payload["window"]["end"])
+        problem = SchedulingProblem(
+            tasks=tuple(AcademicTask.model_validate(item) for item in payload.get("tasks", [])),
+            availability_windows=self.availability_windows(start, end, preference.timezone),
+            busy_intervals=tuple(
+                BusyInterval.model_validate(item) for item in payload.get("busy_intervals", [])
+            ),
+            preferences=preference,
+            now=start,
+        )
+        validation = validate_session_adjustments(problem, sessions)
+        if not validation.valid:
+            raise ScheduleAdjustmentInvalid(validation.message)
         payload["sessions"] = [item.model_dump(mode="json") for item in sessions]
         payload["locked_sessions"] = [
             item.model_dump(mode="json") for item in sessions if item.locked
@@ -209,9 +228,52 @@ class StudyPlanWorkflowService:
         run.input_payload = payload
         if run.plan_payload:
             result = SchedulingResult.model_validate(run.plan_payload)
-            run.plan_payload = result.model_copy(update={"sessions": sessions}).model_dump(
-                mode="json"
+            scheduled: dict[str, int] = {}
+            for session in sessions:
+                scheduled[session.task_id] = (
+                    scheduled.get(session.task_id, 0) + session.duration_minutes
+                )
+            unscheduled = {
+                task.id: max(0, task.estimated_minutes - scheduled.get(task.id, 0))
+                for task in problem.tasks
+            }
+            conflicts = tuple(
+                SchedulingConflict(
+                    code="UNSCHEDULED_WORK",
+                    message=(
+                        f"Relay scheduled {task.estimated_minutes - unscheduled[task.id]} of "
+                        f"{task.estimated_minutes} required minutes before the deadline."
+                    ),
+                    task_id=task.id,
+                    unscheduled_minutes=unscheduled[task.id],
+                )
+                for task in problem.tasks
+                if unscheduled[task.id] > 0
             )
+            completed = sum(minutes == 0 for minutes in unscheduled.values())
+            partial = sum(
+                0 < unscheduled[task.id] < task.estimated_minutes for task in problem.tasks
+            )
+            total_minutes = sum(session.duration_minutes for session in sessions)
+            metrics = SchedulingMetrics(
+                tasks_fully_scheduled=completed,
+                tasks_partially_scheduled=partial,
+                unscheduled_minutes=sum(unscheduled.values()),
+                session_count=len(sessions),
+                average_session_minutes=total_minutes / len(sessions) if sessions else 0,
+                deadline_violations=0,
+                preference_violations=0,
+            )
+            status = SchedulingStatus.INFEASIBLE if conflicts and not sessions else result.status
+            run.plan_payload = result.model_copy(
+                update={
+                    "sessions": sessions,
+                    "conflicts": conflicts,
+                    "metrics": metrics,
+                    "status": status,
+                    "unscheduled_minutes_by_task": unscheduled,
+                }
+            ).model_dump(mode="json")
         record(self.session, owner, "SESSION_MOVED", run.id, {"session_count": len(sessions)})
         await self.session.commit()
         return await self.detail(run_id, owner)

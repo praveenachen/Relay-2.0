@@ -74,8 +74,17 @@ def decompose_minutes(total: int, preferred: int, maximum: int) -> tuple[int, ..
     if remaining > 0:
         chunks.append(remaining)
     if len(chunks) >= 2 and chunks[-1] < SLOT_MINUTES:
-        chunks[-2] += chunks[-1]
-        chunks.pop()
+        if chunks[-2] + chunks[-1] <= maximum:
+            # A slightly longer session is better than an unnecessary tiny
+            # fragment when it still respects the user's hard maximum.
+            chunks[-2] += chunks[-1]
+            chunks.pop()
+        else:
+            # Otherwise borrow from the prior chunk so both remain usable
+            # without exceeding the configured maximum.
+            borrowed = SLOT_MINUTES - chunks[-1]
+            chunks[-2] -= borrowed
+            chunks[-1] += borrowed
     return tuple(chunks)
 
 
@@ -151,7 +160,7 @@ def _slot_score(
     priority_rank = 6 - task.priority
     priority = priority_rank * weights.priority
     minutes_after_now = max(0, int((start - urgency_anchor).total_seconds() // 60))
-    earliness = -(minutes_after_now // SLOT_MINUTES) * max(1, urgency_rank + priority_rank)
+    earliness = -(minutes_after_now // SLOT_MINUTES) * weights.earliness
     preferred = 0
     if preferences.preferred_period == "morning" and 7 <= local.hour < 12:
         preferred = weights.preferred_period
@@ -213,6 +222,14 @@ class CPSATStudyScheduler:
         selected = [model.new_bool_var(f"slot_{index}") for index, _ in enumerate(candidates)]
         self._add_overlap_constraints(model, selected, candidates, problem)
 
+        fragment_groups: dict[tuple[str, int], list[Any]] = {}
+        for index, candidate in enumerate(candidates):
+            fragment_groups.setdefault((candidate.task.id, candidate.fragment_id), []).append(
+                selected[index]
+            )
+        for variables in fragment_groups.values():
+            model.add(sum(variables) <= 1)
+
         for task in problem.tasks:
             requirement = max(0, task.estimated_minutes - locked_minutes.get(task.id, 0))
             task_vars = [
@@ -229,6 +246,9 @@ class CPSATStudyScheduler:
             objective_terms.append(selected[index] * (scheduled_value + candidate.score))
         objective_terms.extend(
             self._daily_balance_penalties(model, candidates, selected, problem, locked_minutes)
+        )
+        objective_terms.extend(
+            self._same_task_daily_penalties(model, candidates, selected, problem)
         )
         model.maximize(sum(objective_terms) if objective_terms else 0)
 
@@ -340,6 +360,44 @@ class CPSATStudyScheduler:
             overage = model.new_int_var(0, total_required, f"overage_{day.isoformat()}")
             model.add(overage >= day_total - daily_target)
             penalties.append(-overage * self.weights.daily_balance)
+        return penalties
+
+    def _same_task_daily_penalties(
+        self,
+        model: cp_model.CpModel,
+        candidates: list[CandidateSlot],
+        selected: list[Any],
+        problem: SchedulingProblem,
+    ) -> list[Any]:
+        """Prefer one session per task/day, tolerate two, discourage 3+.
+
+        These remain soft costs. If a deadline or limited availability makes
+        a clustered day necessary, the dominant scheduled-minute objective
+        still completes the required work.
+        """
+        if not candidates:
+            return []
+        zone = ZoneInfo(problem.preferences.timezone)
+        groups: dict[tuple[str, date], list[int]] = {}
+        for index, candidate in enumerate(candidates):
+            key = (candidate.task.id, _local_day(candidate.start, zone))
+            groups.setdefault(key, []).append(index)
+        locked_counts: dict[tuple[str, date], int] = {}
+        for session in problem.locked_sessions:
+            key = (session.task_id, _local_day(session.start, zone))
+            locked_counts[key] = locked_counts.get(key, 0) + 1
+
+        penalties = []
+        for (task_id, day), indices in groups.items():
+            locked = locked_counts.get((task_id, day), 0)
+            maximum = locked + len(indices)
+            count = locked + sum(selected[index] for index in indices)
+            over_one = model.new_int_var(0, maximum, f"same_task_2_{task_id}_{day.isoformat()}")
+            over_two = model.new_int_var(0, maximum, f"same_task_3_{task_id}_{day.isoformat()}")
+            model.add(over_one >= count - 1)
+            model.add(over_two >= count - 2)
+            penalties.append(-over_one * self.weights.same_task_second_session)
+            penalties.append(-over_two * self.weights.same_task_additional_session)
         return penalties
 
     def _candidate_slots(
