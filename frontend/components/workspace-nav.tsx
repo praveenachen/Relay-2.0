@@ -24,7 +24,7 @@ import { auth } from "@/features/auth/api";
 
 const primaryLinks = [
   ["/dashboard", "Home", House],
-  ["/my-day", "My Day", CalendarDays],
+  ["/my-week", "My Week", CalendarDays],
   ["/inbox", "Inbox", Inbox],
 ] as const;
 const spaceLinks = [

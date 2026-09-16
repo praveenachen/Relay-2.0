@@ -41,7 +41,11 @@ from app.schemas.domain import ApprovalRead, RunInput, RunRead
 from app.services.audit import record
 from app.services.workflows import WorkflowService
 from app.workflows.study_plan.actions import OPERATION, CreateCalendarStudyPlanAction
-from app.workflows.study_plan.errors import PlanWorkflowInvalidState, SchedulingInputInvalid
+from app.workflows.study_plan.errors import (
+    CalendarDestinationRequired,
+    PlanWorkflowInvalidState,
+    SchedulingInputInvalid,
+)
 from app.workflows.study_plan.schemas import PlanSetupInput
 
 
@@ -221,7 +225,7 @@ class StudyPlanWorkflowService:
             raise SchedulingInputInvalid()
         calendar_id = await self.calendar_id(owner, (run.input_payload or {}).get("calendar_id"))
         if not calendar_id:
-            raise SchedulingInputInvalid()
+            raise CalendarDestinationRequired()
         connection_id, calendar_summary = await self.google_connection_metadata(owner, calendar_id)
         events = tuple(
             CreateCalendarStudyBlockAction(

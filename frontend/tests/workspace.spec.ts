@@ -8,6 +8,79 @@ test("protected pages require a real session", async ({ page }) => {
   ).toBeVisible();
 });
 
+test("Inbox bulk accept uses the confirmed card drafts", async ({ page }) => {
+  const email = `inbox-${Date.now()}@example.com`;
+  const origin = `http://localhost:${process.env.RELAY_BROWSER_FRONTEND_PORT || "3010"}`;
+  const registered = await page.request.post("/api/auth/register", {
+    headers: { Origin: origin },
+    data: {
+      email,
+      password: "browser test password 123",
+      name: "Inbox Student",
+    },
+  });
+  expect(registered.ok()).toBeTruthy();
+  const loggedIn = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin },
+    form: { username: email, password: "browser test password 123" },
+  });
+  expect(loggedIn.ok()).toBeTruthy();
+  const created = await page.request.post("/api/projects", {
+    headers: { Origin: origin },
+    data: { name: "10K plan", space: "PERSONAL" },
+  });
+  expect(created.ok()).toBeTruthy();
+  const project = await created.json();
+  const captured = await page.request.post(
+    `/api/projects/${project.id}/sources`,
+    {
+      headers: { Origin: origin },
+      multipart: {
+        source_type: "PERSONAL_GOAL",
+        title: "Race goal",
+        content: "Prepare for my first 10K",
+      },
+    },
+  );
+  expect(captured.ok()).toBeTruthy();
+
+  await page.goto("/inbox");
+  const cards = page.locator(".proposal-card");
+  const card = cards.first();
+  await expect(card).toBeVisible();
+  const initialCount = await cards.count();
+  const taskTitle = (await card.getByRole("heading").textContent())!;
+  await card.locator('input[type="checkbox"]').check();
+  const confirmations = card.locator(".confirmation-list button");
+  while ((await confirmations.count()) > 0) await confirmations.first().click();
+  const acceptSelected = page.getByRole("button", {
+    name: "Accept selected (1)",
+  });
+  await expect(acceptSelected).toBeEnabled();
+  await acceptSelected.click();
+  await expect(cards).toHaveCount(initialCount - 1);
+
+  await page.goto(`/projects/${project.id}?tab=plan`);
+  const taskRow = page.locator(".plan-tasks li").filter({ hasText: taskTitle });
+  await expect(taskRow.getByLabel(`Select ${taskTitle}`)).toBeDisabled();
+  await taskRow.getByRole("button", { name: "Add details" }).click();
+  await page.getByLabel("Due date").fill("2026-10-10");
+  await page.getByLabel("Estimate").fill("60");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(taskRow.getByLabel(`Select ${taskTitle}`)).toBeEnabled();
+  await taskRow.getByLabel(`Select ${taskTitle}`).check();
+  await expect(
+    page.getByRole("button", { name: "Plan my week" }),
+  ).toBeDisabled();
+  await expect(page.getByText("Google Calendar isn’t connected")).toBeVisible();
+  await expect(
+    page.getByRole("link", { name: "Connect Google Calendar" }),
+  ).toHaveAttribute("href", "/connections");
+  await page.getByRole("link", { name: "Adjust preferences" }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByLabel("Preferred session (minutes)")).toBeVisible();
+});
+
 test("signup, project workspace, legacy planner, preferences, and logout", async ({
   page,
 }, testInfo) => {

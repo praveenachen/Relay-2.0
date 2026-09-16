@@ -205,3 +205,16 @@ class RelayRepository:
                 .order_by(ProjectTask.created_at, ProjectTask.id)
             )
         ).all()
+
+    async def task(self, project_id: UUID, task_id: UUID, owner: UUID) -> ProjectTask:
+        await self.project(project_id, owner)
+        task = await self.session.scalar(
+            select(ProjectTask).where(
+                ProjectTask.id == task_id,
+                ProjectTask.project_workspace_id == project_id,
+                ProjectTask.user_id == owner,
+            )
+        )
+        if task is None:
+            raise ProjectNotFound()
+        return task

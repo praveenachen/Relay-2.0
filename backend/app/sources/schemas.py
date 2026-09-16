@@ -86,7 +86,23 @@ class TaskRead(StrictModel):
     source_title: str | None = None
     source_type: SourceType | None = None
     source_reference: str | None
+    external_references: list["TaskExternalReference"] = Field(default_factory=list)
     created_at: datetime
+
+
+class TaskExternalReference(StrictModel):
+    provider: Literal["GITHUB"]
+    label: str
+    url: str
+
+
+class TaskInput(StrictModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str | None = Field(default=None, max_length=2000)
+    due_date: datetime | None = None
+    estimate_minutes: int | None = Field(default=None, ge=5, le=1440)
+    priority: Priority | None = None
+    status: Literal["TODO", "IN_PROGRESS", "DONE"] = "TODO"
 
 
 class TaskExecutionResult(StrictModel):

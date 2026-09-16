@@ -8,8 +8,27 @@ export type ProjectTask = {
   estimate: number | null;
   sourceTitle?: string | null;
   sourceReference?: string | null;
+  description?: string | null;
+  externalReferences?: { provider: "GITHUB"; label: string; url: string }[];
   server?: boolean;
 };
+
+export function projectTaskFromServer(task: ServerTask): ProjectTask {
+  return {
+    id: task.id,
+    projectId: task.project_id,
+    title: task.title,
+    description: task.description,
+    status: task.status,
+    priority: task.priority || "MEDIUM",
+    dueDate: task.due_date ? localDateValue(task.due_date) : null,
+    estimate: task.estimate_minutes,
+    sourceTitle: task.source_title,
+    sourceReference: task.source_reference,
+    externalReferences: task.external_references,
+    server: true,
+  };
+}
 
 const KEY = "relay-project-tasks";
 const EMPTY = "[]";
@@ -59,3 +78,5 @@ export function useProjectTasks() {
   }, [snapshot]);
 }
 import { useMemo, useSyncExternalStore } from "react";
+import type { ServerTask } from "@/features/sources/api";
+import { localDateValue } from "@/lib/datetime";

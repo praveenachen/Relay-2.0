@@ -19,6 +19,7 @@ from app.domain.errors import (
 )
 from app.models.entities import (
     ApprovalRequest,
+    ExternalArtifact,
     ProjectSource,
     ProjectTask,
     ProposedAction,
@@ -38,6 +39,8 @@ from app.sources.schemas import (
     SourceCaptureInput,
     SourceRead,
     TaskExecutionResult,
+    TaskExternalReference,
+    TaskInput,
     TaskProposalEdit,
     TaskProposalRead,
     TaskRead,
@@ -212,6 +215,31 @@ class SourceCaptureService:
 class TaskProposalService:
     def __init__(self, repo: RelayRepository):
         self.repo, self.session = repo, repo.session
+
+    async def create_manual(self, project_id: UUID, owner: UUID, data: TaskInput) -> TaskRead:
+        await self.repo.project(project_id, owner)
+        task = ProjectTask(
+            user_id=owner,
+            project_workspace_id=project_id,
+            **data.model_dump(),
+        )
+        self.session.add(task)
+        await self.session.commit()
+        return (await task_reads(self.repo, project_id, owner, task_id=task.id))[0]
+
+    async def update_task(
+        self, project_id: UUID, task_id: UUID, owner: UUID, data: TaskInput
+    ) -> TaskRead:
+        task = await self.repo.task(project_id, task_id, owner)
+        for key, value in data.model_dump().items():
+            setattr(task, key, value)
+        await self.session.commit()
+        return (await task_reads(self.repo, project_id, owner, task_id=task.id))[0]
+
+    async def delete_task(self, project_id: UUID, task_id: UUID, owner: UUID) -> None:
+        task = await self.repo.task(project_id, task_id, owner)
+        await self.session.delete(task)
+        await self.session.commit()
 
     async def list(self, owner: UUID) -> list[TaskProposalRead]:
         rows = (
@@ -397,10 +425,31 @@ class TaskExecutionService:
         return TaskExecutionResult(task_id=task.id)
 
 
-async def task_reads(repo: RelayRepository, project_id: UUID, owner: UUID) -> list[TaskRead]:
+async def task_reads(
+    repo: RelayRepository, project_id: UUID, owner: UUID, task_id: UUID | None = None
+) -> list[TaskRead]:
     result: list[TaskRead] = []
     for task in await repo.tasks(project_id, owner):
+        if task_id is not None and task.id != task_id:
+            continue
         source = await repo.source(task.source_id, owner) if task.source_id else None
+        references: list[TaskExternalReference] = []
+        actions = await repo.session.scalars(
+            select(ProposedAction).where(ProposedAction.action_type == "create_github_issue")
+        )
+        for action in actions:
+            if action.payload.get("task_id") != str(task.id):
+                continue
+            artifact = await repo.session.scalar(
+                select(ExternalArtifact).where(ExternalArtifact.proposed_action_id == action.id)
+            )
+            if artifact is not None:
+                number = artifact.external_id.rsplit("#", 1)[-1]
+                references.append(
+                    TaskExternalReference(
+                        provider="GITHUB", label=f"GitHub #{number}", url=artifact.external_url
+                    )
+                )
         result.append(
             TaskRead(
                 id=task.id,
@@ -415,6 +464,7 @@ async def task_reads(repo: RelayRepository, project_id: UUID, owner: UUID) -> li
                 source_title=source.title if source else None,
                 source_type=source.source_type if source else None,
                 source_reference=task.source_reference,
+                external_references=references,
                 created_at=task.created_at,
             )
         )

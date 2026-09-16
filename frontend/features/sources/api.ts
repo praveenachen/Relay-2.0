@@ -71,15 +71,56 @@ export const serverTaskSchema = z.object({
   source_title: z.string().nullable(),
   source_type: sourceTypeSchema.nullable(),
   source_reference: z.string().nullable(),
+  external_references: z.array(
+    z.object({
+      provider: z.literal("GITHUB"),
+      label: z.string(),
+      url: z.string(),
+    }),
+  ),
   created_at: z.string(),
 });
 export type ServerTask = z.infer<typeof serverTaskSchema>;
 
 export const sources = {
+  allTasks: () => request("/tasks", serverTaskSchema.array()),
   list: (projectId: string) =>
     request(`/projects/${projectId}/sources`, sourceSchema.array()),
   tasks: (projectId: string) =>
     request(`/projects/${projectId}/tasks`, serverTaskSchema.array()),
+  createTask: (
+    projectId: string,
+    data: {
+      title: string;
+      description?: string | null;
+      due_date?: string | null;
+      estimate_minutes?: number | null;
+      priority?: "LOW" | "MEDIUM" | "HIGH" | null;
+      status?: "TODO" | "IN_PROGRESS" | "DONE";
+    },
+  ) =>
+    request(
+      `/projects/${projectId}/tasks`,
+      serverTaskSchema,
+      json(data, "POST"),
+    ),
+  updateTask: (
+    projectId: string,
+    taskId: string,
+    data: {
+      title: string;
+      description?: string | null;
+      due_date?: string | null;
+      estimate_minutes?: number | null;
+      priority?: "LOW" | "MEDIUM" | "HIGH" | null;
+      status: "TODO" | "IN_PROGRESS" | "DONE";
+    },
+  ) =>
+    request(
+      `/projects/${projectId}/tasks/${taskId}`,
+      serverTaskSchema,
+      json(data, "PUT"),
+    ),
   create: (
     projectId: string,
     data: {

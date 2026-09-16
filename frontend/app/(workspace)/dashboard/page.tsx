@@ -10,11 +10,16 @@ import {
   Inbox,
   Sparkles,
 } from "lucide-react";
-import { usePendingApprovals, useProjects, useUser } from "@/hooks/queries";
+import {
+  useAllServerTasks,
+  usePendingApprovals,
+  useProjects,
+  useUser,
+} from "@/hooks/queries";
 import { ErrorMessage, Loading } from "@/components/ui";
 import { ProjectCard } from "@/components/project-card";
 import { NewProjectButton } from "@/components/project-library";
-import { useProjectTasks } from "@/lib/project-tasks";
+import { projectTaskFromServer, useProjectTasks } from "@/lib/project-tasks";
 
 const spaces = [
   { slug: "school", name: "School", icon: GraduationCap },
@@ -26,10 +31,21 @@ export default function Dashboard() {
   const user = useUser();
   const projects = useProjects();
   const approvals = usePendingApprovals();
-  const tasks = useProjectTasks();
-  if (user.isPending || projects.isPending || approvals.isPending)
+  const localTasks = useProjectTasks();
+  const serverTasks = useAllServerTasks();
+  const tasks = [
+    ...(serverTasks.data || []).map(projectTaskFromServer),
+    ...localTasks,
+  ];
+  if (
+    user.isPending ||
+    projects.isPending ||
+    approvals.isPending ||
+    serverTasks.isPending
+  )
     return <Loading />;
-  const error = user.error || projects.error || approvals.error;
+  const error =
+    user.error || projects.error || approvals.error || serverTasks.error;
   if (error) return <ErrorMessage error={error} />;
   const hour = new Date().getHours();
   const greeting =
@@ -133,8 +149,8 @@ export default function Dashboard() {
               <h2>Today</h2>
               <p>Tasks that need your focus now.</p>
             </div>
-            <Link href="/my-day">
-              Open My Day <ArrowRight />
+            <Link href="/my-week">
+              Open My Week <ArrowRight />
             </Link>
           </div>
           {today.length ? (

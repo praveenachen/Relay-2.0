@@ -1,7 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Response, UploadFile
 
 from app.ai.base import LanguageModel
 from app.api.dependencies import Repository
@@ -19,6 +19,7 @@ from app.sources.schemas import (
     SourceRead,
     SourceType,
     TaskExecutionResult,
+    TaskInput,
     TaskProposalEdit,
     TaskProposalRead,
     TaskRead,
@@ -99,6 +100,40 @@ async def sources(project_id: UUID, user: CurrentUser, capture: Capture) -> list
 @router.get("/projects/{project_id}/tasks", response_model=list[TaskRead])
 async def project_tasks(project_id: UUID, user: CurrentUser, repo: Repository) -> list[TaskRead]:
     return await task_reads(repo, project_id, user.id)
+
+
+@router.get("/tasks", response_model=list[TaskRead])
+async def all_project_tasks(user: CurrentUser, repo: Repository) -> list[TaskRead]:
+    result: list[TaskRead] = []
+    for project in await repo.projects(user.id):
+        result.extend(await task_reads(repo, project.id, user.id))
+    return result
+
+
+@router.post("/projects/{project_id}/tasks", response_model=TaskRead, status_code=201)
+async def create_project_task(
+    project_id: UUID, data: TaskInput, user: CurrentUser, repo: Repository
+) -> TaskRead:
+    return await TaskProposalService(repo).create_manual(project_id, user.id, data)
+
+
+@router.put("/projects/{project_id}/tasks/{task_id}", response_model=TaskRead)
+async def update_project_task(
+    project_id: UUID,
+    task_id: UUID,
+    data: TaskInput,
+    user: CurrentUser,
+    repo: Repository,
+) -> TaskRead:
+    return await TaskProposalService(repo).update_task(project_id, task_id, user.id, data)
+
+
+@router.delete("/projects/{project_id}/tasks/{task_id}", status_code=204)
+async def delete_project_task(
+    project_id: UUID, task_id: UUID, user: CurrentUser, repo: Repository
+) -> Response:
+    await TaskProposalService(repo).delete_task(project_id, task_id, user.id)
+    return Response(status_code=204)
 
 
 @router.get("/task-proposals", response_model=list[TaskProposalRead])

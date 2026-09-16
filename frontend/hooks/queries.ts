@@ -38,6 +38,8 @@ export const useServerTasks = (id: string) =>
     queryKey: ["projects", id, "tasks"],
     queryFn: () => sources.tasks(id),
   });
+export const useAllServerTasks = () =>
+  useQuery({ queryKey: ["tasks"], queryFn: sources.allTasks });
 export const useTaskProposals = () =>
   useQuery({ queryKey: ["task-proposals"], queryFn: taskProposals.list });
 

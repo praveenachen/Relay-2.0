@@ -147,4 +147,66 @@ export const plan = {
     request(`/workflows/plan/${id}/approve-and-execute`, runSchema, {
       method: "POST",
     }),
+  createProjectPlan: (
+    projectId: string,
+    data: {
+      task_ids: string[];
+      start: string;
+      end: string;
+      calendar_id: string | null;
+    },
+  ) =>
+    request(
+      `/projects/${projectId}/plan`,
+      planDetailSchema,
+      json(data, "POST"),
+    ),
+};
+
+export const githubIssuePreviewSchema = z.object({
+  run_id: z.guid(),
+  approval_id: z.guid(),
+  task_id: z.guid(),
+  title: z.string(),
+  description: z.string(),
+  repository: z.string(),
+});
+export type GitHubIssuePreview = z.infer<typeof githubIssuePreviewSchema>;
+
+export const projectActions = {
+  previewGitHubIssue: (
+    projectId: string,
+    taskId: string,
+    data: { title: string; description: string },
+  ) =>
+    request(
+      `/projects/${projectId}/tasks/${taskId}/github-issue/preview`,
+      githubIssuePreviewSchema,
+      json(data, "POST"),
+    ),
+  confirmGitHubIssue: (
+    projectId: string,
+    taskId: string,
+    runId: string,
+    approvalId: string,
+  ) =>
+    request(
+      `/projects/${projectId}/tasks/${taskId}/github-issue/${runId}/${approvalId}/confirm`,
+      runSchema,
+      { method: "POST" },
+    ),
+};
+
+export const scheduledBlockSchema = z.object({
+  run_id: z.guid(),
+  project_id: z.guid(),
+  project_name: z.string(),
+  task_id: z.guid(),
+  task_title: z.string(),
+  start: z.string(),
+  end: z.string(),
+});
+
+export const relaySchedule = {
+  list: () => request("/schedule", scheduledBlockSchema.array()),
 };

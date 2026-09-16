@@ -3,11 +3,11 @@
 import { useState } from "react";
 import { Plus, Sparkles, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useProjects } from "@/hooks/queries";
+import { useAllServerTasks, useProjects } from "@/hooks/queries";
 import { projects, type Project } from "@/features/projects/api";
 import { ErrorMessage, Loading } from "@/components/ui";
 import { ProjectCard } from "@/components/project-card";
-import { useProjectTasks } from "@/lib/project-tasks";
+import { projectTaskFromServer, useProjectTasks } from "@/lib/project-tasks";
 
 export type Space = "SCHOOL" | "WORK" | "PERSONAL";
 
@@ -160,10 +160,24 @@ const emptyStateCopy: Record<Space, { title: string; description: string }> = {
 
 export function ProjectLibrary({ space }: { space: Space }) {
   const query = useProjects();
-  const tasks = useProjectTasks();
-  if (query.isPending) return <Loading label="Loading projects" />;
-  if (query.error)
-    return <ErrorMessage error={query.error} retry={() => query.refetch()} />;
+  const localTasks = useProjectTasks();
+  const serverTasks = useAllServerTasks();
+  const tasks = [
+    ...(serverTasks.data || []).map(projectTaskFromServer),
+    ...localTasks,
+  ];
+  if (query.isPending || serverTasks.isPending)
+    return <Loading label="Loading projects" />;
+  if (query.error || serverTasks.error)
+    return (
+      <ErrorMessage
+        error={query.error || serverTasks.error}
+        retry={() => {
+          query.refetch();
+          serverTasks.refetch();
+        }}
+      />
+    );
   const items = (query.data || []).filter((project) => project.space === space);
   if (!items.length) {
     const copy = emptyStateCopy[space];

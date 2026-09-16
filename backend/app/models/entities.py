@@ -89,7 +89,7 @@ class UserPreference(Identity, Timestamps, Base):
     latest_study_time: Mapped[time] = mapped_column(Time, default=time(22))
     preferred_session_minutes: Mapped[int] = mapped_column(default=50)
     maximum_session_minutes: Mapped[int] = mapped_column(default=90)
-    minimum_break_minutes: Mapped[int] = mapped_column(default=10)
+    minimum_break_minutes: Mapped[int] = mapped_column(default=20)
 
 
 class ConnectedAccount(Identity, Timestamps, Base):

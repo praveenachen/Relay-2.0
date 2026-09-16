@@ -117,7 +117,7 @@ class ProfileHistoryService:
         preference.latest_study_time = time(22)
         preference.preferred_session_minutes = 50
         preference.maximum_session_minutes = 90
-        preference.minimum_break_minutes = 10
+        preference.minimum_break_minutes = 20
         user.onboarding_completed = False
 
         connections = await self.repo.connections(owner, lock=True)

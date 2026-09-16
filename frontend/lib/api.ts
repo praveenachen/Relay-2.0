@@ -38,6 +38,8 @@ export async function request<T>(
         "This step is already running or is not available yet. Wait for the current step to finish, then refresh if needed.",
       INVALID_WORKFLOW_TRANSITION:
         "This workflow is already moving to another step. Wait for the current step to finish, then refresh if needed.",
+      CALENDAR_DESTINATION_REQUIRED:
+        "Connect Google Calendar and select a destination calendar before adding these time blocks.",
     };
     const message =
       code && messages[code]

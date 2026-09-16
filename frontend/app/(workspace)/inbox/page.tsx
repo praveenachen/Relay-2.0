@@ -20,14 +20,17 @@ const confirmationLabels = {
 
 function ProposalCard({
   item,
+  draft,
+  setDraft,
   selected,
   toggle,
 }: {
   item: TaskProposal;
+  draft: ProposalPayload;
+  setDraft: (draft: ProposalPayload) => void;
   selected: boolean;
   toggle: () => void;
 }) {
-  const [draft, setDraft] = useState<ProposalPayload>(item.proposal);
   const [editing, setEditing] = useState(false);
   const cache = useQueryClient();
   const finish = () => {
@@ -263,27 +266,45 @@ function ProposalCard({
 export default function Inbox() {
   const query = useTaskProposals();
   const [selected, setSelected] = useState<string[]>([]);
+  const [drafts, setDrafts] = useState<Record<string, ProposalPayload>>({});
   const cache = useQueryClient();
   const pending = (query.data || []).filter(
     (item) => item.status === "PENDING",
   );
-  const selectedItems = pending.filter(
-    (item) =>
-      selected.includes(item.approval_id) &&
-      item.proposal.needs_confirmation.length === 0 &&
-      !item.proposal.possible_duplicate,
-  );
+  const proposalFor = (item: TaskProposal) =>
+    drafts[item.approval_id] || item.proposal;
+  const selectableItems = pending.filter((item) => {
+    const proposal = proposalFor(item);
+    return (
+      proposal.needs_confirmation.length === 0 && !proposal.possible_duplicate
+    );
+  });
+  const selectedItems = selectableItems
+    .filter((item) => selected.includes(item.approval_id))
+    .map((item) => ({ item, proposal: proposalFor(item) }));
   const acceptSelected = useMutation({
-    mutationFn: () =>
-      Promise.all(
-        selectedItems.map((item) =>
-          taskProposals.accept(item.approval_id, item.proposal),
+    mutationFn: async () => {
+      const results = await Promise.allSettled(
+        selectedItems.map(({ item, proposal }) =>
+          taskProposals.accept(item.approval_id, proposal),
         ),
-      ),
+      );
+      const failures = results.filter(
+        (result) => result.status === "rejected",
+      ).length;
+      if (failures)
+        throw new Error(
+          `Couldn’t create ${failures} selected ${failures === 1 ? "task" : "tasks"}. Please retry.`,
+        );
+      return results;
+    },
     onSuccess: () => {
       setSelected([]);
+    },
+    onSettled: () => {
       cache.invalidateQueries({ queryKey: ["task-proposals"] });
-      for (const item of selectedItems)
+      cache.invalidateQueries({ queryKey: ["tasks"] });
+      for (const { item } of selectedItems)
         cache.invalidateQueries({
           queryKey: ["projects", item.project_id, "tasks"],
         });
@@ -309,11 +330,16 @@ export default function Inbox() {
           <label>
             <input
               type="checkbox"
-              checked={selected.length === pending.length}
+              checked={
+                selectableItems.length > 0 &&
+                selectableItems.every((item) =>
+                  selected.includes(item.approval_id),
+                )
+              }
               onChange={(event) =>
                 setSelected(
                   event.target.checked
-                    ? pending.map((item) => item.approval_id)
+                    ? selectableItems.map((item) => item.approval_id)
                     : [],
                 )
               }
@@ -349,6 +375,13 @@ export default function Inbox() {
             <ProposalCard
               key={item.approval_id}
               item={item}
+              draft={proposalFor(item)}
+              setDraft={(draft) =>
+                setDrafts((current) => ({
+                  ...current,
+                  [item.approval_id]: draft,
+                }))
+              }
               selected={selected.includes(item.approval_id)}
               toggle={() =>
                 setSelected((current) =>

@@ -904,7 +904,8 @@
   font-weight: 720;
   letter-spacing: -0.03em;
 }
-.project-modal form {
+.project-modal form,
+.modal-stack {
   display: grid;
   gap: 16px;
 }
@@ -912,7 +913,6 @@
   resize: vertical;
 }
 .modal-body-text {
-  margin-bottom: 20px;
   color: var(--muted);
   font-size: 0.85rem;
   line-height: 1.5;
@@ -1206,15 +1206,237 @@
   display: grid;
   grid-template-columns: minmax(240px, 0.62fr) minmax(0, 1.38fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 .plan-tasks,
 .plan-week {
+  display: flex;
+  flex-direction: column;
   min-height: 300px;
+}
+.plan-week {
+  gap: 0.9rem;
 }
 .plan-week-cta {
   margin-top: 16px;
   width: 100%;
+}
+
+.plan-tasks .mini-task-list li {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  border-radius: 12px;
+  padding: 6px;
+  transition: background 120ms ease;
+}
+
+.plan-tasks .mini-task-list li:hover,
+.plan-tasks .mini-task-list li:focus-within {
+  background: #f7f7fd;
+}
+
+.plan-task-content {
+  display: grid;
+  min-width: 0;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 4px 0;
+  text-align: left;
+}
+
+.plan-task-content strong {
+  overflow-wrap: anywhere;
+}
+
+.plan-task-content time {
+  margin-top: 3px;
+}
+
+.plan-task-edit {
+  white-space: nowrap;
+}
+
+.plan-tasks .needs-details .plan-task-content time {
+  color: #d45d58;
+}
+
+.task-row-actions,
+.plan-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.plan-week .plan-actions {
+  margin-top: 0;
+}
+
+.calendar-readiness {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid #dedff0;
+  border-radius: 12px;
+  background: #f8f8fe;
+}
+
+.calendar-readiness > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  color: #625bd8;
+}
+
+.calendar-readiness > div {
+  min-width: 0;
+  flex: 1;
+}
+
+.calendar-readiness strong {
+  display: block;
+  font-size: 0.78rem;
+}
+
+.calendar-readiness p {
+  margin: 2px 0 0;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.calendar-readiness.ready {
+  border-color: #cfe5d9;
+  background: #f3faf6;
+}
+
+.calendar-readiness.ready > svg {
+  color: #2f8062;
+}
+
+.calendar-picker-inline {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) minmax(150px, 0.75fr) auto;
+  align-items: end;
+  gap: 0.6rem;
+}
+
+.calendar-picker-inline select {
+  min-height: 38px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: white;
+  padding: 0.45rem 0.65rem;
+  color: var(--foreground);
+  font: inherit;
+  font-size: 0.76rem;
+}
+
+.calendar-picker-inline .button {
+  min-height: 38px;
+  padding: 0.45rem 0.8rem;
+}
+
+.calendar-picker-inline > .text-link {
+  grid-column: 2 / -1;
+  justify-self: start;
+  font-size: 0.72rem;
+}
+
+.plan-week > .notice.error {
+  padding: 0.75rem 0.85rem;
+  font-size: 0.76rem;
+}
+
+.plan-week > .notice.error > svg {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+
+.plan-week > .notice.error p {
+  margin: 0;
+}
+
+.plan-week > .notice.error .mt-3 {
+  margin-top: 0.35rem;
+}
+
+.task-row-actions {
+  margin-left: auto;
+}
+
+.approval-preview,
+.weekly-blocks article {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-soft);
+  padding: 0.9rem 1rem;
+}
+
+.approval-preview p,
+.approval-preview small,
+.weekly-blocks small {
+  display: block;
+  color: var(--text-muted);
+}
+
+.weekly-blocks {
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.weekly-blocks article {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.weekly-blocks time {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.success-message {
+  color: var(--success, #247a52);
+  font-weight: 700;
+}
+
+.day-calendar .calendar-shell article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.2rem 1rem;
+  padding: 0.75rem;
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.day-calendar .calendar-shell article small {
+  color: var(--text-muted);
+}
+
+.day-calendar .calendar-shell article time {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-self: center;
+}
+
+.week-day-group {
+  display: grid;
+  gap: 0.5rem;
+  padding-bottom: 1rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.week-day-group:last-child {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
 }
 .source-list {
   display: grid;
@@ -1330,6 +1552,14 @@
 .calendar-shell {
   position: relative;
   padding-top: 10px;
+}
+.plan-week-placeholder p {
+  border-left: 3px solid #6b74cf;
+  border-radius: 8px;
+  background: #f0f1ff;
+  padding: 11px;
+  color: #777d8d;
+  font-size: 0.7rem;
 }
 .calendar-shell > div {
   display: grid;
@@ -1540,6 +1770,15 @@
   .inbox-hero > span {
     width: 52px;
     height: 52px;
+  }
+  .calendar-picker-inline {
+    grid-template-columns: 1fr;
+  }
+  .calendar-picker-inline > .text-link {
+    grid-column: 1;
+  }
+  .plan-week .plan-actions > * {
+    flex: 1 1 auto;
   }
 }
 @media (max-width: 520px) {
@@ -2604,6 +2843,12 @@ p {
 .icon-button svg {
   height: 16px;
   width: 16px;
+}
+.icon-text-button {
+  width: auto;
+  gap: 0.4rem;
+  padding: 0 0.85rem;
+  white-space: nowrap;
 }
 
 .blocked-action-card {

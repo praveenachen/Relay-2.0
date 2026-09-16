@@ -11,3 +11,9 @@ class SchedulingInputInvalid(DomainError):
     code = "SCHEDULING_INPUT_INVALID"
     status_code = 422
     message = "The scheduling input is incomplete or invalid."
+
+
+class CalendarDestinationRequired(DomainError):
+    code = "CALENDAR_DESTINATION_REQUIRED"
+    status_code = 409
+    message = "Connect Google Calendar and select a calendar before adding these time blocks."
