@@ -4,11 +4,11 @@ test("protected pages require a real session", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login$/);
   await expect(
-    page.getByRole("heading", { name: "Welcome back." }),
+    page.getByRole("heading", { name: "Pick up where you left off." }),
   ).toBeVisible();
 });
 
-test("signup, optional connections, preferences, persisted draft, and logout", async ({
+test("signup, project workspace, legacy planner, preferences, and logout", async ({
   page,
 }, testInfo) => {
   const email = `browser-${Date.now()}@example.com`;
@@ -37,7 +37,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByRole("button", { name: "Go to dashboard" }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(
-    page.getByRole("heading", { name: "Recent work" }),
+    page.getByRole("heading", { name: "Recent projects" }),
   ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("dashboard-desktop.png"),
@@ -56,22 +56,44 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
     fullPage: true,
   });
   await page.setViewportSize({ width: 1280, height: 720 });
-  await page.getByRole("link", { name: "Plan my week", exact: true }).click();
-  await expect(page).toHaveURL(/\/workflows\/plan$/);
+
+  // The current product shell is organized around spaces and projects.
+  await page.getByRole("link", { name: "School", exact: true }).click();
+  await expect(page).toHaveURL(/\/spaces\/school$/);
+  await expect(
+    page.getByRole("heading", { name: "School", exact: true }),
+  ).toBeVisible();
+  await page
+    .locator(".space-hero")
+    .getByRole("button", { name: "New project" })
+    .click();
+  await page.getByLabel("Project name").fill("Assignment 3");
+  await page.getByRole("button", { name: "Create project" }).click();
+  await page.getByRole("link").filter({ hasText: "Assignment 3" }).click();
+  await expect(page).toHaveURL(/\/projects\/[a-f0-9-]+$/);
+  await expect(
+    page.getByRole("heading", { name: "Assignment 3" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Project sections" }),
+  ).toBeVisible();
+
+  // Legacy workflow routes remain intentionally reachable while their engines
+  // are repurposed behind the project surfaces.
+  await page.goto("/workflows/plan");
   await page.getByRole("button", { name: "Build a study plan" }).click();
   await expect(page).toHaveURL(/\/workflows\/plan\/[a-f0-9-]+$/);
   await page.getByRole("button", { name: "Add task" }).click();
   await page.getByLabel("Task name").fill("Assignment 3");
-  await expect(page.getByLabel("Estimated effort (minutes)")).toHaveValue(
-    "60",
-  );
-  await expect(page.getByRole("button", { name: "Build my plan" })).toBeDisabled();
+  await expect(page.getByLabel("Estimated effort (minutes)")).toHaveValue("60");
+  await expect(
+    page.getByRole("button", { name: "Build my plan" }),
+  ).toBeDisabled();
   // Google Calendar was never connected during onboarding (skipped above),
   // and Plan now requires an explicit calendar before setup can be saved.
   await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
   await page.reload();
   await expect(page.getByText("Next: connect Google Calendar.")).toBeVisible();
-  await page.locator(".account-menu summary").click();
   await page.getByRole("link", { name: "Settings", exact: true }).click();
   await expect(page.getByLabel("Preferred session (minutes)")).toHaveValue(
     "45",
@@ -85,7 +107,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByLabel("Preferred session (minutes)").fill("40");
   await page.getByRole("button", { name: "Save preferences" }).click();
   await expect(page.getByRole("status")).toContainText("Preferences saved");
-  await page.locator(".account-menu summary").click();
+  await page.locator(".sidebar-account summary").click();
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login$/);
   await page.getByLabel("Email", { exact: true }).fill(email);
@@ -95,7 +117,7 @@ test("signup, optional connections, preferences, persisted draft, and logout", a
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(
-    page.getByRole("heading", { name: "Recent work" }),
+    page.getByRole("heading", { name: "Recent projects" }),
   ).toBeVisible();
 });
 

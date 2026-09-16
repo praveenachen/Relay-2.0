@@ -59,9 +59,7 @@ async def test_delete_project_removes_it_and_its_members(client, account):
 
 
 async def test_delete_project_clears_its_sources_tasks_and_proposals(client, account):
-    created = await client.post(
-        "/projects", json={"name": "Capstone", "space": "SCHOOL"}
-    )
+    created = await client.post("/projects", json={"name": "Capstone", "space": "SCHOOL"})
     project_id = created.json()["id"]
     captured = await client.post(
         f"/projects/{project_id}/sources",

@@ -23,7 +23,13 @@ import { learn, LectureSummary } from "@/features/learn/api";
 import { WorkflowBadge } from "@/components/workflow-badge";
 import { CompletionActions } from "@/components/completion-actions";
 import { RelayLine } from "@/components/relay-line";
-import { Empty, ErrorMessage, Loading, PageTitle, Status } from "@/components/ui";
+import {
+  Empty,
+  ErrorMessage,
+  Loading,
+  PageTitle,
+  Status,
+} from "@/components/ui";
 import { runTitle, workflowDisplay } from "@/features/workflows/display";
 import { useDefinitions, useRuns } from "@/hooks/queries";
 
@@ -55,7 +61,8 @@ export function LearnEntry() {
   const notes = (runs.data || [])
     .filter((run) => run.workflow_definition_id === lectureDefinitionId)
     .sort(
-      (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
     )
     .slice(0, 5);
   const [file, setFile] = useState<File | null>(null);
@@ -144,36 +151,43 @@ export function LearnEntry() {
           </ol>
         </div>
       </section>
-      {!runs.isPending && !definitions.isPending && !runs.error && !definitions.error && (
-        <section className="mt-12">
-          <h2 className="section-title">Your notes</h2>
-          {notes.length === 0 ? (
-            <Empty title="Your notes will show up here.">
-              Upload a lecture above to create your first set of study notes.
-            </Empty>
-          ) : (
-            <ul className="run-list">
-              {notes.map((run) => (
-                <li key={run.id}>
-                  <Link className="run-card" href={`/workflows/learn/${run.id}`}>
-                    <div>
-                      <p className="run-card-title">
-                        {runTitle(run, workflowDisplay.lecture_to_notion)}
-                      </p>
-                      <p className="run-card-meta">
-                        Updated {new Date(run.updated_at).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <span className="run-card-status">
-                      <Status value={run.status} />
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
+      {!runs.isPending &&
+        !definitions.isPending &&
+        !runs.error &&
+        !definitions.error && (
+          <section className="mt-12">
+            <h2 className="section-title">Your notes</h2>
+            {notes.length === 0 ? (
+              <Empty title="Your notes will show up here.">
+                Upload a lecture above to create your first set of study notes.
+              </Empty>
+            ) : (
+              <ul className="run-list">
+                {notes.map((run) => (
+                  <li key={run.id}>
+                    <Link
+                      className="run-card"
+                      href={`/workflows/learn/${run.id}`}
+                    >
+                      <div>
+                        <p className="run-card-title">
+                          {runTitle(run, workflowDisplay.lecture_to_notion)}
+                        </p>
+                        <p className="run-card-meta">
+                          Updated{" "}
+                          {new Date(run.updated_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="run-card-status">
+                        <Status value={run.status} />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
     </>
   );
 }
@@ -722,7 +736,9 @@ function ProcessingPanel({
   return (
     <article className="panel">
       <h2 className="section-title">
-        {detail.run.status === "DRAFT" ? "Source document" : "Creating your notes"}
+        {detail.run.status === "DRAFT"
+          ? "Source document"
+          : "Creating your notes"}
       </h2>
       <p className="text-sm">{detail.source?.filename}</p>
       {detail.source && (

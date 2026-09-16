@@ -86,9 +86,7 @@ class SourceCaptureService:
             workflow = WorkflowService(self.repo)
             candidates = await self._duplicate_candidates(project.id, owner)
             for proposal in batch.proposals:
-                match = find_possible_duplicate(
-                    proposal.title, proposal.description, candidates
-                )
+                match = find_possible_duplicate(proposal.title, proposal.description, candidates)
                 run = WorkflowRun(
                     user_id=owner,
                     workflow_definition_id=definition.id,
@@ -174,8 +172,7 @@ class SourceCaptureService:
 
     async def list_sources(self, project_id: UUID, owner: UUID) -> list[SourceRead]:
         return [
-            SourceRead.model_validate(item)
-            for item in await self.repo.sources(project_id, owner)
+            SourceRead.model_validate(item) for item in await self.repo.sources(project_id, owner)
         ]
 
     async def _duplicate_candidates(
@@ -280,9 +277,7 @@ class TaskProposalService:
 
     async def reject(self, approval_id: UUID, owner: UUID) -> ApprovalRead:
         await self._owned(approval_id, owner)
-        return await ApprovalService(self.repo).resolve(
-            approval_id, owner, None, approve=False
-        )
+        return await ApprovalService(self.repo).resolve(approval_id, owner, None, approve=False)
 
     async def accept(
         self,
@@ -402,9 +397,7 @@ class TaskExecutionService:
         return TaskExecutionResult(task_id=task.id)
 
 
-async def task_reads(
-    repo: RelayRepository, project_id: UUID, owner: UUID
-) -> list[TaskRead]:
+async def task_reads(repo: RelayRepository, project_id: UUID, owner: UUID) -> list[TaskRead]:
     result: list[TaskRead] = []
     for task in await repo.tasks(project_id, owner):
         source = await repo.source(task.source_id, owner) if task.source_id else None

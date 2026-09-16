@@ -63,7 +63,9 @@ export function AuthForm({ signup = false }: { signup?: boolean }) {
         <div className="mt-8">
           <p className="eyebrow">{signup ? "Get started" : "Welcome back"}</p>
           <h1 className="mt-2 text-2xl font-semibold">
-            {signup ? "Create your Relay account." : "Pick up where you left off."}
+            {signup
+              ? "Create your Relay account."
+              : "Pick up where you left off."}
           </h1>
           <p className="mt-3 leading-6 text-muted">
             {signup

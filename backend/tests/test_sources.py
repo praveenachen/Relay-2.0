@@ -33,9 +33,7 @@ async def capture(client, project, source_type, content, title="Source"):
     assert response.status_code == 201, response.text
     proposals = (await client.get("/task-proposals")).json()
     return response.json(), [
-        item
-        for item in proposals
-        if item["source_id"] == response.json()["id"]
+        item for item in proposals if item["source_id"] == response.json()["id"]
     ]
 
 
@@ -88,21 +86,15 @@ async def test_school_source_types_create_typed_proposals(
 
 async def test_personal_goal_creates_small_practical_set(client, account):
     project = await create_project(client, space="PERSONAL")
-    _, proposals = await capture(
-        client, project, "PERSONAL_GOAL", "Prepare for my first 10K"
-    )
+    _, proposals = await capture(client, project, "PERSONAL_GOAL", "Prepare for my first 10K")
     assert 2 <= len(proposals) <= 6
     assert all(item["proposal"]["needs_confirmation"] for item in proposals)
 
 
 async def test_reject_proposal_creates_no_task(client, account):
     project = await create_project(client)
-    _, proposals = await capture(
-        client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12"
-    )
-    response = await client.post(
-        f"/task-proposals/{proposals[0]['approval_id']}/reject"
-    )
+    _, proposals = await capture(client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12")
+    response = await client.post(f"/task-proposals/{proposals[0]['approval_id']}/reject")
     assert response.status_code == 200
     assert (await client.get(f"/projects/{project['id']}/tasks")).json() == []
 
@@ -122,13 +114,9 @@ async def test_edit_accept_runtime_creation_and_source_provenance(client, accoun
         "title": "Draft the final design report",
         "needs_confirmation": [],
     }
-    edited = await client.put(
-        f"/task-proposals/{item['approval_id']}", json=payload
-    )
+    edited = await client.put(f"/task-proposals/{item['approval_id']}", json=payload)
     assert edited.status_code == 200, edited.text
-    accepted = await client.post(
-        f"/task-proposals/{item['approval_id']}/accept", json=payload
-    )
+    accepted = await client.post(f"/task-proposals/{item['approval_id']}/accept", json=payload)
     assert accepted.status_code == 200, accepted.text
     tasks = (await client.get(f"/projects/{project['id']}/tasks")).json()
     assert len(tasks) == 1
@@ -140,17 +128,11 @@ async def test_edit_accept_runtime_creation_and_source_provenance(client, accoun
 
 async def test_resubmit_is_idempotent(client, account):
     project = await create_project(client)
-    _, proposals = await capture(
-        client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12"
-    )
+    _, proposals = await capture(client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12")
     item = proposals[0]
     payload = {**item["proposal"], "needs_confirmation": []}
-    first = await client.post(
-        f"/task-proposals/{item['approval_id']}/accept", json=payload
-    )
-    second = await client.post(
-        f"/task-proposals/{item['approval_id']}/accept", json=payload
-    )
+    first = await client.post(f"/task-proposals/{item['approval_id']}/accept", json=payload)
+    second = await client.post(f"/task-proposals/{item['approval_id']}/accept", json=payload)
     assert first.status_code == 200
     assert second.status_code == 409
     assert len((await client.get(f"/projects/{project['id']}/tasks")).json()) == 1
@@ -158,9 +140,7 @@ async def test_resubmit_is_idempotent(client, account):
 
 async def test_runtime_failure_creates_no_task(client, account, monkeypatch):
     project = await create_project(client)
-    _, proposals = await capture(
-        client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12"
-    )
+    _, proposals = await capture(client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12")
     item = proposals[0]
     payload = {**item["proposal"], "needs_confirmation": []}
 
@@ -174,9 +154,7 @@ async def test_runtime_failure_creates_no_task(client, account, monkeypatch):
         )
 
     monkeypatch.setattr(LocalRuntimeClient, "submit_execution", fail)
-    response = await client.post(
-        f"/task-proposals/{item['approval_id']}/accept", json=payload
-    )
+    response = await client.post(f"/task-proposals/{item['approval_id']}/accept", json=payload)
     assert response.status_code == 502
     assert response.json()["message"] == "Relay couldn't create the selected task. Please retry."
     assert (await client.get(f"/projects/{project['id']}/tasks")).json() == []
@@ -184,9 +162,7 @@ async def test_runtime_failure_creates_no_task(client, account, monkeypatch):
 
 async def test_explicit_month_name_date_is_extracted(client, account):
     project = await create_project(client, space="WORK")
-    _, proposals = await capture(
-        client, project, "DOCUMENT_BRIEF", "Freeze scope by Sep 30, 2026"
-    )
+    _, proposals = await capture(client, project, "DOCUMENT_BRIEF", "Freeze scope by Sep 30, 2026")
     assert proposals
     due = proposals[0]["proposal"]["due_date"]
     assert due is not None and due.startswith("2026-09-30")
@@ -203,9 +179,7 @@ async def test_vague_timing_does_not_invent_a_due_date(client, account):
     assert "due_date" in proposals[0]["proposal"]["needs_confirmation"]
 
 
-async def test_relative_deadline_phrase_extracts_the_stated_date_not_an_offset(
-    client, account
-):
+async def test_relative_deadline_phrase_extracts_the_stated_date_not_an_offset(client, account):
     project = await create_project(client, space="WORK")
     _, proposals = await capture(
         client, project, "DOCUMENT_BRIEF", "Finish the deck before Demo Day on Oct 3."
@@ -217,9 +191,7 @@ async def test_relative_deadline_phrase_extracts_the_stated_date_not_an_offset(
     assert due[5:10] == "10-03"
 
 
-async def test_duplicate_proposal_flagged_across_sources_with_different_filenames(
-    client, account
-):
+async def test_duplicate_proposal_flagged_across_sources_with_different_filenames(client, account):
     project = await create_project(client)
     content = "Submit the final design report by 2026-10-12"
     _, first_proposals = await capture(
@@ -258,14 +230,10 @@ async def test_duplicate_detection_is_scoped_to_the_same_project(client, account
 
 async def test_history_reset_clears_source_tasks_and_proposals(client, account):
     project = await create_project(client)
-    _, proposals = await capture(
-        client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12"
-    )
+    _, proposals = await capture(client, project, "ASSIGNMENT_BRIEF", "Submit report by 2026-10-12")
     item = proposals[0]
     payload = {**item["proposal"], "needs_confirmation": []}
-    accepted = await client.post(
-        f"/task-proposals/{item['approval_id']}/accept", json=payload
-    )
+    accepted = await client.post(f"/task-proposals/{item['approval_id']}/accept", json=payload)
     assert accepted.status_code == 200
 
     reset = await client.post("/users/me/history/reset")

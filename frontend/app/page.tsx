@@ -30,7 +30,8 @@ const steps = [
   {
     number: "01",
     title: "Organize it into a project",
-    description: "Turn a class, a brief, or an idea into a project with a clear goal.",
+    description:
+      "Turn a class, a brief, or an idea into a project with a clear goal.",
   },
   {
     number: "02",
@@ -141,7 +142,10 @@ export default function Home() {
           </div>
         </section>
 
-        <section className="landing-steps" aria-labelledby="how-it-works-heading">
+        <section
+          className="landing-steps"
+          aria-labelledby="how-it-works-heading"
+        >
           <p className="eyebrow">How it works</p>
           <h2 id="how-it-works-heading" className="mt-2 text-2xl font-semibold">
             From commitments to a plan you can act on.
@@ -159,7 +163,9 @@ export default function Home() {
 
         <footer className="landing-footer">
           <Brand />
-          <p>Your projects, tasks, and plans &mdash; one place for all of it.</p>
+          <p>
+            Your projects, tasks, and plans &mdash; one place for all of it.
+          </p>
         </footer>
       </div>
     </div>

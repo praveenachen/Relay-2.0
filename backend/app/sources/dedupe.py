@@ -10,7 +10,19 @@ import re
 from difflib import SequenceMatcher
 
 _STOPWORDS = {
-    "a", "an", "the", "on", "in", "of", "to", "for", "and", "or", "with", "at", "by",
+    "a",
+    "an",
+    "the",
+    "on",
+    "in",
+    "of",
+    "to",
+    "for",
+    "and",
+    "or",
+    "with",
+    "at",
+    "by",
 }
 POSSIBLE_DUPLICATE_THRESHOLD = 0.82
 

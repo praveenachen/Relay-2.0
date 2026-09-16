@@ -67,16 +67,10 @@ async def capture_source(
             if len(raw) > limit:
                 raise DocumentTooLarge()
             document_service = DocumentService(limit, settings.max_document_characters)
-            uploaded = document_service.validate(
-                file.filename or "", file.content_type or "", raw
-            )
+            uploaded = document_service.validate(file.filename or "", file.content_type or "", raw)
             parsed = await document_service.parse(uploaded)
             source_content = "\n\n".join(
-                (
-                    f"{section.heading}\n{section.text}"
-                    if section.heading
-                    else section.text
-                )
+                (f"{section.heading}\n{section.text}" if section.heading else section.text)
                 for section in parsed.sections
             )
             original_filename = uploaded.filename
@@ -98,29 +92,21 @@ async def capture_source(
 
 
 @router.get("/projects/{project_id}/sources", response_model=list[SourceRead])
-async def sources(
-    project_id: UUID, user: CurrentUser, capture: Capture
-) -> list[SourceRead]:
+async def sources(project_id: UUID, user: CurrentUser, capture: Capture) -> list[SourceRead]:
     return await capture.list_sources(project_id, user.id)
 
 
 @router.get("/projects/{project_id}/tasks", response_model=list[TaskRead])
-async def project_tasks(
-    project_id: UUID, user: CurrentUser, repo: Repository
-) -> list[TaskRead]:
+async def project_tasks(project_id: UUID, user: CurrentUser, repo: Repository) -> list[TaskRead]:
     return await task_reads(repo, project_id, user.id)
 
 
 @router.get("/task-proposals", response_model=list[TaskProposalRead])
-async def task_proposals(
-    user: CurrentUser, repo: Repository
-) -> list[TaskProposalRead]:
+async def task_proposals(user: CurrentUser, repo: Repository) -> list[TaskProposalRead]:
     return await TaskProposalService(repo).list(user.id)
 
 
-@router.put(
-    "/task-proposals/{approval_id}", response_model=TaskProposalRead
-)
+@router.put("/task-proposals/{approval_id}", response_model=TaskProposalRead)
 async def edit_task_proposal(
     approval_id: UUID,
     data: TaskProposalEdit,
@@ -141,9 +127,7 @@ async def accept_task_proposal(
     repo: Repository,
     runtime: Runtime,
 ) -> TaskExecutionResult:
-    return await TaskProposalService(repo).accept(
-        approval_id, user.id, data, runtime
-    )
+    return await TaskProposalService(repo).accept(approval_id, user.id, data, runtime)
 
 
 @router.post(

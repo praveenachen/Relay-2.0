@@ -4,7 +4,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Relay | Projects, plans, and focus",
-  description: "A personal project workspace for everything you are moving forward.",
+  description:
+    "A personal project workspace for everything you are moving forward.",
 };
 
 export default function RootLayout({

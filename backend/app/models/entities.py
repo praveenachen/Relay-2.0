@@ -174,9 +174,7 @@ class ProjectTask(Identity, Timestamps, Base):
     status: Mapped[str] = mapped_column(String(20), default="TODO")
     source_id: Mapped[UUID | None] = mapped_column(ForeignKey("project_source.id"))
     source_reference: Mapped[str | None] = mapped_column(String(500))
-    proposed_action_id: Mapped[UUID | None] = mapped_column(
-        ForeignKey("proposed_action.id")
-    )
+    proposed_action_id: Mapped[UUID | None] = mapped_column(ForeignKey("proposed_action.id"))
 
 
 class WorkflowRun(Identity, Timestamps, Base):

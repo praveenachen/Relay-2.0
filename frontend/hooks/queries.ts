@@ -29,9 +29,15 @@ export const useProjects = () =>
 export const useProject = (id: string) =>
   useQuery({ queryKey: ["projects", id], queryFn: () => projects.get(id) });
 export const useProjectSources = (id: string) =>
-  useQuery({ queryKey: ["projects", id, "sources"], queryFn: () => sources.list(id) });
+  useQuery({
+    queryKey: ["projects", id, "sources"],
+    queryFn: () => sources.list(id),
+  });
 export const useServerTasks = (id: string) =>
-  useQuery({ queryKey: ["projects", id, "tasks"], queryFn: () => sources.tasks(id) });
+  useQuery({
+    queryKey: ["projects", id, "tasks"],
+    queryFn: () => sources.tasks(id),
+  });
 export const useTaskProposals = () =>
   useQuery({ queryKey: ["task-proposals"], queryFn: taskProposals.list });
 

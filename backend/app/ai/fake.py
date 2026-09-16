@@ -96,7 +96,12 @@ class FakeLanguageModel:
         else:
             if source_type == "COURSE_OUTLINE":
                 keywords: tuple[str, ...] = (
-                    "exam", "midterm", "assignment", "project", "presentation", "assessment"
+                    "exam",
+                    "midterm",
+                    "assignment",
+                    "project",
+                    "presentation",
+                    "assessment",
                 )
                 selected = [
                     line for line in lines if any(word in line.lower() for word in keywords)

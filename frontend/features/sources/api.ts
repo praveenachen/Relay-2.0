@@ -80,13 +80,24 @@ export const sources = {
     request(`/projects/${projectId}/sources`, sourceSchema.array()),
   tasks: (projectId: string) =>
     request(`/projects/${projectId}/tasks`, serverTaskSchema.array()),
-  create: (projectId: string, data: { sourceType: SourceType; title: string; content: string; file?: File | null }) => {
+  create: (
+    projectId: string,
+    data: {
+      sourceType: SourceType;
+      title: string;
+      content: string;
+      file?: File | null;
+    },
+  ) => {
     const body = new FormData();
     body.set("source_type", data.sourceType);
     body.set("title", data.title);
     if (data.content) body.set("content", data.content);
     if (data.file) body.set("file", data.file);
-    return request(`/projects/${projectId}/sources`, sourceSchema, { method: "POST", body });
+    return request(`/projects/${projectId}/sources`, sourceSchema, {
+      method: "POST",
+      body,
+    });
   },
 };
 
@@ -95,7 +106,15 @@ export const taskProposals = {
   edit: (id: string, payload: ProposalPayload) =>
     request(`/task-proposals/${id}`, taskProposalSchema, json(payload, "PUT")),
   accept: (id: string, payload: ProposalPayload) =>
-    request(`/task-proposals/${id}/accept`, z.object({ task_id: z.guid(), duplicate: z.boolean() }), json(payload)),
+    request(
+      `/task-proposals/${id}/accept`,
+      z.object({ task_id: z.guid(), duplicate: z.boolean() }),
+      json(payload),
+    ),
   reject: (id: string) =>
-    request(`/task-proposals/${id}/reject`, z.object({ status: z.literal("rejected") }), { method: "POST" }),
+    request(
+      `/task-proposals/${id}/reject`,
+      z.object({ status: z.literal("rejected") }),
+      { method: "POST" },
+    ),
 };

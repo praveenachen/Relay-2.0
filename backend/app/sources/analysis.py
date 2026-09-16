@@ -25,9 +25,7 @@ needs_confirmation. Use a human-readable source_reference such as a section head
 speaker, or line description; never expose chunk IDs or internal identifiers."""
 
 
-def _without_unsupported_dates(
-    proposals: list[TaskProposal], content: str
-) -> list[TaskProposal]:
+def _without_unsupported_dates(proposals: list[TaskProposal], content: str) -> list[TaskProposal]:
     """Defense in depth: clear any due_date the model set but the source never states.
 
     This guards against a model inferring an exact date from vague or relative
@@ -49,9 +47,7 @@ class SourceAnalysisService:
     def __init__(self, model: LanguageModel):
         self.model = model
 
-    async def generate(
-        self, source: SourceCaptureInput, *, current_user: str
-    ) -> TaskProposalBatch:
+    async def generate(self, source: SourceCaptureInput, *, current_user: str) -> TaskProposalBatch:
         try:
             result = await self.model.generate_structured(
                 [
@@ -72,11 +68,7 @@ class SourceAnalysisService:
             )
             batch = TaskProposalBatch.model_validate(result.model_dump())
             batch = batch.model_copy(
-                update={
-                    "proposals": _without_unsupported_dates(
-                        batch.proposals, source.content
-                    )
-                }
+                update={"proposals": _without_unsupported_dates(batch.proposals, source.content)}
             )
             if source.source_type == "MEETING_TRANSCRIPT":
                 identity = current_user.strip().casefold()
@@ -87,9 +79,7 @@ class SourceAnalysisService:
                 ]
                 unassigned = [item for item in batch.proposals if not item.owner]
                 if assigned_to_user:
-                    batch = batch.model_copy(
-                        update={"proposals": [*assigned_to_user, *unassigned]}
-                    )
+                    batch = batch.model_copy(update={"proposals": [*assigned_to_user, *unassigned]})
                 normalized = []
                 for item in batch.proposals:
                     needs = list(item.needs_confirmation)
@@ -97,9 +87,7 @@ class SourceAnalysisService:
                         needs.append("due_date")
                     if item.owner is None and "owner" not in needs:
                         needs.append("owner")
-                    normalized.append(
-                        item.model_copy(update={"needs_confirmation": needs})
-                    )
+                    normalized.append(item.model_copy(update={"needs_confirmation": needs}))
                 batch = batch.model_copy(update={"proposals": normalized})
             return batch
         except (ValidationError, AttributeError, TypeError, ValueError) as error:
