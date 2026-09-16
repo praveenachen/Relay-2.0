@@ -46,7 +46,12 @@ test("Inbox bulk accept uses the confirmed card drafts", async ({ page }) => {
 
   await page.goto("/inbox");
   const cards = page.locator(".proposal-card");
-  const card = cards.first();
+  // Proposals share a timestamp, so database row order can differ across
+  // SQLite builds. Choose an explicitly selectable card instead of assuming
+  // the first row is not a possible duplicate.
+  const card = cards
+    .filter({ hasNot: page.locator(".proposal-duplicate-warning") })
+    .first();
   await expect(card).toBeVisible();
   const initialCount = await cards.count();
   const taskTitle = (await card.getByRole("heading").textContent())!;
